@@ -1,12 +1,13 @@
 #pragma once
 
 #include <RaidenEngineCore/EngineConfig.hpp>
-
 #include <volk.h>
 
 namespace Raiden::Core {
 
 class IPlatform;
+
+// TODO: this is the vulkan renderdevice, abstract this later in VulkanRenderDevice
 
 class IRenderDevice {
 public:
@@ -23,6 +24,8 @@ public:
   virtual uint32_t getGraphicsQueueIndex() const = 0;
   virtual uint32_t getPresentQueueIndex() const = 0;
   virtual bool hasValidation() const = 0;
+
+  virtual bool drawFrame() = 0;
 };
 
 } // namespace Raiden::Core

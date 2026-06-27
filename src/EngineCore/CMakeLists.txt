@@ -13,9 +13,12 @@ CPMAddPackage(
 add_library(EngineCore STATIC
   src/Application.cpp
   src/Logger.cpp
+  
   src/Platform/SDL3/SDL3Platform.cpp
+  
   src/Renderer/Vulkan/VulkanDevice.cpp
   src/Renderer/Vulkan/VulkanSwapchain.cpp
+  src/Renderer/Vulkan/VulkanFrameContext.cpp
 )
 
 target_include_directories(EngineCore PUBLIC

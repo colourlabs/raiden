@@ -165,10 +165,20 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
     return false;
   }
 
+  if (!frameContext_.init(device_, graphicsQueueIndex_)) {
+    s_logger.critical("Failed to create frame context");
+    return false;
+  }
+
   return true;
 }
 
 void VulkanDevice::shutdown() {
+  if (device_ != VK_NULL_HANDLE) {
+    vkDeviceWaitIdle(device_); // wait for in-flight work before destroying anything
+  }
+
+  frameContext_.shutdown();
   swapchain_.shutdown();
 
   if (device_ != VK_NULL_HANDLE) {
@@ -334,6 +344,75 @@ SwapChainSupport VulkanDevice::querySwapChainSupport(VkPhysicalDevice device,
   }
 
   return support;
+}
+
+bool VulkanDevice::drawFrame() {
+  uint32_t imageIndex = 0;
+  if (!frameContext_.beginFrame(swapchain_, imageIndex)) {
+    // TODO: handle swapchain recreation here later
+    return false;
+  }
+
+  VkCommandBuffer cmd = frameContext_.currentCommandBuffer();
+
+  VkCommandBufferBeginInfo beginInfo{};
+  beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+  if (vkBeginCommandBuffer(cmd, &beginInfo) != VK_SUCCESS) {
+    s_logger.error("Failed to begin command buffer");
+    return false;
+  }
+
+  VkImage image = swapchain_.images()[imageIndex];
+
+  // transition image: UNDEFINED -> TRANSFER_DST_OPTIMAL
+  VkImageMemoryBarrier toTransferDst{};
+  toTransferDst.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  toTransferDst.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  toTransferDst.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  toTransferDst.srcAccessMask = 0;
+  toTransferDst.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  toTransferDst.image = image;
+  toTransferDst.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+  toTransferDst.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  toTransferDst.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+
+  vkCmdPipelineBarrier(cmd,
+      VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+      0, 0, nullptr, 0, nullptr, 1, &toTransferDst);
+
+  // clear the image
+  VkClearColorValue clearColor{};
+  clearColor.float32[0] = 0.05f;
+  clearColor.float32[1] = 0.05f;
+  clearColor.float32[2] = 0.2f;
+  clearColor.float32[3] = 1.0f;
+
+  VkImageSubresourceRange range{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+  vkCmdClearColorImage(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &range);
+
+  // transition image: TRANSFER_DST_OPTIMAL -> PRESENT_SRC_KHR
+  VkImageMemoryBarrier toPresent{};
+  toPresent.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  toPresent.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  toPresent.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  toPresent.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  toPresent.dstAccessMask = 0;
+  toPresent.image = image;
+  toPresent.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+  toPresent.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  toPresent.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+
+  vkCmdPipelineBarrier(cmd,
+      VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+      0, 0, nullptr, 0, nullptr, 1, &toPresent);
+
+  if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
+    s_logger.error("Failed to end command buffer");
+    return false;
+  }
+
+  return frameContext_.endFrame(swapchain_, graphicsQueue_, presentQueue_, imageIndex);
 }
 
 } // namespace Raiden::Core

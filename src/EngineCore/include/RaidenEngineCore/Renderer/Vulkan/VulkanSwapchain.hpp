@@ -21,6 +21,7 @@ public:
   VkFormat imageFormat() const { return imageFormat_; };
   VkExtent2D extent() const { return extent_; }
   const std::vector<VkImageView> &imageViews() const { return imageViews_; }
+  const std::vector<VkImage>& images() const { return images_; }
 
 private:
   VkDevice device_ = VK_NULL_HANDLE; // kept for shutdown

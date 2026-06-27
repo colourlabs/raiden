@@ -46,6 +46,8 @@ void Application::run() {
     if (!platform_->pollEvents()) {
       running_ = false;
     }
+
+    device_->drawFrame();
   }
   s_logger.info("Exited main loop.");
 }

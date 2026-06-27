@@ -1,6 +1,8 @@
 #pragma once
 
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanSwapchain.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanFrameContext.hpp>
+
 #include <RaidenEngineCore/Renderer/IRenderDevice.hpp>
 
 #include <optional>
@@ -89,7 +91,11 @@ private:
   const std::vector<const char *> deviceExtensions_ = {
       VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
+  bool drawFrame() override;
+
+  // other stuff
   VulkanSwapchain swapchain_;
+  VulkanFrameContext frameContext_;
 };
 
 } // namespace Raiden::Core
