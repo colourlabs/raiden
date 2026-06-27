@@ -1,9 +1,11 @@
 #pragma once
 
+#include <RaidenEngineCore/EngineConfig.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanSwapchain.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanFrameContext.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanRenderPass.hpp>
 
-#include <RaidenEngineCore/Renderer/IRenderDevice.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/IVulkanRenderDevice.hpp>
 
 #include <optional>
 #include <vector>
@@ -25,7 +27,7 @@ struct SwapChainSupport {
   std::vector<VkPresentModeKHR> presentModes;
 };
 
-class VulkanDevice final : public IRenderDevice {
+class VulkanDevice final : public IVulkanRenderDevice {
 public:
   VulkanDevice() = default;
   ~VulkanDevice() override;
@@ -82,6 +84,8 @@ private:
   VkQueue presentQueue_ = VK_NULL_HANDLE;
   uint32_t graphicsQueueIndex_ = 0;
   uint32_t presentQueueIndex_ = 0;
+  IPlatform* platform_ = nullptr;
+  EngineConfig config_;
 
   bool enableValidation_ = false;
 
@@ -92,9 +96,14 @@ private:
       VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
   bool drawFrame() override;
+  bool recreateSwapchain();
+  bool createFramebuffers();
+  void destroyFramebuffers();
 
   // other stuff
   VulkanSwapchain swapchain_;
+  VulkanRenderPass renderPass_;
+  std::vector<VkFramebuffer> framebuffers_;
   VulkanFrameContext frameContext_;
 };
 

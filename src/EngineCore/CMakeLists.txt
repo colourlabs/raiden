@@ -19,6 +19,7 @@ add_library(EngineCore STATIC
   src/Renderer/Vulkan/VulkanDevice.cpp
   src/Renderer/Vulkan/VulkanSwapchain.cpp
   src/Renderer/Vulkan/VulkanFrameContext.cpp
+  src/Renderer/Vulkan/VulkanRenderPass.cpp
 )
 
 target_include_directories(EngineCore PUBLIC

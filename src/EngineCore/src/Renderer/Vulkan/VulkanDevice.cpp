@@ -12,6 +12,9 @@ static const Logger s_logger("Raiden::Core::VulkanDevice");
 VulkanDevice::~VulkanDevice() { shutdown(); }
 
 bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
+  platform_ = platform;
+  config_ = config;
+
   if (volkInitialize() != VK_SUCCESS) {
     s_logger.critical("Failed to initialize volk");
     return false;
@@ -165,6 +168,16 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
     return false;
   }
 
+  if (!renderPass_.init(device_, swapchain_.imageFormat())) {
+    s_logger.critical("Failed to create render pass");
+    return false;
+  }
+
+  if (!createFramebuffers()) {
+    s_logger.critical("Failed to create framebuffers");
+    return false;
+  }
+
   if (!frameContext_.init(device_, graphicsQueueIndex_)) {
     s_logger.critical("Failed to create frame context");
     return false;
@@ -178,6 +191,8 @@ void VulkanDevice::shutdown() {
     vkDeviceWaitIdle(device_); // wait for in-flight work before destroying anything
   }
 
+  destroyFramebuffers();
+  renderPass_.shutdown();
   frameContext_.shutdown();
   swapchain_.shutdown();
 
@@ -349,8 +364,7 @@ SwapChainSupport VulkanDevice::querySwapChainSupport(VkPhysicalDevice device,
 bool VulkanDevice::drawFrame() {
   uint32_t imageIndex = 0;
   if (!frameContext_.beginFrame(swapchain_, imageIndex)) {
-    // TODO: handle swapchain recreation here later
-    return false;
+    return recreateSwapchain();
   }
 
   VkCommandBuffer cmd = frameContext_.currentCommandBuffer();
@@ -363,56 +377,106 @@ bool VulkanDevice::drawFrame() {
     return false;
   }
 
-  VkImage image = swapchain_.images()[imageIndex];
+  VkRenderPassBeginInfo renderPassInfo{};
+  renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+  renderPassInfo.renderPass = renderPass_.renderPass();
+  renderPassInfo.framebuffer = framebuffers_[imageIndex];
+  renderPassInfo.renderArea.offset = {0, 0};
+  renderPassInfo.renderArea.extent = swapchain_.extent();
 
-  // transition image: UNDEFINED -> TRANSFER_DST_OPTIMAL
-  VkImageMemoryBarrier toTransferDst{};
-  toTransferDst.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-  toTransferDst.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  toTransferDst.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-  toTransferDst.srcAccessMask = 0;
-  toTransferDst.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-  toTransferDst.image = image;
-  toTransferDst.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-  toTransferDst.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  toTransferDst.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  VkClearValue clearColor{};
+  clearColor.color.float32[0] = 0.05f;
+  clearColor.color.float32[1] = 0.05f;
+  clearColor.color.float32[2] = 0.2f;
+  clearColor.color.float32[3] = 1.0f;
+  renderPassInfo.clearValueCount = 1;
+  renderPassInfo.pClearValues = &clearColor;
 
-  vkCmdPipelineBarrier(cmd,
-      VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-      0, 0, nullptr, 0, nullptr, 1, &toTransferDst);
+  vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-  // clear the image
-  VkClearColorValue clearColor{};
-  clearColor.float32[0] = 0.05f;
-  clearColor.float32[1] = 0.05f;
-  clearColor.float32[2] = 0.2f;
-  clearColor.float32[3] = 1.0f;
+  // TODO: bind pipeline and draw here
 
-  VkImageSubresourceRange range{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-  vkCmdClearColorImage(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &range);
-
-  // transition image: TRANSFER_DST_OPTIMAL -> PRESENT_SRC_KHR
-  VkImageMemoryBarrier toPresent{};
-  toPresent.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-  toPresent.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-  toPresent.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-  toPresent.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-  toPresent.dstAccessMask = 0;
-  toPresent.image = image;
-  toPresent.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-  toPresent.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  toPresent.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-
-  vkCmdPipelineBarrier(cmd,
-      VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-      0, 0, nullptr, 0, nullptr, 1, &toPresent);
+  vkCmdEndRenderPass(cmd);
 
   if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
     s_logger.error("Failed to end command buffer");
     return false;
   }
 
-  return frameContext_.endFrame(swapchain_, graphicsQueue_, presentQueue_, imageIndex);
+  if (!frameContext_.endFrame(swapchain_, graphicsQueue_, presentQueue_, imageIndex)) {
+    return recreateSwapchain();
+  }
+
+  return true;
+}
+
+bool VulkanDevice::createFramebuffers() {
+  framebuffers_.resize(swapchain_.imageViews().size());
+
+  for (size_t i = 0; i < framebuffers_.size(); ++i) {
+    VkImageView attachments[] = {swapchain_.imageViews()[i]};
+
+    VkFramebufferCreateInfo fbInfo{};
+    fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    fbInfo.renderPass = renderPass_.renderPass();
+    fbInfo.attachmentCount = 1;
+    fbInfo.pAttachments = attachments;
+    fbInfo.width = swapchain_.extent().width;
+    fbInfo.height = swapchain_.extent().height;
+    fbInfo.layers = 1;
+
+    if (vkCreateFramebuffer(device_, &fbInfo, nullptr, &framebuffers_[i]) != VK_SUCCESS) {
+      s_logger.error("Failed to create framebuffer");
+      return false;
+    }
+  }
+
+  s_logger.info("Framebuffers created.");
+  return true;
+}
+
+void VulkanDevice::destroyFramebuffers() {
+  for (auto fb : framebuffers_) {
+    vkDestroyFramebuffer(device_, fb, nullptr);
+  }
+  framebuffers_.clear();
+}
+
+bool VulkanDevice::recreateSwapchain() {
+  int width = 0, height = 0;
+  platform_->getWindowSize(width, height);
+
+  // window minimized, wait until it has real size again before rebuilding.
+  while (width == 0 || height == 0) {
+    platform_->getWindowSize(width, height);
+    if (!platform_->pollEvents()) {
+      return false; // user closed the window while minimized
+    }
+  }
+
+  vkDeviceWaitIdle(device_);
+
+  destroyFramebuffers();
+
+  auto indices = findQueueFamilies(physicalDevice_, surface_);
+
+  if (!swapchain_.recreate(physicalDevice_, surface_,
+                           indices.graphicsFamily.value(),
+                           indices.presentFamily.value(),
+                           static_cast<uint32_t>(width),
+                           static_cast<uint32_t>(height),
+                           config_.window.vsync)) {
+    s_logger.error("Failed to recreate swapchain");
+    return false;
+  }
+
+  if (!createFramebuffers()) {
+    s_logger.error("Failed to recreate framebuffers");
+    return false;
+  }
+
+  s_logger.info("Swapchain recreated.");
+  return true;
 }
 
 } // namespace Raiden::Core

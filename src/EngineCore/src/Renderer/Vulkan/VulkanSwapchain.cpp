@@ -5,15 +5,14 @@ namespace Raiden::Core {
 
 static const Logger s_logger("Raiden::Core::VulkanSwapchain");
 
-// TODO: this swapchain will crash on window resize! on purpose until triangle renders
-
 bool VulkanSwapchain::init(VkPhysicalDevice physicalDevice, VkDevice device,
                            VkSurfaceKHR surface, uint32_t graphicsFamily,
                            uint32_t presentFamily, uint32_t windowWidth,
                            uint32_t windowHeight, bool vsync) {
   device_ = device;
 
-  // TODO: maybe use the C++ bindings for Vulkan (vulkan-hpp) instead of writing this C-style bullshit
+  // TODO: maybe use the C++ bindings for Vulkan (vulkan-hpp) instead of writing
+  // this C-style bullshit
 
   VkSurfaceCapabilitiesKHR caps;
   vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &caps);
@@ -163,6 +162,15 @@ VkExtent2D VulkanSwapchain::chooseExtent(const VkSurfaceCapabilitiesKHR &caps,
                              caps.maxImageExtent.height);
 
   return extent;
+}
+
+bool VulkanSwapchain::recreate(VkPhysicalDevice physicalDevice,
+                               VkSurfaceKHR surface, uint32_t graphicsFamily,
+                               uint32_t presentFamily, uint32_t windowWidth,
+                               uint32_t windowHeight, bool vsync) {
+  shutdown();
+  return init(physicalDevice, device_, surface, graphicsFamily, presentFamily,
+              windowWidth, windowHeight, vsync);
 }
 
 } // namespace Raiden::Core
