@@ -1,6 +1,7 @@
 #include <RaidenEngineCore/Application.hpp>
+
 #include <RaidenEngineCore/Platform/SDL3/SDL3Platform.hpp>
-#include <RaidenEngineCore/Renderer/VulkanDevice.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanDevice.hpp>
 
 #include <memory>
 

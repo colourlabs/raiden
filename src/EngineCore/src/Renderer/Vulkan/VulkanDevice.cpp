@@ -1,5 +1,5 @@
 #include <RaidenEngineCore/Platform/IPlatform.hpp>
-#include <RaidenEngineCore/Renderer/VulkanDevice.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanDevice.hpp>
 #include <RaidenEngineCore/Logger.hpp>
 
 #include <cstring>
