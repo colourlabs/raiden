@@ -15,6 +15,7 @@ add_library(EngineCore STATIC
   src/Logger.cpp
   src/Platform/SDL3/SDL3Platform.cpp
   src/Renderer/Vulkan/VulkanDevice.cpp
+  src/Renderer/Vulkan/VulkanSwapchain.cpp
 )
 
 target_include_directories(EngineCore PUBLIC

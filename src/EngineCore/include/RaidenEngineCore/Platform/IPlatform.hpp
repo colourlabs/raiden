@@ -16,6 +16,8 @@ public:
 
   virtual void* getNativeWindowHandle() = 0;
 
+  virtual void getWindowSize(int &width, int &height) const = 0;
+
   virtual std::vector<const char *> getRequiredInstanceExtensions() const = 0;
   virtual bool createVulkanSurface(VkInstance instance, VkSurfaceKHR *surface) = 0;
 };

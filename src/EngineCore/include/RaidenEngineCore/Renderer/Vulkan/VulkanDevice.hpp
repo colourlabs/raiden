@@ -1,5 +1,6 @@
 #pragma once
 
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanSwapchain.hpp>
 #include <RaidenEngineCore/Renderer/IRenderDevice.hpp>
 
 #include <optional>
@@ -87,6 +88,8 @@ private:
 
   const std::vector<const char *> deviceExtensions_ = {
       VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+
+  VulkanSwapchain swapchain_;
 };
 
 } // namespace Raiden::Core

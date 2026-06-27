@@ -81,4 +81,8 @@ bool SDL3Platform::createVulkanSurface(VkInstance instance,
   return true;
 }
 
+void SDL3Platform::getWindowSize(int &width, int &height) const {
+  SDL_GetWindowSizeInPixels(window_, &width, &height);
+}
+
 } // namespace Raiden::Core

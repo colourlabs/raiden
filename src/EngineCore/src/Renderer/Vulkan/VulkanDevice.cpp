@@ -151,10 +151,26 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
   vkGetDeviceQueue(device_, graphicsQueueIndex_, 0, &graphicsQueue_);
   vkGetDeviceQueue(device_, presentQueueIndex_, 0, &presentQueue_);
 
+  int windowWidth = 0;
+  int windowHeight = 0;
+  platform->getWindowSize(windowWidth, windowHeight);
+
+  if (!swapchain_.init(physicalDevice_, device_, surface_,
+                        indices.graphicsFamily.value(),
+                        indices.presentFamily.value(),
+                        static_cast<uint32_t>(windowWidth),
+                        static_cast<uint32_t>(windowHeight),
+                        config.window.vsync)) {
+    s_logger.critical("Failed to create swapchain");
+    return false;
+  }
+
   return true;
 }
 
 void VulkanDevice::shutdown() {
+  swapchain_.shutdown();
+
   if (device_ != VK_NULL_HANDLE) {
     vkDestroyDevice(device_, nullptr);
     device_ = VK_NULL_HANDLE;

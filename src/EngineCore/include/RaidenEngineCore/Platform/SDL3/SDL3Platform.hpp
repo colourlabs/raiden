@@ -6,7 +6,7 @@ struct SDL_Window;
 
 namespace Raiden::Core {
 
-class SDL3Platform final : public IPlatform {
+class SDL3Platform : public IPlatform {
 public:
   SDL3Platform() = default;
   ~SDL3Platform() override;
@@ -21,6 +21,8 @@ public:
   bool pollEvents() override;
 
   void *getNativeWindowHandle() override;
+
+  void getWindowSize(int &width, int &height) const override;
 
   std::vector<const char *> getRequiredInstanceExtensions() const override;
   bool createVulkanSurface(VkInstance instance, VkSurfaceKHR *surface) override;

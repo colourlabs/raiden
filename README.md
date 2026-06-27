@@ -1,6 +1,6 @@
 # raiden
 
-an attempt of doing vulkan (and other rendering backings like WebGL for brower maybe after) and SDL3 game engine but less crap then my previous attempts
+an attempt of doing vulkan (and other rendering backings like WebGL for browser maybe after) and SDL3 game engine but less crap then my previous attempts
 
 ## why
 
