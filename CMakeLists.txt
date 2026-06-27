@@ -8,3 +8,4 @@ include(cmake/CPM.cmake)
 
 add_subdirectory(src/EngineCore)
 add_subdirectory(src/EngineRuntime)
+add_subdirectory(shaders)

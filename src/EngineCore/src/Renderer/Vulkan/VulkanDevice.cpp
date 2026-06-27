@@ -178,6 +178,24 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
     return false;
   }
 
+  std::string shadersDir = SHADERS_DIR;
+  if (!vertexShader_.init(device_, ShaderStage::Vertex,
+                          shadersDir + "/triangle.vert.spv")) {
+    s_logger.critical("Failed to load vertex shader");
+    return false;
+  }
+  if (!fragmentShader_.init(device_, ShaderStage::Fragment,
+                            shadersDir + "/triangle.frag.spv")) {
+    s_logger.critical("Failed to load fragment shader");
+    return false;
+  }
+
+  if (!pipeline_.init(device_, renderPass_.renderPass(), swapchain_.extent(),
+                      vertexShader_, fragmentShader_)) {
+    s_logger.critical("Failed to create graphics pipeline");
+    return false;
+  }
+
   if (!frameContext_.init(device_, graphicsQueueIndex_)) {
     s_logger.critical("Failed to create frame context");
     return false;
@@ -192,6 +210,9 @@ void VulkanDevice::shutdown() {
   }
 
   destroyFramebuffers();
+  pipeline_.shutdown();
+  vertexShader_.shutdown();
+  fragmentShader_.shutdown();
   renderPass_.shutdown();
   frameContext_.shutdown();
   swapchain_.shutdown();
@@ -394,7 +415,8 @@ bool VulkanDevice::drawFrame() {
 
   vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-  // TODO: bind pipeline and draw here
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_.pipeline());
+  vkCmdDraw(cmd, 3, 1, 0, 0);
 
   vkCmdEndRenderPass(cmd);
 

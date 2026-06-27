@@ -20,6 +20,12 @@ add_library(EngineCore STATIC
   src/Renderer/Vulkan/VulkanSwapchain.cpp
   src/Renderer/Vulkan/VulkanFrameContext.cpp
   src/Renderer/Vulkan/VulkanRenderPass.cpp
+  src/Renderer/Vulkan/VulkanShader.cpp
+  src/Renderer/Vulkan/VulkanPipeline.cpp
+)
+
+target_compile_definitions(EngineCore PRIVATE
+  SHADERS_DIR="${CMAKE_BINARY_DIR}/shaders"
 )
 
 target_include_directories(EngineCore PUBLIC

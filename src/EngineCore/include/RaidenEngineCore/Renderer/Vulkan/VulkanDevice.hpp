@@ -4,6 +4,8 @@
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanSwapchain.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanFrameContext.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanRenderPass.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanShader.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanPipeline.hpp>
 
 #include <RaidenEngineCore/Renderer/Vulkan/IVulkanRenderDevice.hpp>
 
@@ -105,6 +107,10 @@ private:
   VulkanRenderPass renderPass_;
   std::vector<VkFramebuffer> framebuffers_;
   VulkanFrameContext frameContext_;
+
+  VulkanShader vertexShader_;
+  VulkanShader fragmentShader_;
+  VulkanPipeline pipeline_;
 };
 
 } // namespace Raiden::Core
