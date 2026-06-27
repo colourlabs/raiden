@@ -22,6 +22,9 @@ public:
 
   void *getNativeWindowHandle() override;
 
+  std::vector<const char *> getRequiredInstanceExtensions() const override;
+  bool createVulkanSurface(VkInstance instance, VkSurfaceKHR *surface) override;
+
 private:
   SDL_Window *window_ = nullptr;
 };

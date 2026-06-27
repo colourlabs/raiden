@@ -6,11 +6,13 @@
 
 namespace Raiden::Core {
 
+class IPlatform;
+
 class IRenderDevice {
 public:
   virtual ~IRenderDevice() = default;
 
-  virtual bool init(const EngineConfig &config, void *nativeWindowHandle) = 0;
+  virtual bool init(const EngineConfig &config, IPlatform *platform) = 0;
   virtual void shutdown() = 0;
 
   virtual VkInstance getInstance() const = 0;

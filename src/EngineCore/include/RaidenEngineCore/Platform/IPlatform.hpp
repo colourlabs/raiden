@@ -1,6 +1,8 @@
 #pragma once
 
 #include <RaidenEngineCore/EngineConfig.hpp>
+#include <volk.h>
+#include <vector>
 
 namespace Raiden::Core {
 
@@ -13,6 +15,9 @@ public:
   virtual bool pollEvents() = 0;
 
   virtual void* getNativeWindowHandle() = 0;
+
+  virtual std::vector<const char *> getRequiredInstanceExtensions() const = 0;
+  virtual bool createVulkanSurface(VkInstance instance, VkSurfaceKHR *surface) = 0;
 };
 
 } // namespace Raiden::Core

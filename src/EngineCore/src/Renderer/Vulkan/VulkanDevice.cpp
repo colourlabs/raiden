@@ -1,32 +1,26 @@
+#include <RaidenEngineCore/Platform/IPlatform.hpp>
 #include <RaidenEngineCore/Renderer/VulkanDevice.hpp>
-
-#include <SDL3/SDL_vulkan.h>
+#include <RaidenEngineCore/Logger.hpp>
 
 #include <cstring>
-#include <iostream>
 #include <set>
 
 namespace Raiden::Core {
 
+static const Logger s_logger("Raiden::Core::VulkanDevice");
+
 VulkanDevice::~VulkanDevice() { shutdown(); }
 
-// TODO: abstract the sdl creation stuff behind iplatform in VulkanDevice 
-
-bool VulkanDevice::init(const EngineConfig &config, void *nativeWindowHandle) {
-  SDL_Window *window = static_cast<SDL_Window *>(nativeWindowHandle);
-
+bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
   if (volkInitialize() != VK_SUCCESS) {
-    std::cerr << "Failed to initialize volk\n";
+    s_logger.critical("Failed to initialize volk");
     return false;
   }
 
   enableValidation_ = config.enableValidation && checkValidationSupport();
 
-  uint32_t extensionCount = 0;
-  char const *const *sdlExtensions =
-      SDL_Vulkan_GetInstanceExtensions(&extensionCount);
-  std::vector<const char *> extensions(sdlExtensions,
-                                       sdlExtensions + extensionCount);
+  std::vector<const char *> extensions =
+      platform->getRequiredInstanceExtensions();
 
   if (enableValidation_) {
     extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -37,7 +31,7 @@ bool VulkanDevice::init(const EngineConfig &config, void *nativeWindowHandle) {
   appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
   appInfo.pApplicationName = "raiden";
   appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-  appInfo.pEngineName = "raiden Engine";
+  appInfo.pEngineName = "raiden engine";
   appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
   appInfo.apiVersion = VK_API_VERSION_1_3;
 
@@ -69,7 +63,7 @@ bool VulkanDevice::init(const EngineConfig &config, void *nativeWindowHandle) {
   }
 
   if (vkCreateInstance(&createInfo, nullptr, &instance_) != VK_SUCCESS) {
-    std::cerr << "Failed to create Vulkan instance\n";
+    s_logger.critical("Failed to create Vulkan instance");
     return false;
   }
 
@@ -78,19 +72,19 @@ bool VulkanDevice::init(const EngineConfig &config, void *nativeWindowHandle) {
   if (enableValidation_) {
     if (createDebugUtilsMessengerEXT(instance_, &debugCreateInfo, nullptr,
                                      &debugMessenger_) != VK_SUCCESS) {
-      std::cerr << "Failed to set up debug messenger\n";
+      s_logger.error("Failed to set up debug messenger");
     }
   }
 
-  if (!SDL_Vulkan_CreateSurface(window, instance_, nullptr, &surface_)) {
-    std::cerr << "SDL_Vulkan_CreateSurface failed: " << SDL_GetError() << "\n";
+  if (!platform->createVulkanSurface(instance_, &surface_)) {
+    s_logger.critical("Failed to create Vulkan surface");
     return false;
   }
 
   uint32_t deviceCount = 0;
   vkEnumeratePhysicalDevices(instance_, &deviceCount, nullptr);
   if (deviceCount == 0) {
-    std::cerr << "No Vulkan-capable GPUs found\n";
+    s_logger.critical("No Vulkan-capable GPUs found");
     return false;
   }
 
@@ -105,7 +99,7 @@ bool VulkanDevice::init(const EngineConfig &config, void *nativeWindowHandle) {
   }
 
   if (physicalDevice_ == VK_NULL_HANDLE) {
-    std::cerr << "No suitable GPU found\n";
+    s_logger.critical("No suitable GPU found");
     return false;
   }
 
@@ -146,7 +140,7 @@ bool VulkanDevice::init(const EngineConfig &config, void *nativeWindowHandle) {
 
   if (vkCreateDevice(physicalDevice_, &deviceCreateInfo, nullptr, &device_) !=
       VK_SUCCESS) {
-    std::cerr << "Failed to create logical device\n";
+    s_logger.critical("Failed to create logical device");
     return false;
   }
 
@@ -187,9 +181,9 @@ VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDevice::debugCallback(
     VkDebugUtilsMessageTypeFlagsEXT /*type*/,
     const VkDebugUtilsMessengerCallbackDataEXT *data, void * /*userData*/) {
   if (severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-    std::cerr << "Vulkan Error: " << data->pMessage << "\n";
+    s_logger.error("{}", data->pMessage);
   } else {
-    std::cout << "Vulkan Warning: " << data->pMessage << "\n";
+    s_logger.warn("{}", data->pMessage);
   }
   return VK_FALSE;
 }
@@ -219,12 +213,7 @@ VkResult VulkanDevice::createDebugUtilsMessengerEXT(
     VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT *createInfo,
     const VkAllocationCallbacks *allocator,
     VkDebugUtilsMessengerEXT *messenger) {
-  auto func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
-      vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT"));
-  if (func) {
-    return func(instance, createInfo, allocator, messenger);
-  }
-  return VK_ERROR_EXTENSION_NOT_PRESENT;
+  return vkCreateDebugUtilsMessengerEXT(instance, createInfo, allocator, messenger);
 }
 
 void VulkanDevice::destroyDebugUtilsMessengerEXT(

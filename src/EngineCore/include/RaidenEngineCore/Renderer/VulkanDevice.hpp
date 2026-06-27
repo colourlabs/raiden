@@ -32,7 +32,7 @@ public:
   VulkanDevice(VulkanDevice &&) = delete;
   VulkanDevice &operator=(VulkanDevice &&) = delete;
 
-  bool init(const EngineConfig &config, void *nativeWindowHandle) override;
+  bool init(const EngineConfig &config, IPlatform *platform) override;
   void shutdown() override;
 
   VkInstance getInstance() const override { return instance_; }

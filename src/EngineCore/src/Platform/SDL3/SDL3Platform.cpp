@@ -1,6 +1,7 @@
 #include <RaidenEngineCore/Platform/SDL3/SDL3Platform.hpp>
 
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_vulkan.h>
 
 #include <iostream>
 
@@ -55,5 +56,29 @@ bool SDL3Platform::pollEvents() {
 }
 
 void *SDL3Platform::getNativeWindowHandle() { return window_; }
+
+std::vector<const char *> SDL3Platform::getRequiredInstanceExtensions() const {
+  uint32_t extensionCount = 0;
+  char const *const *sdlExtensions =
+      SDL_Vulkan_GetInstanceExtensions(&extensionCount);
+  if (sdlExtensions == nullptr) {
+    return {};
+  }
+  return std::vector<const char *>(sdlExtensions,
+                                   sdlExtensions + extensionCount);
+}
+
+bool SDL3Platform::createVulkanSurface(VkInstance instance,
+                                       VkSurfaceKHR *surface) {
+  if (window_ == nullptr) {
+    std::cerr << "createVulkanSurface failed: window is null\n";
+    return false;
+  }
+  if (!SDL_Vulkan_CreateSurface(window_, instance, nullptr, surface)) {
+    std::cerr << "SDL_Vulkan_CreateSurface failed: " << SDL_GetError() << "\n";
+    return false;
+  }
+  return true;
+}
 
 } // namespace Raiden::Core

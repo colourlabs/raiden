@@ -12,6 +12,7 @@ CPMAddPackage(
 
 add_library(EngineCore STATIC
   src/Application.cpp
+  src/Logger.cpp
   src/Platform/SDL3/SDL3Platform.cpp
   src/Renderer/Vulkan/VulkanDevice.cpp
 )
