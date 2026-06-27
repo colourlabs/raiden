@@ -1,7 +1,8 @@
+#include <RaidenEngineCore/Logger.hpp>
 #include <RaidenEngineCore/Platform/IPlatform.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanDevice.hpp>
-#include <RaidenEngineCore/Logger.hpp>
 
+#include <array>
 #include <cstring>
 #include <set>
 
@@ -28,39 +29,39 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
   if (enableValidation_) {
     extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
   }
-
   // proudly stolen
-  VkApplicationInfo appInfo{};
-  appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-  appInfo.pApplicationName = "raiden";
-  appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-  appInfo.pEngineName = "raiden engine";
-  appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-  appInfo.apiVersion = VK_API_VERSION_1_3;
-
-  VkInstanceCreateInfo createInfo{};
-  createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-  createInfo.pApplicationInfo = &appInfo;
-  createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
-  createInfo.ppEnabledExtensionNames = extensions.data();
+  VkApplicationInfo appInfo{
+      .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+      .pApplicationName = "raiden",
+      .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
+      .pEngineName = "raiden engine",
+      .engineVersion = VK_MAKE_VERSION(1, 0, 0),
+      .apiVersion = VK_API_VERSION_1_4,
+  };
 
   VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
+  VkInstanceCreateInfo createInfo{
+      .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+      .pApplicationInfo = &appInfo,
+      .enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
+      .ppEnabledExtensionNames = extensions.data(),
+  };
+
   if (enableValidation_) {
     createInfo.enabledLayerCount =
         static_cast<uint32_t>(validationLayers_.size());
     createInfo.ppEnabledLayerNames = validationLayers_.data();
 
-    debugCreateInfo.sType =
-        VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    debugCreateInfo.messageSeverity =
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    debugCreateInfo.messageType =
-        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-        VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-        VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-    debugCreateInfo.pfnUserCallback = debugCallback;
-    debugCreateInfo.pUserData = nullptr;
+    debugCreateInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+        .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                           VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+        .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                       VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                       VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+        .pfnUserCallback = debugCallback,
+        .pUserData = nullptr,
+    };
 
     createInfo.pNext = &debugCreateInfo;
   }
@@ -114,26 +115,27 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
   std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
   float queuePriority = 1.0f;
   for (uint32_t family : uniqueQueueFamilies) {
-    VkDeviceQueueCreateInfo queueCreateInfo{};
-    queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queueCreateInfo.queueFamilyIndex = family;
-    queueCreateInfo.queueCount = 1;
-    queueCreateInfo.pQueuePriorities = &queuePriority;
+    VkDeviceQueueCreateInfo queueCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .queueFamilyIndex = family,
+        .queueCount = 1,
+        .pQueuePriorities = &queuePriority,
+    };
     queueCreateInfos.push_back(queueCreateInfo);
   }
 
-  VkPhysicalDeviceFeatures deviceFeatures{};
-  deviceFeatures.samplerAnisotropy = VK_TRUE;
+  VkPhysicalDeviceFeatures deviceFeatures{
+      .samplerAnisotropy = VK_TRUE,
+  };
 
-  VkDeviceCreateInfo deviceCreateInfo{};
-  deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  deviceCreateInfo.queueCreateInfoCount =
-      static_cast<uint32_t>(queueCreateInfos.size());
-  deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
-  deviceCreateInfo.pEnabledFeatures = &deviceFeatures;
-  deviceCreateInfo.enabledExtensionCount =
-      static_cast<uint32_t>(deviceExtensions_.size());
-  deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions_.data();
+  VkDeviceCreateInfo deviceCreateInfo{
+      .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+      .queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size()),
+      .pQueueCreateInfos = queueCreateInfos.data(),
+      .enabledExtensionCount = static_cast<uint32_t>(deviceExtensions_.size()),
+      .ppEnabledExtensionNames = deviceExtensions_.data(),
+      .pEnabledFeatures = &deviceFeatures,
+  };
 
   if (enableValidation_) {
     deviceCreateInfo.enabledLayerCount =
@@ -158,18 +160,27 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
   int windowHeight = 0;
   platform->getWindowSize(windowWidth, windowHeight);
 
-  if (!swapchain_.init(physicalDevice_, device_, surface_,
-                        indices.graphicsFamily.value(),
-                        indices.presentFamily.value(),
-                        static_cast<uint32_t>(windowWidth),
-                        static_cast<uint32_t>(windowHeight),
-                        config.window.vsync)) {
+  if (!swapchain_.init(
+          physicalDevice_, device_, surface_, indices.graphicsFamily.value(),
+          indices.presentFamily.value(), static_cast<uint32_t>(windowWidth),
+          static_cast<uint32_t>(windowHeight), config.window.vsync)) {
     s_logger.critical("Failed to create swapchain");
     return false;
   }
 
-  if (!renderPass_.init(device_, swapchain_.imageFormat())) {
+  depthFormat_ = chooseDepthFormat();
+
+  if (!renderPass_.init(device_, swapchain_.imageFormat(), depthFormat_)) {
     s_logger.critical("Failed to create render pass");
+    return false;
+  }
+
+  if (!depthImage_.init(physicalDevice_, device_, swapchain_.extent().width,
+                        swapchain_.extent().height, depthFormat_,
+                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                        VK_IMAGE_ASPECT_DEPTH_BIT)) {
+    s_logger.critical("Failed to create depth image");
     return false;
   }
 
@@ -190,11 +201,60 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
     return false;
   }
 
+  VertexInputDescription vertexDesc;
+  VkVertexInputBindingDescription binding{
+      .binding = 0,
+      .stride = sizeof(Vertex),
+      .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+  };
+  vertexDesc.bindings.push_back(binding);
+
+  VkVertexInputAttributeDescription posAttr{
+      .location = 0,
+      .binding = 0,
+      .format = VK_FORMAT_R32G32_SFLOAT,
+      .offset = offsetof(Vertex, pos),
+  };
+  vertexDesc.attributes.push_back(posAttr);
+
+  VkVertexInputAttributeDescription colorAttr{
+      .location = 1,
+      .binding = 0,
+      .format = VK_FORMAT_R32G32B32_SFLOAT,
+      .offset = offsetof(Vertex, color),
+  };
+  vertexDesc.attributes.push_back(colorAttr);
+
   if (!pipeline_.init(device_, renderPass_.renderPass(), swapchain_.extent(),
-                      vertexShader_, fragmentShader_)) {
+                      vertexShader_, fragmentShader_, vertexDesc)) {
     s_logger.critical("Failed to create graphics pipeline");
     return false;
   }
+
+  std::array<Vertex, 3> vertices = {{
+      {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+      {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+      {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+  }};
+
+  if (!vertexBuffer_.init(physicalDevice_, device_, sizeof(vertices),
+                          VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                              VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
+    s_logger.critical("Failed to create vertex buffer");
+    return false;
+  }
+  vertexBuffer_.upload(vertices.data(), sizeof(vertices));
+
+  std::array<uint16_t, 3> indexData = {{0, 1, 2}};
+  if (!indexBuffer_.init(physicalDevice_, device_, sizeof(indexData),
+                         VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
+    s_logger.critical("Failed to create index buffer");
+    return false;
+  }
+  indexBuffer_.upload(indexData.data(), sizeof(indexData));
 
   if (!frameContext_.init(device_, graphicsQueueIndex_)) {
     s_logger.critical("Failed to create frame context");
@@ -206,11 +266,15 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
 
 void VulkanDevice::shutdown() {
   if (device_ != VK_NULL_HANDLE) {
-    vkDeviceWaitIdle(device_); // wait for in-flight work before destroying anything
+    vkDeviceWaitIdle(
+        device_); // wait for in-flight work before destroying anything
   }
 
   destroyFramebuffers();
   pipeline_.shutdown();
+  depthImage_.shutdown();
+  indexBuffer_.shutdown();
+  vertexBuffer_.shutdown();
   vertexShader_.shutdown();
   fragmentShader_.shutdown();
   renderPass_.shutdown();
@@ -275,7 +339,8 @@ VkResult VulkanDevice::createDebugUtilsMessengerEXT(
     VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT *createInfo,
     const VkAllocationCallbacks *allocator,
     VkDebugUtilsMessengerEXT *messenger) {
-  return vkCreateDebugUtilsMessengerEXT(instance, createInfo, allocator, messenger);
+  return vkCreateDebugUtilsMessengerEXT(instance, createInfo, allocator,
+                                        messenger);
 }
 
 void VulkanDevice::destroyDebugUtilsMessengerEXT(
@@ -390,33 +455,40 @@ bool VulkanDevice::drawFrame() {
 
   VkCommandBuffer cmd = frameContext_.currentCommandBuffer();
 
-  VkCommandBufferBeginInfo beginInfo{};
-  beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  VkCommandBufferBeginInfo beginInfo{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+  };
 
   if (vkBeginCommandBuffer(cmd, &beginInfo) != VK_SUCCESS) {
     s_logger.error("Failed to begin command buffer");
     return false;
   }
 
-  VkRenderPassBeginInfo renderPassInfo{};
-  renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-  renderPassInfo.renderPass = renderPass_.renderPass();
-  renderPassInfo.framebuffer = framebuffers_[imageIndex];
-  renderPassInfo.renderArea.offset = {0, 0};
-  renderPassInfo.renderArea.extent = swapchain_.extent();
+  std::array<VkClearValue, 2> clearValues{};
+  clearValues[0].color.float32[0] = 0.05f;
+  clearValues[0].color.float32[1] = 0.05f;
+  clearValues[0].color.float32[2] = 0.2f;
+  clearValues[0].color.float32[3] = 1.0f;
+  clearValues[1].depthStencil.depth = 1.0f;
 
-  VkClearValue clearColor{};
-  clearColor.color.float32[0] = 0.05f;
-  clearColor.color.float32[1] = 0.05f;
-  clearColor.color.float32[2] = 0.2f;
-  clearColor.color.float32[3] = 1.0f;
-  renderPassInfo.clearValueCount = 1;
-  renderPassInfo.pClearValues = &clearColor;
+  VkRenderPassBeginInfo renderPassInfo{
+      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+      .renderPass = renderPass_.renderPass(),
+      .framebuffer = framebuffers_[imageIndex],
+      .renderArea = {{0, 0}, swapchain_.extent()},
+      .clearValueCount = 2,
+      .pClearValues = clearValues.data(),
+  };
 
   vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_.pipeline());
-  vkCmdDraw(cmd, 3, 1, 0, 0);
+
+  VkBuffer vertexBuffer = vertexBuffer_.buffer();
+  VkDeviceSize offset = 0;
+  vkCmdBindVertexBuffers(cmd, 0, 1, &vertexBuffer, &offset);
+  vkCmdBindIndexBuffer(cmd, indexBuffer_.buffer(), 0, VK_INDEX_TYPE_UINT16);
+  vkCmdDrawIndexed(cmd, 3, 1, 0, 0, 0);
 
   vkCmdEndRenderPass(cmd);
 
@@ -425,7 +497,8 @@ bool VulkanDevice::drawFrame() {
     return false;
   }
 
-  if (!frameContext_.endFrame(swapchain_, graphicsQueue_, presentQueue_, imageIndex)) {
+  if (!frameContext_.endFrame(swapchain_, graphicsQueue_, presentQueue_,
+                              imageIndex)) {
     return recreateSwapchain();
   }
 
@@ -436,18 +509,21 @@ bool VulkanDevice::createFramebuffers() {
   framebuffers_.resize(swapchain_.imageViews().size());
 
   for (size_t i = 0; i < framebuffers_.size(); ++i) {
-    VkImageView attachments[] = {swapchain_.imageViews()[i]};
+    std::array<VkImageView, 2> attachments = {swapchain_.imageViews()[i],
+                                              depthImage_.view()};
 
-    VkFramebufferCreateInfo fbInfo{};
-    fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    fbInfo.renderPass = renderPass_.renderPass();
-    fbInfo.attachmentCount = 1;
-    fbInfo.pAttachments = attachments;
-    fbInfo.width = swapchain_.extent().width;
-    fbInfo.height = swapchain_.extent().height;
-    fbInfo.layers = 1;
+    VkFramebufferCreateInfo fbInfo{
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = renderPass_.renderPass(),
+        .attachmentCount = renderPass_.hasDepth() ? 2u : 1u,
+        .pAttachments = attachments.data(),
+        .width = swapchain_.extent().width,
+        .height = swapchain_.extent().height,
+        .layers = 1,
+    };
 
-    if (vkCreateFramebuffer(device_, &fbInfo, nullptr, &framebuffers_[i]) != VK_SUCCESS) {
+    if (vkCreateFramebuffer(device_, &fbInfo, nullptr, &framebuffers_[i]) !=
+        VK_SUCCESS) {
       s_logger.error("Failed to create framebuffer");
       return false;
     }
@@ -479,16 +555,24 @@ bool VulkanDevice::recreateSwapchain() {
   vkDeviceWaitIdle(device_);
 
   destroyFramebuffers();
+  depthImage_.shutdown();
 
   auto indices = findQueueFamilies(physicalDevice_, surface_);
 
-  if (!swapchain_.recreate(physicalDevice_, surface_,
-                           indices.graphicsFamily.value(),
-                           indices.presentFamily.value(),
-                           static_cast<uint32_t>(width),
-                           static_cast<uint32_t>(height),
-                           config_.window.vsync)) {
+  if (!swapchain_.recreate(
+          physicalDevice_, surface_, indices.graphicsFamily.value(),
+          indices.presentFamily.value(), static_cast<uint32_t>(width),
+          static_cast<uint32_t>(height), config_.window.vsync)) {
     s_logger.error("Failed to recreate swapchain");
+    return false;
+  }
+
+  if (!depthImage_.init(physicalDevice_, device_, swapchain_.extent().width,
+                        swapchain_.extent().height, depthFormat_,
+                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                        VK_IMAGE_ASPECT_DEPTH_BIT)) {
+    s_logger.error("Failed to recreate depth image");
     return false;
   }
 
@@ -499,6 +583,10 @@ bool VulkanDevice::recreateSwapchain() {
 
   s_logger.info("Swapchain recreated.");
   return true;
+}
+
+VkFormat VulkanDevice::chooseDepthFormat() {
+  return findDepthFormat(physicalDevice_);
 }
 
 } // namespace Raiden::Core

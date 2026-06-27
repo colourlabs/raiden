@@ -6,14 +6,16 @@ namespace Raiden::Core {
 
 class VulkanRenderPass {
 public:
-  bool init(VkDevice device, VkFormat imageFormat);
+  bool init(VkDevice device, VkFormat imageFormat, VkFormat depthFormat);
   void shutdown();
 
   VkRenderPass renderPass() const { return renderPass_; }
+  bool hasDepth() const { return depthFormat_ != VK_FORMAT_UNDEFINED; }
 
 private:
   VkDevice device_ = VK_NULL_HANDLE;
   VkRenderPass renderPass_ = VK_NULL_HANDLE;
+  VkFormat depthFormat_ = VK_FORMAT_UNDEFINED;
 };
 
 }

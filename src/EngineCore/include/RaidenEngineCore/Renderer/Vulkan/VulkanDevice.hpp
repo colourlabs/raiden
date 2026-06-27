@@ -6,8 +6,12 @@
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanRenderPass.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanShader.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanPipeline.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanBuffer.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanImage.hpp>
 
 #include <RaidenEngineCore/Renderer/Vulkan/IVulkanRenderDevice.hpp>
+
+#include <glm/glm.hpp>
 
 #include <optional>
 #include <vector>
@@ -27,6 +31,11 @@ struct SwapChainSupport {
   VkSurfaceCapabilitiesKHR capabilities;
   std::vector<VkSurfaceFormatKHR> formats;
   std::vector<VkPresentModeKHR> presentModes;
+};
+
+struct Vertex {
+  glm::vec2 pos;
+  glm::vec3 color;
 };
 
 class VulkanDevice final : public IVulkanRenderDevice {
@@ -101,6 +110,7 @@ private:
   bool recreateSwapchain();
   bool createFramebuffers();
   void destroyFramebuffers();
+  VkFormat chooseDepthFormat();
 
   // other stuff
   VulkanSwapchain swapchain_;
@@ -111,6 +121,10 @@ private:
   VulkanShader vertexShader_;
   VulkanShader fragmentShader_;
   VulkanPipeline pipeline_;
+  VulkanBuffer vertexBuffer_;
+  VulkanBuffer indexBuffer_;
+  VulkanImage depthImage_;
+  VkFormat depthFormat_ = VK_FORMAT_UNDEFINED;
 };
 
 } // namespace Raiden::Core

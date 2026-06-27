@@ -1,6 +1,6 @@
+#include <RaidenEngineCore/Logger.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanFrameContext.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanSwapchain.hpp>
-#include <RaidenEngineCore/Logger.hpp>
 
 namespace Raiden::Core {
 
@@ -10,12 +10,14 @@ bool VulkanFrameContext::init(VkDevice device, uint32_t graphicsFamily) {
   device_ = device;
 
   // command pool
-  VkCommandPoolCreateInfo poolInfo{};
-  poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-  poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-  poolInfo.queueFamilyIndex = graphicsFamily;
+  VkCommandPoolCreateInfo poolInfo{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+      .queueFamilyIndex = graphicsFamily,
+  };
 
-  if (vkCreateCommandPool(device_, &poolInfo, nullptr, &commandPool_) != VK_SUCCESS) {
+  if (vkCreateCommandPool(device_, &poolInfo, nullptr, &commandPool_) !=
+      VK_SUCCESS) {
     s_logger.critical("Failed to create command pool");
     return false;
   }
@@ -23,13 +25,15 @@ bool VulkanFrameContext::init(VkDevice device, uint32_t graphicsFamily) {
   // command buffers, one per frame in flight
   commandBuffers_.resize(kMaxFramesInFlight);
 
-  VkCommandBufferAllocateInfo allocInfo{};
-  allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  allocInfo.commandPool = commandPool_;
-  allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-  allocInfo.commandBufferCount = kMaxFramesInFlight;
+  VkCommandBufferAllocateInfo allocInfo{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+      .commandPool = commandPool_,
+      .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+      .commandBufferCount = kMaxFramesInFlight,
+  };
 
-  if (vkAllocateCommandBuffers(device_, &allocInfo, commandBuffers_.data()) != VK_SUCCESS) {
+  if (vkAllocateCommandBuffers(device_, &allocInfo, commandBuffers_.data()) !=
+      VK_SUCCESS) {
     s_logger.critical("Failed to allocate command buffers");
     return false;
   }
@@ -39,17 +43,23 @@ bool VulkanFrameContext::init(VkDevice device, uint32_t graphicsFamily) {
   renderFinishedSemaphores_.resize(kMaxFramesInFlight);
   inFlightFences_.resize(kMaxFramesInFlight);
 
-  VkSemaphoreCreateInfo semInfo{};
-  semInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+  VkSemaphoreCreateInfo semInfo{
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+  };
 
-  VkFenceCreateInfo fenceInfo{};
-  fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-  fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT; // start signaled so first beginFrame doesn't block forever
+  VkFenceCreateInfo fenceInfo{
+      .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+      .flags = VK_FENCE_CREATE_SIGNALED_BIT, // start signaled so first
+                                             // beginFrame doesn't block forever
+  };
 
   for (uint32_t i = 0; i < kMaxFramesInFlight; ++i) {
-    if (vkCreateSemaphore(device_, &semInfo, nullptr, &imageAvailableSemaphores_[i]) != VK_SUCCESS ||
-        vkCreateSemaphore(device_, &semInfo, nullptr, &renderFinishedSemaphores_[i]) != VK_SUCCESS ||
-        vkCreateFence(device_, &fenceInfo, nullptr, &inFlightFences_[i]) != VK_SUCCESS) {
+    if (vkCreateSemaphore(device_, &semInfo, nullptr,
+                          &imageAvailableSemaphores_[i]) != VK_SUCCESS ||
+        vkCreateSemaphore(device_, &semInfo, nullptr,
+                          &renderFinishedSemaphores_[i]) != VK_SUCCESS ||
+        vkCreateFence(device_, &fenceInfo, nullptr, &inFlightFences_[i]) !=
+            VK_SUCCESS) {
       s_logger.critical("Failed to create sync objects");
       return false;
     }
@@ -70,14 +80,17 @@ void VulkanFrameContext::shutdown() {
   imageAvailableSemaphores_.clear();
 
   if (commandPool_ != VK_NULL_HANDLE) {
-    vkDestroyCommandPool(device_, commandPool_, nullptr); // also frees its command buffers
+    vkDestroyCommandPool(device_, commandPool_,
+                         nullptr); // also frees its command buffers
     commandPool_ = VK_NULL_HANDLE;
   }
   commandBuffers_.clear();
 }
 
-bool VulkanFrameContext::beginFrame(VulkanSwapchain& swapchain, uint32_t& outImageIndex) {
-  vkWaitForFences(device_, 1, &inFlightFences_[currentFrame_], VK_TRUE, UINT64_MAX);
+bool VulkanFrameContext::beginFrame(VulkanSwapchain &swapchain,
+                                    uint32_t &outImageIndex) {
+  vkWaitForFences(device_, 1, &inFlightFences_[currentFrame_], VK_TRUE,
+                  UINT64_MAX);
 
   VkResult result = vkAcquireNextImageKHR(
       device_, swapchain.swapchain(), UINT64_MAX,
@@ -97,37 +110,41 @@ bool VulkanFrameContext::beginFrame(VulkanSwapchain& swapchain, uint32_t& outIma
   return true;
 }
 
-bool VulkanFrameContext::endFrame(VulkanSwapchain& swapchain, VkQueue graphicsQueue, VkQueue presentQueue, uint32_t imageIndex) {
-  VkSubmitInfo submitInfo{};
-  submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+bool VulkanFrameContext::endFrame(VulkanSwapchain &swapchain,
+                                  VkQueue graphicsQueue, VkQueue presentQueue,
+                                  uint32_t imageIndex) {
+  VkSemaphore waitSemaphores[] = {imageAvailableSemaphores_[currentFrame_]};
+  VkPipelineStageFlags waitStages[] = {
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+  VkSemaphore signalSemaphores[] = {renderFinishedSemaphores_[currentFrame_]};
 
-  VkSemaphore waitSemaphores[] = { imageAvailableSemaphores_[currentFrame_] };
-  VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-  submitInfo.waitSemaphoreCount = 1;
-  submitInfo.pWaitSemaphores = waitSemaphores;
-  submitInfo.pWaitDstStageMask = waitStages;
+  VkSubmitInfo submitInfo{
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .waitSemaphoreCount = 1,
+      .pWaitSemaphores = waitSemaphores,
+      .pWaitDstStageMask = waitStages,
+      .commandBufferCount = 1,
+      .pCommandBuffers = &commandBuffers_[currentFrame_],
+      .signalSemaphoreCount = 1,
+      .pSignalSemaphores = signalSemaphores,
+  };
 
-  submitInfo.commandBufferCount = 1;
-  submitInfo.pCommandBuffers = &commandBuffers_[currentFrame_];
-
-  VkSemaphore signalSemaphores[] = { renderFinishedSemaphores_[currentFrame_] };
-  submitInfo.signalSemaphoreCount = 1;
-  submitInfo.pSignalSemaphores = signalSemaphores;
-
-  if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences_[currentFrame_]) != VK_SUCCESS) {
+  if (vkQueueSubmit(graphicsQueue, 1, &submitInfo,
+                    inFlightFences_[currentFrame_]) != VK_SUCCESS) {
     s_logger.error("Failed to submit draw command buffer");
     return false;
   }
 
-  VkPresentInfoKHR presentInfo{};
-  presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-  presentInfo.waitSemaphoreCount = 1;
-  presentInfo.pWaitSemaphores = signalSemaphores;
+  VkSwapchainKHR swapchains[] = {swapchain.swapchain()};
 
-  VkSwapchainKHR swapchains[] = { swapchain.swapchain() };
-  presentInfo.swapchainCount = 1;
-  presentInfo.pSwapchains = swapchains;
-  presentInfo.pImageIndices = &imageIndex;
+  VkPresentInfoKHR presentInfo{
+      .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+      .waitSemaphoreCount = 1,
+      .pWaitSemaphores = signalSemaphores,
+      .swapchainCount = 1,
+      .pSwapchains = swapchains,
+      .pImageIndices = &imageIndex,
+  };
 
   VkResult result = vkQueuePresentKHR(presentQueue, &presentInfo);
 
@@ -144,4 +161,4 @@ bool VulkanFrameContext::endFrame(VulkanSwapchain& swapchain, VkQueue graphicsQu
   return true;
 }
 
-};
+}; // namespace Raiden::Core

@@ -1,10 +1,16 @@
 #pragma once
 
 #include <volk.h>
+#include <vector>
 
 namespace Raiden::Core {
 
 class VulkanShader;
+
+struct VertexInputDescription {
+  std::vector<VkVertexInputBindingDescription> bindings;
+  std::vector<VkVertexInputAttributeDescription> attributes;
+};
 
 class VulkanPipeline {
 public:
@@ -18,7 +24,8 @@ public:
 
   bool init(VkDevice device, VkRenderPass renderPass, VkExtent2D extent,
             const VulkanShader &vertexShader,
-            const VulkanShader &fragmentShader);
+            const VulkanShader &fragmentShader,
+            const VertexInputDescription &vertexInput);
   void shutdown();
 
   VkPipeline pipeline() const { return pipeline_; }

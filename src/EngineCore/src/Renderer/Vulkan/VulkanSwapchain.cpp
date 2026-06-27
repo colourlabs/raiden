@@ -11,8 +11,7 @@ bool VulkanSwapchain::init(VkPhysicalDevice physicalDevice, VkDevice device,
                            uint32_t windowHeight, bool vsync) {
   device_ = device;
 
-  // TODO: maybe use the C++ bindings for Vulkan (vulkan-hpp) instead of writing
-  // this C-style bullshit
+  // TODO: maybe use vulkan-hpp instead
 
   VkSurfaceCapabilitiesKHR caps;
   vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &caps);
@@ -44,17 +43,24 @@ bool VulkanSwapchain::init(VkPhysicalDevice physicalDevice, VkDevice device,
   }
 
   // swapchain creation
-  VkSwapchainCreateInfoKHR createInfo{};
-  createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-  createInfo.surface = surface;
-  createInfo.minImageCount = imageCount;
-  createInfo.imageFormat = surfaceFormat.format;
-  createInfo.imageColorSpace = surfaceFormat.colorSpace;
-  createInfo.imageExtent = extent_;
-  createInfo.imageArrayLayers = 1;
-  createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-
   std::array<uint32_t, 2> queueFamilyIndices = {graphicsFamily, presentFamily};
+
+  VkSwapchainCreateInfoKHR createInfo{
+      .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+      .surface = surface,
+      .minImageCount = imageCount,
+      .imageFormat = surfaceFormat.format,
+      .imageColorSpace = surfaceFormat.colorSpace,
+      .imageExtent = extent_,
+      .imageArrayLayers = 1,
+      .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+      .preTransform = caps.currentTransform,
+      .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+      .presentMode = presentMode,
+      .clipped = VK_TRUE,
+      .oldSwapchain = VK_NULL_HANDLE, // TODO: replace later
+  };
+
   if (graphicsFamily != presentFamily) {
     createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
     createInfo.queueFamilyIndexCount = 2;
@@ -62,12 +68,6 @@ bool VulkanSwapchain::init(VkPhysicalDevice physicalDevice, VkDevice device,
   } else {
     createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
   }
-
-  createInfo.preTransform = caps.currentTransform;
-  createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-  createInfo.presentMode = presentMode;
-  createInfo.clipped = VK_TRUE;
-  createInfo.oldSwapchain = VK_NULL_HANDLE; // TODO: replace later
 
   if (vkCreateSwapchainKHR(device_, &createInfo, nullptr, &swapchain_) !=
       VK_SUCCESS) {
@@ -85,19 +85,17 @@ bool VulkanSwapchain::init(VkPhysicalDevice physicalDevice, VkDevice device,
   // create an image view per image
   imageViews_.resize(images_.size());
   for (size_t i = 0; i < images_.size(); ++i) {
-    VkImageViewCreateInfo viewInfo{};
-    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.image = images_[i];
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = imageFormat_;
-    viewInfo.components = {
-        VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
-        VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY};
-    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = 1;
-    viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = 1;
+    VkImageViewCreateInfo viewInfo{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = images_[i],
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = imageFormat_,
+        .components = {VK_COMPONENT_SWIZZLE_IDENTITY,
+                       VK_COMPONENT_SWIZZLE_IDENTITY,
+                       VK_COMPONENT_SWIZZLE_IDENTITY,
+                       VK_COMPONENT_SWIZZLE_IDENTITY},
+        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+    };
 
     if (vkCreateImageView(device_, &viewInfo, nullptr, &imageViews_[i]) !=
         VK_SUCCESS) {

@@ -1,5 +1,5 @@
-#include <RaidenEngineCore/Renderer/Vulkan/VulkanShader.hpp>
 #include <RaidenEngineCore/Logger.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanShader.hpp>
 
 #include <fstream>
 #include <vector>
@@ -27,10 +27,11 @@ bool VulkanShader::init(VkDevice device, ShaderStage stage,
             static_cast<std::streamsize>(fileSize));
   file.close();
 
-  VkShaderModuleCreateInfo moduleInfo{};
-  moduleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-  moduleInfo.codeSize = code.size() * sizeof(uint32_t);
-  moduleInfo.pCode = code.data();
+  VkShaderModuleCreateInfo moduleInfo{
+      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+      .codeSize = code.size() * sizeof(uint32_t),
+      .pCode = code.data(),
+  };
 
   if (vkCreateShaderModule(device_, &moduleInfo, nullptr, &module_) !=
       VK_SUCCESS) {
@@ -67,4 +68,4 @@ void VulkanShader::shutdown() {
   }
 }
 
-}
+} // namespace Raiden::Core
