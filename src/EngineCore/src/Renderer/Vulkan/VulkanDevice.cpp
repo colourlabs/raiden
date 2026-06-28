@@ -29,6 +29,7 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
   if (enableValidation_) {
     extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
   }
+
   // proudly stolen
   VkApplicationInfo appInfo{
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,

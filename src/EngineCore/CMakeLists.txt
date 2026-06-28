@@ -5,6 +5,12 @@ CPMAddPackage(
 )
 
 CPMAddPackage(
+  NAME VulkanMemoryAllocator
+  GITHUB_REPOSITORY GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
+  GIT_TAG v3.4.0
+)
+
+CPMAddPackage(
   NAME SDL3
   GITHUB_REPOSITORY libsdl-org/SDL
   GIT_TAG release-3.4.10
@@ -22,6 +28,7 @@ add_library(EngineCore STATIC
   
   src/Platform/SDL3/SDL3Platform.cpp
   
+  src/Renderer/Vulkan/VulkanAllocator.cpp
   src/Renderer/Vulkan/VulkanDevice.cpp
   src/Renderer/Vulkan/VulkanSwapchain.cpp
   src/Renderer/Vulkan/VulkanFrameContext.cpp
@@ -45,4 +52,5 @@ target_link_libraries(EngineCore PUBLIC
   volk
   SDL3::SDL3
   glm::glm
+  VulkanMemoryAllocator
 )
