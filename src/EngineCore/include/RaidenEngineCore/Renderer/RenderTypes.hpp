@@ -1,5 +1,6 @@
 #pragma once
 
+#include <glm/glm.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
@@ -59,6 +60,20 @@ struct TextureDesc {
   uint32_t width;
   uint32_t height;
   Format format;
+};
+
+struct alignas(16) FrameUniforms {
+  glm::mat4 projection;
+  glm::mat4 view;
+  glm::mat4 model;
+  glm::vec4 extra; // x=time, y=dt, z=resolutionX, w=resolutionY
+};
+
+struct Vertex {
+  glm::vec3 pos;
+  glm::vec3 normal;
+  glm::vec3 color;
+  glm::vec2 uv;
 };
 
 } // namespace Raiden::Core

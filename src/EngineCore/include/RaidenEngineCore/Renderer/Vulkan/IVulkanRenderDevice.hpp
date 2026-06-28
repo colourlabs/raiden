@@ -1,5 +1,6 @@
 #pragma once
 
+#include <RaidenEngineCore/ECS/World.hpp>
 #include <RaidenEngineCore/Renderer/IRenderDevice.hpp>
 #include <volk.h>
 
@@ -19,6 +20,8 @@ public:
   virtual bool hasValidation() const = 0;
   virtual VkRenderPass getRenderPass() const = 0;
   virtual uint32_t getSwapchainImageCount() const = 0;
+
+  virtual void setWorld(World *world) = 0;
 };
 
 } // namespace Raiden::Core

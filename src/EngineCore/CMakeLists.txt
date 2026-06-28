@@ -40,6 +40,24 @@ CPMAddPackage(
   GIT_TAG v0.17
 )
 
+CPMAddPackage(
+  NAME ktx
+  GITHUB_REPOSITORY KhronosGroup/KTX-Software
+  GIT_TAG v4.4.2
+  OPTIONS
+    "KTX_FEATURE_TESTS OFF"
+    "KTX_FEATURE_TOOLS OFF"
+    "KTX_FEATURE_GL_UPLOAD OFF" # no OpenGL backend as of yet
+    "KTX_FEATURE_VK_UPLOAD OFF" # we do our own upload
+    "KTX_FEATURE_STATIC_LIBRARY ON"
+)
+
+CPMAddPackage(
+  NAME fastgltf
+  GITHUB_REPOSITORY spnda/fastgltf
+  GIT_TAG v0.9.0
+)
+
 add_library(EngineCore STATIC
   src/Application.cpp
   src/Logger.cpp
@@ -55,6 +73,9 @@ add_library(EngineCore STATIC
   src/Platform/SDL3/SDL3Platform.cpp
   
   src/Input/ActionMap.cpp
+
+  src/Assets/AssetManager.cpp
+  src/Assets/KtxLoader.cpp
   
   src/Renderer/Vulkan/VulkanAllocator.cpp
   src/Renderer/Vulkan/VulkanDevice.cpp
@@ -69,6 +90,7 @@ add_library(EngineCore STATIC
   src/Renderer/Vulkan/VulkanTextureImpl.cpp
   src/Renderer/Vulkan/VulkanCommandBuffer.cpp
   src/Renderer/Vulkan/VulkanDescriptorPool.cpp
+  src/Renderer/Vulkan/VulkanMaterial.cpp
 )
 
 target_compile_definitions(EngineCore PUBLIC
@@ -83,6 +105,11 @@ target_include_directories(EngineCore PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
+
+set_target_properties(EngineCore PROPERTIES
+  POSITION_INDEPENDENT_CODE ON
+)
+
 target_include_directories(EngineCore PRIVATE
   ${imgui_SOURCE_DIR}
   ${imgui_SOURCE_DIR}/backends
@@ -105,4 +132,6 @@ target_link_libraries(EngineCore PUBLIC
   glm::glm
   VulkanMemoryAllocator
   tomlplusplus::tomlplusplus
+  ktx
+  fastgltf::fastgltf
 )

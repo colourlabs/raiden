@@ -35,6 +35,7 @@ public:
   std::unique_ptr<IFile> open(std::string_view path) override;
   bool exists(std::string_view path) const override;
   std::string readAll(std::string_view path) override;
+  std::vector<std::byte> readBytes(std::string_view path) override;
 
   std::string resolveToRealPath(std::string_view virtualPath) const;
 

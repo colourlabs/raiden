@@ -33,6 +33,7 @@ public:
                                            VkDescriptorPool pool,
                                            VkDescriptorSetLayout layout,
                                            VkSampler sampler) const;
+  VkSampler sampler() const { return sampler_; }
 
 private:
   void transitionLayout(VkCommandBuffer cmd, VkImageLayout oldLayout,
@@ -45,6 +46,7 @@ private:
   VulkanImage image_;
   VkFormat vkFormat_ = VK_FORMAT_UNDEFINED;
   Format format_ = Format::R8G8B8A8_UNORM;
+  VkSampler sampler_ = VK_NULL_HANDLE;
   uint32_t width_ = 0;
   uint32_t height_ = 0;
   mutable VkDescriptorSet descriptorSet_ = VK_NULL_HANDLE;

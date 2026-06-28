@@ -38,6 +38,7 @@ private:
   std::unique_ptr<IPlatform> platform_;
   std::unique_ptr<IRenderDevice> device_;
   std::unique_ptr<IVirtualFileSystem> vfs_;
+  std::unique_ptr<IAssetManager> assetManager_;
   std::unique_ptr<ImGuiOverlay> overlay_;
 
   EngineConfig config_;

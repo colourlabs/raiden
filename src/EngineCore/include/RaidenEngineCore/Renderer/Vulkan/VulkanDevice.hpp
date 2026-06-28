@@ -1,18 +1,20 @@
 #pragma once
 
+#include <RaidenEngineCore/ECS/World.hpp>
 #include <RaidenEngineCore/EngineConfig.hpp>
-#include <RaidenEngineCore/Renderer/Vulkan/VulkanSwapchain.hpp>
-#include <RaidenEngineCore/Renderer/Vulkan/VulkanFrameContext.hpp>
-#include <RaidenEngineCore/Renderer/Vulkan/VulkanRenderPass.hpp>
-#include <RaidenEngineCore/Renderer/Vulkan/VulkanShader.hpp>
-#include <RaidenEngineCore/Renderer/Vulkan/VulkanPipeline.hpp>
-#include <RaidenEngineCore/Renderer/Vulkan/VulkanBuffer.hpp>
-#include <RaidenEngineCore/Renderer/Vulkan/VulkanImage.hpp>
+#include <RaidenEngineCore/Renderer/RenderTypes.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanAllocator.hpp>
-#include <RaidenEngineCore/Renderer/Vulkan/VulkanPipelineImpl.hpp>
-#include <RaidenEngineCore/Renderer/Vulkan/VulkanTextureImpl.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanBuffer.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanCommandBuffer.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanDescriptorPool.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanFrameContext.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanImage.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanPipeline.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanPipelineImpl.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanRenderPass.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanShader.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanSwapchain.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanTextureImpl.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -20,6 +22,7 @@
 
 #include <glm/glm.hpp>
 
+#include <chrono>
 #include <optional>
 #include <vector>
 
@@ -40,18 +43,7 @@ struct SwapChainSupport {
   std::vector<VkPresentModeKHR> presentModes;
 };
 
-struct Vertex {
-  glm::vec2 pos;
-  glm::vec3 color;
-};
-
-struct alignas(16) FrameUniforms {
-  glm::mat4 projection;
-  glm::mat4 view;
-  glm::vec4 extra; // x=time, y=deltaTime, z=resolutionX, w=resolutionY
-};
-
-class VulkanDevice final : public IVulkanRenderDevice {
+class VulkanDevice : public IVulkanRenderDevice {
 public:
   VulkanDevice() = default;
   ~VulkanDevice() override;
@@ -68,20 +60,28 @@ public:
   VkPhysicalDevice getPhysicalDevice() const override {
     return physicalDevice_;
   }
+
   VkDevice getDevice() const override { return device_; }
   VkQueue getGraphicsQueue() const override { return graphicsQueue_; }
   VkQueue getPresentQueue() const override { return presentQueue_; }
+
   uint32_t getGraphicsQueueIndex() const override {
     return graphicsQueueIndex_;
   }
+
   uint32_t getPresentQueueIndex() const override { return presentQueueIndex_; }
+
   bool hasValidation() const override { return enableValidation_; }
+
   VkRenderPass getRenderPass() const override {
     return renderPass_.renderPass();
   }
+
   uint32_t getSwapchainImageCount() const override {
     return static_cast<uint32_t>(swapchain_.imageViews().size());
   }
+
+  void setWorld(World *world) override { world_ = world; }
 
   float gpuTimeMs() const { return gpuTimeMs_; }
   uint32_t lastDrawCalls() const { return lastDrawCalls_; }
@@ -90,6 +90,13 @@ public:
   std::unique_ptr<IBuffer> createBuffer(const BufferDesc &desc) override;
   std::unique_ptr<IPipeline> createPipeline(const PipelineDesc &desc) override;
   std::unique_ptr<ITexture> createTexture(const TextureDesc &desc) override;
+
+  std::shared_ptr<IMaterial>
+  createMaterial(const MaterialDesc &desc, std::shared_ptr<ITexture> albedo,
+                 std::shared_ptr<ITexture> normal,
+                 std::shared_ptr<ITexture> metallicRoughness,
+                 std::shared_ptr<ITexture> emissive,
+                 std::shared_ptr<ITexture> occlusion) override;
 
   void waitIdle() override {
     if (device_ != VK_NULL_HANDLE)
@@ -129,8 +136,10 @@ private:
   VkQueue presentQueue_ = VK_NULL_HANDLE;
   uint32_t graphicsQueueIndex_ = 0;
   uint32_t presentQueueIndex_ = 0;
-  IPlatform* platform_ = nullptr;
+  IPlatform *platform_ = nullptr;
   EngineConfig config_;
+
+  std::vector<std::unique_ptr<IPipeline>> pipelineOwnership_;
 
   bool enableValidation_ = false;
 
@@ -140,7 +149,6 @@ private:
   const std::vector<const char *> deviceExtensions_ = {
       VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
-  bool drawFrame() override;
   bool recreateSwapchain();
   bool createFramebuffers();
   void destroyFramebuffers();
@@ -174,6 +182,11 @@ private:
   VkFormat depthFormat_ = VK_FORMAT_UNDEFINED;
 
   float totalTime_ = 0.0f;
+
+  uint32_t frameIndex_ = 0;
+  std::chrono::steady_clock::time_point lastFrameTime_;
+  bool timestampReady_[kMaxFrames] = {};
+  World *world_ = nullptr;
 
   // profiler
   VkQueryPool queryPool_ = VK_NULL_HANDLE;

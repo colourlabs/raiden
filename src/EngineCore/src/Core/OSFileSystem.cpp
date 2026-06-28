@@ -48,6 +48,19 @@ void OSFile::close() {
   }
 }
 
+std::vector<std::byte> OSFileSystem::readBytes(std::string_view path) {
+  auto file = open(path);
+  if (!file)
+      return {};
+
+  size_t sz = file->size();
+  std::vector<std::byte> result(sz);
+  if (sz > 0) {
+      file->read(result.data(), sz);
+  }
+  return result;
+}
+
 bool OSFileSystem::mount(std::string_view virtualPath,
                          std::string_view realPath) {
   // normalize: ensure virtual prefix ends with /

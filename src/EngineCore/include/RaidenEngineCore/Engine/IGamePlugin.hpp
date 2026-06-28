@@ -1,9 +1,13 @@
 #pragma once
 
 
+#include <RaidenEngineCore/Assets/IAssetManager.hpp>
+#include <RaidenEngineCore/ECS/World.hpp>
+
 namespace Raiden::Core {
 
 class IVirtualFileSystem;
+class IAssetManager;
 
 }
 
@@ -17,9 +21,10 @@ class IGamePlugin {
 public:
   virtual ~IGamePlugin() = default;
   virtual const char *name() const = 0;
-  virtual bool init(IRenderDevice &device, IVirtualFileSystem &vfs) = 0;
+  virtual bool init(IRenderDevice &device, IVirtualFileSystem &vfs, IAssetManager &assets) = 0;
   virtual void update(float deltaTime, const InputState &input) = 0;
   virtual void render(ICommandBuffer &cmd) = 0;
+  virtual Raiden::Core::World *getWorld() { return nullptr; }
   virtual void onDebugUI() {}
   virtual void shutdown() = 0;
 };

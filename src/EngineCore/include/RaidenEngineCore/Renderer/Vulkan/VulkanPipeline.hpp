@@ -1,7 +1,7 @@
 #pragma once
 
-#include <volk.h>
 #include <vector>
+#include <volk.h>
 
 namespace Raiden::Core {
 
@@ -22,10 +22,6 @@ public:
   VulkanPipeline(VulkanPipeline &&) = delete;
   VulkanPipeline &operator=(VulkanPipeline &&) = delete;
 
-  bool init(VkDevice device, VkRenderPass renderPass, VkExtent2D extent,
-            const VulkanShader &vertexShader,
-            const VulkanShader &fragmentShader,
-            const VertexInputDescription &vertexInput);
   bool initDynamic(VkDevice device, VkRenderPass renderPass,
                    const VulkanShader &vertexShader,
                    const VulkanShader &fragmentShader,
@@ -44,4 +40,4 @@ private:
   VkPipeline pipeline_ = VK_NULL_HANDLE;
 };
 
-}
+} // namespace Raiden::Core

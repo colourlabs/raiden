@@ -1,7 +1,47 @@
-struct FrameUniforms {
+struct FrameUniforms
+{
   float4x4 projection;
   float4x4 view;
-  float4 extra; // x = time, y = deltaTime, z = resX, w = resY
+  float4x4 model;
+  float4 extra; // x=time, y=deltaTime, z=resX, w=resY
 };
 
-[[vk::binding(0, 0)]] ConstantBuffer<FrameUniforms> frameUBO;
+struct MaterialParams
+{
+  float4 baseColorFactor;
+  float4 emissiveFactor; // w unused
+  float metallicFactor;
+  float roughnessFactor;
+  float occlusionStrength;
+  float alphaCutoff;
+  int alphaMode; // 0=Opaque 1=Mask 2=Blend
+  int normalMapDirectX;
+  int hasNormalMap;
+  int hasEmissiveMap;
+  int hasOcclusionMap;
+  int hasMetallicRoughnessMap;
+  float2 uvOffset;
+  float2 uvScale;
+  float uvRotation;
+  int vertexColorMode; // 0=Ignore 1=Multiply 2=Add
+  float2 _pad;
+};
+
+[[vk::binding(0, 0)]]
+ConstantBuffer<FrameUniforms> frameUBO;
+
+// set 2, material textures
+[[vk::binding(0, 2)]]
+Texture2D<float4> albedoMap;
+[[vk::binding(1, 2)]]
+Texture2D<float4> normalMap;
+[[vk::binding(2, 2)]]
+Texture2D<float4> metallicRoughnessMap;
+[[vk::binding(3, 2)]]
+Texture2D<float4> emissiveMap;
+[[vk::binding(4, 2)]]
+Texture2D<float4> occlusionMap;
+
+// set 3, material params
+[[vk::binding(0, 3)]]
+ConstantBuffer<MaterialParams> material;

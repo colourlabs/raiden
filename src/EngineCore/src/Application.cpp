@@ -1,4 +1,5 @@
 #include <RaidenEngineCore/Application.hpp>
+#include <RaidenEngineCore/Assets/AssetManager.hpp>
 #include <RaidenEngineCore/Engine/VulkanImGuiBackend.hpp>
 #include <RaidenEngineCore/Logger.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/IVulkanRenderDevice.hpp>
@@ -13,8 +14,7 @@ static const Logger s_logger("Raiden::Core::Application");
 Application::Application(std::unique_ptr<IPlatform> platform,
                          std::unique_ptr<IRenderDevice> device,
                          std::unique_ptr<IVirtualFileSystem> vfs)
-    : platform_(std::move(platform)),
-      device_(std::move(device)),
+    : platform_(std::move(platform)), device_(std::move(device)),
       vfs_(std::move(vfs)) {
   lastFrameTime_ = std::chrono::steady_clock::now();
 }
@@ -36,6 +36,8 @@ bool Application::init(const EngineConfig &config) {
     return false;
   }
 
+  assetManager_ = std::make_unique<AssetManager>(*device_, *vfs_);
+
   // init ImGui overlay
   if (auto *vkDevice = dynamic_cast<IVulkanRenderDevice *>(device_.get())) {
     auto backend = std::make_unique<VulkanImGuiBackend>(
@@ -56,10 +58,16 @@ bool Application::loadGamePlugin(std::string_view path) {
     return false;
   }
 
-  if (!pluginLoader_.plugin().init(*device_, *vfs_)) {
+  if (!pluginLoader_.plugin().init(*device_, *vfs_, *assetManager_)) {
     s_logger.error("Game plugin init failed.");
     pluginLoader_.unload();
     return false;
+  }
+
+  auto *vkDev = dynamic_cast<IVulkanRenderDevice *>(device_.get());
+  if (vkDev) {
+    if (auto *world = pluginLoader_.plugin().getWorld())
+      vkDev->setWorld(world);
   }
 
   s_logger.info("Game plugin '{}' initialized.", pluginLoader_.plugin().name());
@@ -72,6 +80,7 @@ void Application::shutdown() {
     running_ = false;
     overlay_.reset();
     pluginLoader_.unload();
+    assetManager_.reset();
     device_->shutdown();
     platform_->shutdown();
   }
@@ -117,8 +126,8 @@ void Application::run() {
         pluginUI = [&]() { pluginLoader_.plugin().onDebugUI(); };
       }
 
-      overlay_->newFrame(platform_->getInputState(), w, h, deltaTime,
-                         profiler, pluginUI);
+      overlay_->newFrame(platform_->getInputState(), w, h, deltaTime, profiler,
+                         pluginUI);
       overlay_->endFrame();
     }
 

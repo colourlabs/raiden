@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace Raiden::Core {
 
@@ -16,6 +17,7 @@ public:
   virtual std::unique_ptr<IFile> open(std::string_view path) = 0;
   virtual bool exists(std::string_view path) const = 0;
   virtual std::string readAll(std::string_view path) = 0;
+  virtual std::vector<std::byte> readBytes(std::string_view path) = 0;
 };
 
 // factory – the implementation lives in a platform-specific source file
