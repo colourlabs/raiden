@@ -1,5 +1,6 @@
 #pragma once
 
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanAllocator.hpp>
 #include <volk.h>
 
 namespace Raiden::Core {
@@ -14,25 +15,26 @@ public:
   VulkanBuffer(VulkanBuffer &&) = delete;
   VulkanBuffer &operator=(VulkanBuffer &&) = delete;
 
-  bool init(VkPhysicalDevice physicalDevice, VkDevice device,
-            VkDeviceSize size, VkBufferUsageFlags usage,
-            VkMemoryPropertyFlags properties);
+  bool init(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags usage,
+            VmaMemoryUsage memoryUsag, VmaAllocationCreateFlags allocFlags = 0);
+
   void shutdown();
+
+  bool map();
+  void unmap();
 
   void upload(const void *data, VkDeviceSize size);
 
   VkBuffer buffer() const { return buffer_; }
 
 private:
-  uint32_t findMemoryType(uint32_t typeFilter,
-                          VkMemoryPropertyFlags properties);
+  VmaAllocator allocator_ = nullptr;
+  VmaAllocation allocation_ = nullptr;
 
-  VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
-  VkDevice device_ = VK_NULL_HANDLE;
   VkBuffer buffer_ = VK_NULL_HANDLE;
-  VkDeviceMemory memory_ = VK_NULL_HANDLE;
+
   void *mapped_ = nullptr;
   VkDeviceSize size_ = 0;
 };
 
-}
+} // namespace Raiden::Core

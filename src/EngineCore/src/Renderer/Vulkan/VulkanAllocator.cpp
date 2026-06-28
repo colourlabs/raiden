@@ -1,22 +1,25 @@
-#include <RaidenEngineCore/Renderer/Vulkan/VulkanAllocator.hpp>
+#define VMA_IMPLEMENTATION
+
 #include <RaidenEngineCore/Logger.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanAllocator.hpp>
 
 namespace Raiden::Core {
 
 static const Logger s_logger("Raiden::Core::VulkanAllocator");
 
-bool VulkanAllocator::init(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device) {
+bool VulkanAllocator::init(VkInstance instance, VkPhysicalDevice physicalDevice,
+                           VkDevice device) {
   VmaVulkanFunctions functions{};
   functions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
   functions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
 
   VmaAllocatorCreateInfo allocatorCreateInfo{
-    .flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT,
-    .physicalDevice = physicalDevice,
-    .device = device,
-    .pVulkanFunctions = &functions,
-    .instance = instance,
-    .vulkanApiVersion = VK_API_VERSION_1_4,
+      .flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT,
+      .physicalDevice = physicalDevice,
+      .device = device,
+      .pVulkanFunctions = &functions,
+      .instance = instance,
+      .vulkanApiVersion = VK_API_VERSION_1_4,
   };
 
   allocator_ = VmaAllocator{};
@@ -28,4 +31,11 @@ bool VulkanAllocator::init(VkInstance instance, VkPhysicalDevice physicalDevice,
   return true;
 };
 
+void VulkanAllocator::shutdown() {
+  if (allocator_) {
+    vmaDestroyAllocator(allocator_);
+    allocator_ = nullptr;
+  }
 }
+
+} // namespace Raiden::Core

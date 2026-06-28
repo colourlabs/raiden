@@ -152,6 +152,11 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
 
   volkLoadDevice(device_);
 
+  if (!allocator_.init(instance_, physicalDevice_, device_)) {
+    s_logger.critical("Failed to create VMA allocator");
+    return false;
+  }
+
   graphicsQueueIndex_ = indices.graphicsFamily.value();
   presentQueueIndex_ = indices.presentFamily.value();
   vkGetDeviceQueue(device_, graphicsQueueIndex_, 0, &graphicsQueue_);
@@ -176,10 +181,10 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
     return false;
   }
 
-  if (!depthImage_.init(physicalDevice_, device_, swapchain_.extent().width,
+  if (!depthImage_.init(device_, allocator_.handle(), swapchain_.extent().width,
                         swapchain_.extent().height, depthFormat_,
                         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                        VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
                         VK_IMAGE_ASPECT_DEPTH_BIT)) {
     s_logger.critical("Failed to create depth image");
     return false;
@@ -238,24 +243,38 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
       {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
   }};
 
-  if (!vertexBuffer_.init(physicalDevice_, device_, sizeof(vertices),
-                          VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                              VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
+  if (!vertexBuffer_.init(
+          allocator_.handle(), sizeof(vertices),
+          VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
+          VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)) {
     s_logger.critical("Failed to create vertex buffer");
     return false;
   }
+
+  if (!vertexBuffer_.map()) {
+    s_logger.critical("Failed to map vertex buffer");
+    return false;
+  }
+
   vertexBuffer_.upload(vertices.data(), sizeof(vertices));
+  vertexBuffer_.unmap();
 
   std::array<uint16_t, 3> indexData = {{0, 1, 2}};
-  if (!indexBuffer_.init(physicalDevice_, device_, sizeof(indexData),
-                         VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
+
+  if (!indexBuffer_.init(
+          allocator_.handle(), sizeof(indexData),
+          VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
+          VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)) {
     s_logger.critical("Failed to create index buffer");
     return false;
   }
+
+  if (!indexBuffer_.map()) {
+    s_logger.critical("Failed to map index buffer");
+    return false;
+  }
   indexBuffer_.upload(indexData.data(), sizeof(indexData));
+  indexBuffer_.unmap();
 
   if (!frameContext_.init(device_, graphicsQueueIndex_)) {
     s_logger.critical("Failed to create frame context");
@@ -276,6 +295,7 @@ void VulkanDevice::shutdown() {
   depthImage_.shutdown();
   indexBuffer_.shutdown();
   vertexBuffer_.shutdown();
+  allocator_.shutdown();
   vertexShader_.shutdown();
   fragmentShader_.shutdown();
   renderPass_.shutdown();
@@ -568,10 +588,10 @@ bool VulkanDevice::recreateSwapchain() {
     return false;
   }
 
-  if (!depthImage_.init(physicalDevice_, device_, swapchain_.extent().width,
+  if (!depthImage_.init(device_, allocator_.handle(), swapchain_.extent().width,
                         swapchain_.extent().height, depthFormat_,
                         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                        VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
                         VK_IMAGE_ASPECT_DEPTH_BIT)) {
     s_logger.error("Failed to recreate depth image");
     return false;

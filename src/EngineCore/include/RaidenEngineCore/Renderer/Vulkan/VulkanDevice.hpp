@@ -8,6 +8,7 @@
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanPipeline.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanBuffer.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanImage.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanAllocator.hpp>
 
 #include <RaidenEngineCore/Renderer/Vulkan/IVulkanRenderDevice.hpp>
 
@@ -111,6 +112,8 @@ private:
   bool createFramebuffers();
   void destroyFramebuffers();
   VkFormat chooseDepthFormat();
+
+  VulkanAllocator allocator_;
 
   // other stuff
   VulkanSwapchain swapchain_;

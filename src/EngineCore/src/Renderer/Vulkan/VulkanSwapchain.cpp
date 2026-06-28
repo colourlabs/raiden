@@ -1,6 +1,10 @@
 #include <RaidenEngineCore/Logger.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanSwapchain.hpp>
 
+#include <algorithm>
+#include <array>
+#include <vector>
+
 namespace Raiden::Core {
 
 static const Logger s_logger("Raiden::Core::VulkanSwapchain");
@@ -8,17 +12,27 @@ static const Logger s_logger("Raiden::Core::VulkanSwapchain");
 bool VulkanSwapchain::init(VkPhysicalDevice physicalDevice, VkDevice device,
                            VkSurfaceKHR surface, uint32_t graphicsFamily,
                            uint32_t presentFamily, uint32_t windowWidth,
-                           uint32_t windowHeight, bool vsync) {
+                           uint32_t windowHeight, bool vsync,
+                           VkSwapchainKHR oldSwapchain) {
   device_ = device;
 
   // TODO: maybe use vulkan-hpp instead
+  // Never mind
 
   VkSurfaceCapabilitiesKHR caps;
-  vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &caps);
+  if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface,
+                                                &caps) != VK_SUCCESS) {
+    s_logger.error("Failed to query surface capabilities.");
+    return false;
+  }
 
   uint32_t formatCount = 0;
   vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount,
                                        nullptr);
+  if (formatCount == 0) {
+    s_logger.error("No surface formats available.");
+    return false;
+  }
   std::vector<VkSurfaceFormatKHR> formats(formatCount);
   vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount,
                                        formats.data());
@@ -26,6 +40,10 @@ bool VulkanSwapchain::init(VkPhysicalDevice physicalDevice, VkDevice device,
   uint32_t presentModeCount = 0;
   vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface,
                                             &presentModeCount, nullptr);
+  if (presentModeCount == 0) {
+    s_logger.error("No surface present modes available.");
+    return false;
+  }
   std::vector<VkPresentModeKHR> presentModes(presentModeCount);
   vkGetPhysicalDeviceSurfacePresentModesKHR(
       physicalDevice, surface, &presentModeCount, presentModes.data());
@@ -58,7 +76,7 @@ bool VulkanSwapchain::init(VkPhysicalDevice physicalDevice, VkDevice device,
       .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
       .presentMode = presentMode,
       .clipped = VK_TRUE,
-      .oldSwapchain = VK_NULL_HANDLE, // TODO: replace later
+      .oldSwapchain = oldSwapchain,
   };
 
   if (graphicsFamily != presentFamily) {
@@ -109,11 +127,15 @@ bool VulkanSwapchain::init(VkPhysicalDevice physicalDevice, VkDevice device,
   return true;
 }
 
-void VulkanSwapchain::shutdown() {
+void VulkanSwapchain::destroyImageViews() {
   for (auto view : imageViews_) {
     vkDestroyImageView(device_, view, nullptr);
   }
   imageViews_.clear();
+}
+
+void VulkanSwapchain::shutdown() {
+  destroyImageViews();
 
   if (swapchain_ != VK_NULL_HANDLE) {
     vkDestroySwapchainKHR(device_, swapchain_, nullptr);
@@ -166,9 +188,18 @@ bool VulkanSwapchain::recreate(VkPhysicalDevice physicalDevice,
                                VkSurfaceKHR surface, uint32_t graphicsFamily,
                                uint32_t presentFamily, uint32_t windowWidth,
                                uint32_t windowHeight, bool vsync) {
-  shutdown();
-  return init(physicalDevice, device_, surface, graphicsFamily, presentFamily,
-              windowWidth, windowHeight, vsync);
+  VkSwapchainKHR oldSwapchain = swapchain_;
+  destroyImageViews();
+
+  bool result =
+      init(physicalDevice, device_, surface, graphicsFamily, presentFamily,
+           windowWidth, windowHeight, vsync, oldSwapchain);
+
+  if (oldSwapchain != VK_NULL_HANDLE) {
+    vkDestroySwapchainKHR(device_, oldSwapchain, nullptr);
+  }
+
+  return result;
 }
 
 } // namespace Raiden::Core

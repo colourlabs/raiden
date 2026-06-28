@@ -14,7 +14,7 @@ public:
   bool init(VkPhysicalDevice physicalDevice, VkDevice device,
             VkSurfaceKHR surface, uint32_t graphicsFamily,
             uint32_t presentFamily, uint32_t windowWidth, uint32_t windowHeight,
-            bool vsync);
+            bool vsync, VkSwapchainKHR oldSwapchain = VK_NULL_HANDLE);
 
   bool recreate(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
     uint32_t graphicsFamily, uint32_t presentFamily,
@@ -37,6 +37,8 @@ private:
 
   VkFormat imageFormat_ = VK_FORMAT_UNDEFINED;
   VkExtent2D extent_{};
+
+  void destroyImageViews();
 
   VkSurfaceFormatKHR
   chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &formats);
