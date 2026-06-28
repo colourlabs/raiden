@@ -23,12 +23,21 @@ struct AudioConfig {
   float masterVolume = 1.0f;
 };
 
+struct PluginConfig {
+  std::string fallback;
+  std::string windows;
+  std::string macosArm;
+  std::string macosX86;
+  std::string linux_;
+};
+
 struct EngineConfig {
   WindowConfig window;
   AudioConfig audio;
   RenderBackend renderBackend = RenderBackend::Vulkan;
 
   bool enableValidation = false;
+  PluginConfig plugin;
 };
 
 } // namespace Raiden::Core

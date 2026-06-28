@@ -25,6 +25,8 @@ public:
   virtual std::unique_ptr<IPipeline> createPipeline(const PipelineDesc &desc) = 0;
   virtual std::unique_ptr<ITexture> createTexture(const TextureDesc &desc) = 0;
 
+  virtual void waitIdle() = 0;
+
   using RenderCallback = std::function<void(ICommandBuffer &)>;
   virtual bool drawFrame(const RenderCallback &callback) = 0;
 };

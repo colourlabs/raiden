@@ -1,5 +1,10 @@
 #include <RaidenEngineCore/Application.hpp>
+#include <RaidenEngineCore/Engine/VulkanImGuiBackend.hpp>
 #include <RaidenEngineCore/Logger.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/IVulkanRenderDevice.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanDevice.hpp>
+
+#include <functional>
 
 namespace Raiden::Core {
 
@@ -31,6 +36,15 @@ bool Application::init(const EngineConfig &config) {
     return false;
   }
 
+  // init ImGui overlay
+  if (auto *vkDevice = dynamic_cast<IVulkanRenderDevice *>(device_.get())) {
+    auto backend = std::make_unique<VulkanImGuiBackend>(
+        *vkDevice, vkDevice->getRenderPass(),
+        vkDevice->getSwapchainImageCount());
+    overlay_ = std::make_unique<ImGuiOverlay>();
+    overlay_->init(std::move(backend));
+  }
+
   s_logger.info("Application initialized successfully.");
   running_ = true;
   return true;
@@ -56,6 +70,7 @@ void Application::shutdown() {
   if (running_) {
     s_logger.info("Shutting down application...");
     running_ = false;
+    overlay_.reset();
     pluginLoader_.unload();
     device_->shutdown();
     platform_->shutdown();
@@ -83,13 +98,45 @@ void Application::run() {
       pluginLoader_.plugin().update(deltaTime, platform_->getInputState());
     }
 
+    if (overlay_) {
+      int w, h;
+      platform_->getWindowSize(w, h);
+
+      ProfilerFrameData profiler{};
+      profiler.cpuFrameTimeMs = deltaTime * 1000.0f;
+
+      if (auto *vkDev = dynamic_cast<IVulkanRenderDevice *>(device_.get())) {
+        auto &d = dynamic_cast<const VulkanDevice &>(*vkDev);
+        profiler.gpuFrameTimeMs = d.gpuTimeMs();
+        profiler.drawCalls = d.lastDrawCalls();
+        profiler.triangles = d.lastTriangles();
+      }
+
+      std::function<void()> pluginUI;
+      if (pluginLoader_.isLoaded()) {
+        pluginUI = [&]() { pluginLoader_.plugin().onDebugUI(); };
+      }
+
+      overlay_->newFrame(platform_->getInputState(), w, h, deltaTime,
+                         profiler, pluginUI);
+      overlay_->endFrame();
+    }
+
     device_->drawFrame([&](ICommandBuffer &cmd) {
       if (pluginLoader_.isLoaded()) {
         pluginLoader_.plugin().render(cmd);
       }
+      if (overlay_) {
+        overlay_->renderDrawData(cmd);
+      }
     });
+
+    // end the ImGui frame even if drawFrame skipped the callback (e.g. resize)
+    if (overlay_) {
+      overlay_->endFrame();
+    }
   }
-  
+
   s_logger.info("Exited main loop.");
 }
 

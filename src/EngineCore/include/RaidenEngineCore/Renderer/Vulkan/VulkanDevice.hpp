@@ -76,10 +76,25 @@ public:
   }
   uint32_t getPresentQueueIndex() const override { return presentQueueIndex_; }
   bool hasValidation() const override { return enableValidation_; }
+  VkRenderPass getRenderPass() const override {
+    return renderPass_.renderPass();
+  }
+  uint32_t getSwapchainImageCount() const override {
+    return static_cast<uint32_t>(swapchain_.imageViews().size());
+  }
+
+  float gpuTimeMs() const { return gpuTimeMs_; }
+  uint32_t lastDrawCalls() const { return lastDrawCalls_; }
+  uint32_t lastTriangles() const { return lastTriangles_; }
 
   std::unique_ptr<IBuffer> createBuffer(const BufferDesc &desc) override;
   std::unique_ptr<IPipeline> createPipeline(const PipelineDesc &desc) override;
   std::unique_ptr<ITexture> createTexture(const TextureDesc &desc) override;
+
+  void waitIdle() override {
+    if (device_ != VK_NULL_HANDLE)
+      vkDeviceWaitIdle(device_);
+  }
 
   bool drawFrame(const RenderCallback &callback) override;
 
@@ -159,6 +174,13 @@ private:
   VkFormat depthFormat_ = VK_FORMAT_UNDEFINED;
 
   float totalTime_ = 0.0f;
+
+  // profiler
+  VkQueryPool queryPool_ = VK_NULL_HANDLE;
+  float timestampPeriod_ = 1.0f;
+  float gpuTimeMs_ = 0.0f;
+  uint32_t lastDrawCalls_ = 0;
+  uint32_t lastTriangles_ = 0;
 };
 
 } // namespace Raiden::Core

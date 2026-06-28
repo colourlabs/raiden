@@ -26,6 +26,7 @@ public:
   void upload(const void *data, VkDeviceSize size);
 
   VkBuffer buffer() const { return buffer_; }
+  void *mapped() const { return mapped_; }
 
 private:
   VmaAllocator allocator_ = nullptr;

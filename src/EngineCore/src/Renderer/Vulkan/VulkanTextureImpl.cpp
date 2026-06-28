@@ -35,6 +35,7 @@ bool VulkanTextureImpl::init(VkDevice device, VmaAllocator allocator,
   cmdPool_ = cmdPool;
   width_ = desc.width;
   height_ = desc.height;
+  format_ = desc.format;
   vkFormat_ = toVkFormat(desc.format);
 
   if (vkFormat_ == VK_FORMAT_UNDEFINED) {
@@ -48,6 +49,8 @@ bool VulkanTextureImpl::init(VkDevice device, VmaAllocator allocator,
                      VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
                      VK_IMAGE_ASPECT_COLOR_BIT);
 }
+
+Format VulkanTextureImpl::getFormat() const { return format_; }
 
 void VulkanTextureImpl::shutdown() {
   image_.shutdown();

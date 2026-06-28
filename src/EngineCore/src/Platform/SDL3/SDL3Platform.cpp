@@ -7,7 +7,7 @@
 
 namespace Raiden::Core {
 
-SDL3Platform::~SDL3Platform() { shutdown(); }
+SDL3Platform::~SDL3Platform() { SDL3Platform::shutdown(); }
 
 bool SDL3Platform::init(const WindowConfig &config, RenderBackend backend) {
   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
@@ -73,12 +73,14 @@ bool SDL3Platform::pollEvents() {
       break;
 
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
-    case SDL_EVENT_MOUSE_BUTTON_UP:
-      if (event.button.button < 3) {
-        inputState_.mouseButtons[event.button.button] =
+    case SDL_EVENT_MOUSE_BUTTON_UP: {
+      int idx = event.button.button - 1;
+      if (idx >= 0 && idx < 3) {
+        inputState_.mouseButtons[idx] =
             (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN);
       }
       break;
+    }
 
     case SDL_EVENT_MOUSE_WHEEL:
       inputState_.scrollY = event.wheel.y;

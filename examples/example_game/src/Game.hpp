@@ -6,6 +6,7 @@
 #include <RaidenEngineCore/Renderer/IBuffer.hpp>
 #include <RaidenEngineCore/Renderer/IPipeline.hpp>
 #include <RaidenEngineCore/Renderer/IRenderDevice.hpp>
+#include <RaidenEngineCore/Renderer/ITexture.hpp>
 #include <RaidenEngineCore/Renderer/RenderTypes.hpp>
 
 #include <glm/glm.hpp>
@@ -15,6 +16,7 @@
 struct Vertex {
   glm::vec2 pos;
   glm::vec3 color;
+  glm::vec2 uv;
 };
 
 class ExampleGame final : public Raiden::Core::IGamePlugin {
@@ -32,10 +34,12 @@ public:
 
 private:
   Raiden::Core::ActionMap actions_;
+  
   std::unique_ptr<Raiden::Core::IPipeline> pipeline_;
   std::unique_ptr<Raiden::Core::IBuffer> vertexBuffer_;
   std::unique_ptr<Raiden::Core::IBuffer> indexBuffer_;
-  
+  std::unique_ptr<Raiden::Core::ITexture> texture_;
+
   uint32_t indexCount_ = 0;
   bool quitRequested_ = false;
 };

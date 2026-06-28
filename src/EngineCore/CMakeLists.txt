@@ -28,13 +28,29 @@ CPMAddPackage(
   GIT_TAG v3.4.0
 )
 
+CPMAddPackage(
+  NAME imgui
+  GITHUB_REPOSITORY ocornut/imgui
+  GIT_TAG v1.91.8
+)
+
+CPMAddPackage(
+  NAME implot
+  GITHUB_REPOSITORY epezent/implot
+  GIT_TAG v0.17
+)
+
 add_library(EngineCore STATIC
   src/Application.cpp
   src/Logger.cpp
   
   src/Core/OSFileSystem.cpp
+
+  src/ECS/World.cpp
   
   src/Engine/GamePluginLoader.cpp
+  src/Engine/ImGuiOverlay.cpp
+  src/Engine/VulkanImGuiBackend.cpp
   
   src/Platform/SDL3/SDL3Platform.cpp
   
@@ -59,9 +75,28 @@ target_compile_definitions(EngineCore PUBLIC
   SHADERS_DIR="${CMAKE_BINARY_DIR}/shaders"
 )
 
+target_compile_definitions(EngineCore PRIVATE
+  IMGUI_IMPL_VULKAN_USE_VOLK
+)
+
 target_include_directories(EngineCore PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
+)
+target_include_directories(EngineCore PRIVATE
+  ${imgui_SOURCE_DIR}
+  ${imgui_SOURCE_DIR}/backends
+  ${implot_SOURCE_DIR}
+)
+
+target_sources(EngineCore PRIVATE
+  ${imgui_SOURCE_DIR}/imgui.cpp
+  ${imgui_SOURCE_DIR}/imgui_draw.cpp
+  ${imgui_SOURCE_DIR}/imgui_tables.cpp
+  ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+  ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
+  ${implot_SOURCE_DIR}/implot.cpp
+  ${implot_SOURCE_DIR}/implot_items.cpp
 )
 
 target_link_libraries(EngineCore PUBLIC

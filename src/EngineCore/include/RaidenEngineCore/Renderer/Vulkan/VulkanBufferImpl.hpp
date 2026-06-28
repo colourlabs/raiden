@@ -43,6 +43,13 @@ public:
 
   size_t size() const override { return size_; }
 
+  void *map() override {
+    buffer_.map();
+    return buffer_.mapped();
+  }
+
+  void unmap() override { buffer_.unmap(); }
+
   VkBuffer handle() const { return buffer_.buffer(); }
 
 private:

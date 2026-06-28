@@ -20,6 +20,7 @@ public:
   virtual bool init(IRenderDevice &device, IVirtualFileSystem &vfs) = 0;
   virtual void update(float deltaTime, const InputState &input) = 0;
   virtual void render(ICommandBuffer &cmd) = 0;
+  virtual void onDebugUI() {}
   virtual void shutdown() = 0;
 };
 

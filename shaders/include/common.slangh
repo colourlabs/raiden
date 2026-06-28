@@ -1,0 +1,7 @@
+struct FrameUniforms {
+  float4x4 projection;
+  float4x4 view;
+  float4 extra; // x = time, y = deltaTime, z = resX, w = resY
+};
+
+[[vk::binding(0, 0)]] ConstantBuffer<FrameUniforms> frameUBO;

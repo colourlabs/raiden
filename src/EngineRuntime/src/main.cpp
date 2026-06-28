@@ -15,8 +15,7 @@
 static const Raiden::Core::Logger s_logger("main");
 
 static bool loadConfig(Raiden::Core::IVirtualFileSystem &vfs,
-                       Raiden::Core::EngineConfig &outConfig,
-                       std::string &outPluginPath) {
+                       Raiden::Core::EngineConfig &outConfig) {
   try {
     std::string content = vfs.readAll("game://engine.toml");
     if (content.empty()) {
@@ -45,7 +44,17 @@ static bool loadConfig(Raiden::Core::IVirtualFileSystem &vfs,
     }
 
     if (auto game = table["game"].as_table()) {
-      outPluginPath = (*game)["plugin"].value_or(std::string(""));
+      outConfig.plugin.fallback = (*game)["plugin"].value_or(std::string(""));
+
+      if (auto plat = (*game)["platform"].as_table()) {
+        outConfig.plugin.windows =
+            (*plat)["windows"].value_or(std::string(""));
+        outConfig.plugin.macosArm =
+            (*plat)["macos_arm"].value_or(std::string(""));
+        outConfig.plugin.macosX86 =
+            (*plat)["macos_x86"].value_or(std::string(""));
+        outConfig.plugin.linux_ = (*plat)["linux"].value_or(std::string(""));
+      }
     }
 
     return true;
@@ -53,6 +62,22 @@ static bool loadConfig(Raiden::Core::IVirtualFileSystem &vfs,
     s_logger.error("Failed to parse engine.toml: {}", err.description());
     return false;
   }
+}
+
+static std::string resolvePluginPath(const Raiden::Core::PluginConfig &cfg) {
+#if defined(_WIN32)
+  return cfg.windows.empty() ? cfg.fallback : cfg.windows;
+#elif defined(__APPLE__)
+  #if defined(__arm64__) || defined(__aarch64__)
+    return cfg.macosArm.empty() ? cfg.fallback : cfg.macosArm;
+  #else
+    return cfg.macosX86.empty() ? cfg.fallback : cfg.macosX86;
+  #endif
+#elif defined(__linux__)
+  return cfg.linux_.empty() ? cfg.fallback : cfg.linux_;
+#else
+  return cfg.fallback;
+#endif
 }
 
 static void printUsage(const char *argv0) {
@@ -92,13 +117,13 @@ int main(int argc, char *argv[]) {
   auto device = std::make_unique<Raiden::Core::VulkanDevice>();
 
   Raiden::Core::EngineConfig config;
-  std::string pluginPath;
 
-  if (!loadConfig(*vfs, config, pluginPath)) {
+  if (!loadConfig(*vfs, config)) {
     s_logger.warn("Falling back to defaults.");
   }
 
   // resolve plugin path relative to datapack
+  std::string pluginPath = resolvePluginPath(config.plugin);
   std::string resolvedPluginPath;
   if (!pluginPath.empty()) {
     resolvedPluginPath = (dp / pluginPath).lexically_normal().string();

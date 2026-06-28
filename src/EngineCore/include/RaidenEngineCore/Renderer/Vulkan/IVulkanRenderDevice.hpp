@@ -17,6 +17,8 @@ public:
   virtual uint32_t getGraphicsQueueIndex() const = 0;
   virtual uint32_t getPresentQueueIndex() const = 0;
   virtual bool hasValidation() const = 0;
+  virtual VkRenderPass getRenderPass() const = 0;
+  virtual uint32_t getSwapchainImageCount() const = 0;
 };
 
 } // namespace Raiden::Core

@@ -13,9 +13,8 @@ set(SLANGC_LIB_DIRS
 )
 string(JOIN ":" SLANGC_ENV_LD_LIBRARY_PATH ${SLANGC_LIB_DIRS})
 
-set(SHADER_SOURCES
-  ${CMAKE_CURRENT_SOURCE_DIR}/triangle.slang
-)
+file(GLOB SHADER_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/*.slang)
+file(GLOB SHADER_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/include/*.slangh)
 
 set(SHADER_OUTPUT_DIR ${CMAKE_BINARY_DIR}/shaders)
 file(MAKE_DIRECTORY ${SHADER_OUTPUT_DIR})
@@ -29,9 +28,9 @@ foreach(SHADER ${SHADER_SOURCES})
 
   add_custom_command(
     OUTPUT ${VERT_SPV} ${FRAG_SPV}
-    COMMAND ${SLANGC_WRAPPER} ${SLANGC} -entry vertexMain -stage vertex -target spirv ${SHADER} -o ${VERT_SPV}
-    COMMAND ${SLANGC_WRAPPER} ${SLANGC} -entry fragmentMain -stage fragment -target spirv ${SHADER} -o ${FRAG_SPV}
-    DEPENDS ${SHADER}
+    COMMAND ${SLANGC_WRAPPER} ${SLANGC} -I ${CMAKE_CURRENT_SOURCE_DIR} -I ${CMAKE_CURRENT_SOURCE_DIR}/include -entry vertexMain -stage vertex -target spirv ${SHADER} -o ${VERT_SPV}
+    COMMAND ${SLANGC_WRAPPER} ${SLANGC} -I ${CMAKE_CURRENT_SOURCE_DIR} -I ${CMAKE_CURRENT_SOURCE_DIR}/include -entry fragmentMain -stage fragment -target spirv ${SHADER} -o ${FRAG_SPV}
+    DEPENDS ${SHADER} ${SHADER_INCLUDES}
     COMMENT "Compiling ${SHADER_NAME}.slang -> SPIR-V"
   )
 

@@ -48,6 +48,53 @@ void VulkanCommandBuffer::bindTexture(uint32_t slot,
 
 void VulkanCommandBuffer::drawIndexed(uint32_t indexCount) {
   vkCmdDrawIndexed(cmd_, indexCount, 1, 0, 0, 0);
+  drawCalls_++;
+  triangles_ += indexCount / 3;
+}
+
+void VulkanCommandBuffer::setViewport(int x, int y, int w, int h) {
+  VkViewport vp{};
+  vp.x = static_cast<float>(x);
+  vp.y = static_cast<float>(y);
+  vp.width = static_cast<float>(w);
+  vp.height = static_cast<float>(h);
+  vp.minDepth = 0.0f;
+  vp.maxDepth = 1.0f;
+  vkCmdSetViewport(cmd_, 0, 1, &vp);
+}
+
+void VulkanCommandBuffer::setScissor(int x, int y, int w, int h) {
+  VkRect2D rect{};
+  rect.offset.x = x;
+  rect.offset.y = y;
+  rect.extent.width = static_cast<uint32_t>(w);
+  rect.extent.height = static_cast<uint32_t>(h);
+  vkCmdSetScissor(cmd_, 0, 1, &rect);
+}
+
+void VulkanCommandBuffer::draw(uint32_t vertexCount, uint32_t instanceCount,
+                                uint32_t firstVertex, uint32_t firstInstance) {
+  vkCmdDraw(cmd_, vertexCount, instanceCount, firstVertex, firstInstance);
+  drawCalls_++;
+}
+
+void VulkanCommandBuffer::drawIndexedInstanced(uint32_t indexCount,
+                                                uint32_t instanceCount,
+                                                uint32_t firstIndex,
+                                                int32_t vertexOffset,
+                                                uint32_t firstInstance) {
+  vkCmdDrawIndexed(cmd_, indexCount, instanceCount, firstIndex, vertexOffset,
+                   firstInstance);
+  drawCalls_++;
+  triangles_ += indexCount / 3 * instanceCount;
+}
+
+void VulkanCommandBuffer::pushConstants(uint32_t offset, uint32_t size,
+                                         const void *data) {
+  if (currentLayout_ == VK_NULL_HANDLE)
+    return;
+  vkCmdPushConstants(cmd_, currentLayout_, VK_SHADER_STAGE_VERTEX_BIT, offset,
+                     size, data);
 }
 
 } // namespace Raiden::Core

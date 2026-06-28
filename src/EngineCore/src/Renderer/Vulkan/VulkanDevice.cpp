@@ -4,6 +4,7 @@
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanBufferImpl.hpp>
 
 #include <array>
+#include <chrono>
 #include <cstring>
 #include <filesystem>
 #include <set>
@@ -165,6 +166,17 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
   vkGetDeviceQueue(device_, graphicsQueueIndex_, 0, &graphicsQueue_);
   vkGetDeviceQueue(device_, presentQueueIndex_, 0, &presentQueue_);
 
+  VkPhysicalDeviceProperties props;
+  vkGetPhysicalDeviceProperties(physicalDevice_, &props);
+  timestampPeriod_ = props.limits.timestampPeriod;
+
+  VkQueryPoolCreateInfo qpInfo{
+      .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+      .queryType = VK_QUERY_TYPE_TIMESTAMP,
+      .queryCount = kMaxFrames * 2,
+  };
+  vkCreateQueryPool(device_, &qpInfo, nullptr, &queryPool_);
+
   int windowWidth = 0;
   int windowHeight = 0;
   platform->getWindowSize(windowWidth, windowHeight);
@@ -201,13 +213,13 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
   descriptorPool_.init(device_);
 
   // per-frame uniform buffers and descriptor sets
-  for (uint32_t i = 0; i < kMaxFrames; ++i) {
-    perFrame_[i].uniformBuffer.init(
+  for (auto &[uniformBuffer, uniformSet] : perFrame_) {
+    uniformBuffer.init(
         allocator_.handle(), sizeof(FrameUniforms),
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
         VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
         VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
-    perFrame_[i].uniformBuffer.map();
+    uniformBuffer.map();
 
     VkDescriptorSetAllocateInfo allocInfo{
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -216,17 +228,17 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
         .pSetLayouts = descriptorPool_.uboSetLayoutAddr(),
     };
 
-    vkAllocateDescriptorSets(device_, &allocInfo, &perFrame_[i].uniformSet);
+    vkAllocateDescriptorSets(device_, &allocInfo, &uniformSet);
 
     VkDescriptorBufferInfo bufferInfo{
-        .buffer = perFrame_[i].uniformBuffer.buffer(),
+        .buffer = uniformBuffer.buffer(),
         .offset = 0,
         .range = sizeof(FrameUniforms),
     };
 
     VkWriteDescriptorSet write{
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = perFrame_[i].uniformSet,
+        .dstSet = uniformSet,
         .dstBinding = 0,
         .descriptorCount = 1,
         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -433,11 +445,16 @@ void VulkanDevice::shutdown() {
   indexBuffer_.shutdown();
   vertexBuffer_.shutdown();
 
-  for (uint32_t i = 0; i < kMaxFrames; ++i) {
-    perFrame_[i].uniformBuffer.shutdown();
+  for (auto &[uniformBuffer, uniformSet] : perFrame_) {
+    uniformBuffer.shutdown();
   }
-  
+
   descriptorPool_.shutdown();
+
+  if (queryPool_ != VK_NULL_HANDLE) {
+    vkDestroyQueryPool(device_, queryPool_, nullptr);
+    queryPool_ = VK_NULL_HANDLE;
+  }
 
   allocator_.shutdown();
   vertexShader_.shutdown();
@@ -684,6 +701,17 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
 
   VkCommandBuffer cmd = frameContext_.currentCommandBuffer();
 
+  static uint32_t frameIndex = 0;
+  uint32_t idx = frameIndex % kMaxFrames;
+
+  // read previous frame's GPU timestamps
+  uint64_t ts[2];
+  if (vkGetQueryPoolResults(device_, queryPool_, idx * 2, 2, sizeof(ts), ts,
+                            sizeof(uint64_t),
+                            VK_QUERY_RESULT_64_BIT) == VK_SUCCESS) {
+    gpuTimeMs_ = static_cast<float>(ts[1] - ts[0]) * timestampPeriod_ * 1e-6f;
+  }
+
   VkCommandBufferBeginInfo beginInfo{
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
   };
@@ -692,6 +720,10 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
     s_logger.error("Failed to begin command buffer");
     return false;
   }
+
+  vkCmdResetQueryPool(cmd, queryPool_, idx * 2, 2);
+  vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, queryPool_,
+                      idx * 2);
 
   std::array<VkClearValue, 2> clearValues{};
   clearValues[0].color.float32[0] = 0.05f;
@@ -728,8 +760,12 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
   vkCmdSetScissor(cmd, 0, 1, &scissor);
 
   // update frame uniforms
-  static uint32_t frameIndex = 0;
-  uint32_t idx = frameIndex++ % kMaxFrames;
+  static auto lastFrameTime = std::chrono::steady_clock::now();
+  auto now = std::chrono::steady_clock::now();
+  float dt = std::chrono::duration<float>(now - lastFrameTime).count();
+  lastFrameTime = now;
+  totalTime_ += dt;
+
   auto &perFrame = perFrame_[idx];
 
   float aspect = static_cast<float>(swapchain_.extent().width) /
@@ -738,7 +774,7 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
       .projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f),
       .view = glm::lookAt(glm::vec3(0.0f, 0.0f, 3.0f), glm::vec3(0.0f),
                           glm::vec3(0.0f, 1.0f, 0.0f)),
-      .extra = {totalTime_, 0.016f,
+      .extra = {totalTime_, dt,
                 static_cast<float>(swapchain_.extent().width),
                 static_cast<float>(swapchain_.extent().height)},
   };
@@ -749,6 +785,13 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
   callback(vkCmdBuf);
 
   vkCmdEndRenderPass(cmd);
+
+  vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queryPool_,
+                      idx * 2 + 1);
+  lastDrawCalls_ = vkCmdBuf.drawCalls();
+  lastTriangles_ = vkCmdBuf.triangles();
+
+  frameIndex++;
 
   if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
     s_logger.error("Failed to end command buffer");

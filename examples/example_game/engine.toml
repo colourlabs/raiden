@@ -4,11 +4,11 @@ width = 800
 height = 600
 resizable = true
 fullscreen = false
-vsync = true
+vsync = false
 
 [render]
 backend = "vulkan"
 validation = true
 
-[game]
-plugin = "lib/libExampleGame.so"
+[game.platform]
+linux = "lib/libExampleGame.so"

@@ -2,6 +2,7 @@
 
 #include <RaidenEngineCore/Core/IVirtualFileSystem.hpp>
 #include <RaidenEngineCore/Engine/GamePluginLoader.hpp>
+#include <RaidenEngineCore/Engine/ImGuiOverlay.hpp>
 #include <RaidenEngineCore/EngineConfig.hpp>
 #include <RaidenEngineCore/Platform/IPlatform.hpp>
 #include <RaidenEngineCore/Renderer/IRenderDevice.hpp>
@@ -37,7 +38,8 @@ private:
   std::unique_ptr<IPlatform> platform_;
   std::unique_ptr<IRenderDevice> device_;
   std::unique_ptr<IVirtualFileSystem> vfs_;
-  
+  std::unique_ptr<ImGuiOverlay> overlay_;
+
   EngineConfig config_;
   GamePluginLoader pluginLoader_;
 
