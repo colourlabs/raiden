@@ -1,0 +1,64 @@
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+#include <string_view>
+#include <vector>
+
+namespace Raiden::Core {
+
+enum class BufferUsage {
+  Vertex,
+  Index,
+  Uniform,
+};
+
+enum class MemoryAccess {
+  GpuOnly,   // device-local, not CPU-mappable
+  CpuToGpu,  // mappable, written by CPU, read by GPU
+};
+
+struct BufferDesc {
+  size_t size = 0;
+  BufferUsage usage = BufferUsage::Vertex;
+  MemoryAccess access = MemoryAccess::GpuOnly;
+};
+
+// unified descriptor types for the public API
+
+enum class Format : uint8_t {
+  R32G32_Float,
+  R32G32B32_Float,
+  R32G32B32A32_Float,
+  R8G8B8A8_UNORM,
+  R8G8B8A8_SRGB,
+};
+
+struct VertexAttribute {
+  uint32_t location;
+  Format format;
+  uint32_t offset;
+};
+
+struct VertexLayout {
+  uint32_t stride;
+  std::vector<VertexAttribute> attributes;
+};
+
+struct ShaderDesc {
+  std::string_view path;
+};
+
+struct PipelineDesc {
+  ShaderDesc shader;
+  VertexLayout vertexLayout;
+  bool depthTestEnable = true;
+};
+
+struct TextureDesc {
+  uint32_t width;
+  uint32_t height;
+  Format format;
+};
+
+} // namespace Raiden::Core

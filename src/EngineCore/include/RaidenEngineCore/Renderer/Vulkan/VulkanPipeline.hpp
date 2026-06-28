@@ -26,6 +26,13 @@ public:
             const VulkanShader &vertexShader,
             const VulkanShader &fragmentShader,
             const VertexInputDescription &vertexInput);
+  bool initDynamic(VkDevice device, VkRenderPass renderPass,
+                   const VulkanShader &vertexShader,
+                   const VulkanShader &fragmentShader,
+                   const VertexInputDescription &vertexInput,
+                   bool depthTestEnable,
+                   VkDescriptorSetLayout *setLayouts = nullptr,
+                   uint32_t setLayoutCount = 0);
   void shutdown();
 
   VkPipeline pipeline() const { return pipeline_; }

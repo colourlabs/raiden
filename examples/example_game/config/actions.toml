@@ -1,0 +1,7 @@
+quit = [
+  { source = "keyboard", code = "escape" },
+]
+
+rotate_speed = [
+  { source = "keyboard", code = "r" },
+]

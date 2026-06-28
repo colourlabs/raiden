@@ -3,6 +3,7 @@
 #include <RaidenEngineCore/Platform/IPlatform.hpp>
 
 struct SDL_Window;
+struct SDL_Gamepad;
 
 namespace Raiden::Core {
 
@@ -24,11 +25,15 @@ public:
 
   void getWindowSize(int &width, int &height) const override;
 
+  const InputState &getInputState() const override { return inputState_; }
+
   std::vector<const char *> getRequiredInstanceExtensions() const override;
   bool createVulkanSurface(VkInstance instance, VkSurfaceKHR *surface) override;
 
 private:
   SDL_Window *window_ = nullptr;
+  SDL_Gamepad *gamepad_ = nullptr;
+  InputState inputState_{};
 };
 
 } // namespace Raiden::Core

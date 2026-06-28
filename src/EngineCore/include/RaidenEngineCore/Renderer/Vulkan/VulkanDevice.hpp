@@ -9,6 +9,12 @@
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanBuffer.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanImage.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanAllocator.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanPipelineImpl.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanTextureImpl.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanCommandBuffer.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanDescriptorPool.hpp>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include <RaidenEngineCore/Renderer/Vulkan/IVulkanRenderDevice.hpp>
 
@@ -39,6 +45,12 @@ struct Vertex {
   glm::vec3 color;
 };
 
+struct alignas(16) FrameUniforms {
+  glm::mat4 projection;
+  glm::mat4 view;
+  glm::vec4 extra; // x=time, y=deltaTime, z=resolutionX, w=resolutionY
+};
+
 class VulkanDevice final : public IVulkanRenderDevice {
 public:
   VulkanDevice() = default;
@@ -64,6 +76,12 @@ public:
   }
   uint32_t getPresentQueueIndex() const override { return presentQueueIndex_; }
   bool hasValidation() const override { return enableValidation_; }
+
+  std::unique_ptr<IBuffer> createBuffer(const BufferDesc &desc) override;
+  std::unique_ptr<IPipeline> createPipeline(const PipelineDesc &desc) override;
+  std::unique_ptr<ITexture> createTexture(const TextureDesc &desc) override;
+
+  bool drawFrame(const RenderCallback &callback) override;
 
 private:
   static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -121,6 +139,17 @@ private:
   std::vector<VkFramebuffer> framebuffers_;
   VulkanFrameContext frameContext_;
 
+  VulkanDescriptorPool descriptorPool_;
+
+  static constexpr uint32_t kMaxFrames = 3;
+  struct PerFrame {
+    VulkanBuffer uniformBuffer;
+    VkDescriptorSet uniformSet = VK_NULL_HANDLE;
+  };
+  PerFrame perFrame_[kMaxFrames];
+
+  VkCommandPool transferPool_ = VK_NULL_HANDLE;
+
   VulkanShader vertexShader_;
   VulkanShader fragmentShader_;
   VulkanPipeline pipeline_;
@@ -128,6 +157,8 @@ private:
   VulkanBuffer indexBuffer_;
   VulkanImage depthImage_;
   VkFormat depthFormat_ = VK_FORMAT_UNDEFINED;
+
+  float totalTime_ = 0.0f;
 };
 
 } // namespace Raiden::Core

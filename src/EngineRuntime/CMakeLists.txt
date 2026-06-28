@@ -7,4 +7,11 @@ target_include_directories(EngineRuntime PUBLIC
   $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(EngineRuntime PRIVATE EngineCore)
+target_link_options(EngineRuntime PRIVATE -rdynamic)
+
+# --whole-archive forces all EngineCore symbols to be exported
+target_link_libraries(EngineRuntime PRIVATE
+  -Wl,--whole-archive
+  EngineCore
+  -Wl,--no-whole-archive
+)

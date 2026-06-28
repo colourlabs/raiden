@@ -1,10 +1,13 @@
 #include <RaidenEngineCore/Logger.hpp>
 #include <RaidenEngineCore/Platform/IPlatform.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanDevice.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanBufferImpl.hpp>
 
 #include <array>
 #include <cstring>
+#include <filesystem>
 #include <set>
+#include <string>
 
 namespace Raiden::Core {
 
@@ -195,6 +198,44 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
     return false;
   }
 
+  descriptorPool_.init(device_);
+
+  // per-frame uniform buffers and descriptor sets
+  for (uint32_t i = 0; i < kMaxFrames; ++i) {
+    perFrame_[i].uniformBuffer.init(
+        allocator_.handle(), sizeof(FrameUniforms),
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+    perFrame_[i].uniformBuffer.map();
+
+    VkDescriptorSetAllocateInfo allocInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = descriptorPool_.handle(),
+        .descriptorSetCount = 1,
+        .pSetLayouts = descriptorPool_.uboSetLayoutAddr(),
+    };
+
+    vkAllocateDescriptorSets(device_, &allocInfo, &perFrame_[i].uniformSet);
+
+    VkDescriptorBufferInfo bufferInfo{
+        .buffer = perFrame_[i].uniformBuffer.buffer(),
+        .offset = 0,
+        .range = sizeof(FrameUniforms),
+    };
+
+    VkWriteDescriptorSet write{
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = perFrame_[i].uniformSet,
+        .dstBinding = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .pBufferInfo = &bufferInfo,
+    };
+
+    vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
+  }
+
   std::string shadersDir = SHADERS_DIR;
   if (!vertexShader_.init(device_, ShaderStage::Vertex,
                           shadersDir + "/triangle.vert.spv")) {
@@ -281,7 +322,103 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
     return false;
   }
 
+  VkCommandPoolCreateInfo transferPoolInfo{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+      .queueFamilyIndex = graphicsQueueIndex_,
+  };
+
+  if (vkCreateCommandPool(device_, &transferPoolInfo, nullptr,
+                          &transferPool_) != VK_SUCCESS) {
+    s_logger.critical("Failed to create transfer command pool");
+    return false;
+  }
+
   return true;
+}
+
+std::unique_ptr<IBuffer> VulkanDevice::createBuffer(const BufferDesc &desc) {
+  auto buffer = std::make_unique<VulkanBufferImpl>();
+  if (!buffer->init(allocator_.handle(), desc)) {
+    s_logger.error("Failed to create buffer");
+    return nullptr;
+  }
+  return buffer;
+}
+
+std::unique_ptr<IPipeline> VulkanDevice::createPipeline(
+    const PipelineDesc &desc) {
+  // resolve shader path: "shaders/thing.slang" -> "thing.vert.spv"
+  namespace fs = std::filesystem;
+  fs::path slangPath(desc.shader.path);
+  std::string stem = slangPath.stem().string();
+
+  std::string shadersDir = SHADERS_DIR;
+  std::string vertPath = shadersDir + "/" + stem + ".vert.spv";
+  std::string fragPath = shadersDir + "/" + stem + ".frag.spv";
+
+  VulkanShader vertShader;
+  if (!vertShader.init(device_, ShaderStage::Vertex, vertPath)) {
+    s_logger.error("Failed to load vertex shader for pipeline");
+    return nullptr;
+  }
+
+  VulkanShader fragShader;
+  if (!fragShader.init(device_, ShaderStage::Fragment, fragPath)) {
+    s_logger.error("Failed to load fragment shader for pipeline");
+    vertShader.shutdown();
+    return nullptr;
+  }
+
+  // convert PipelineDesc vertex layout -> VulkanVertexInputDescription
+  VertexInputDescription vertexDesc;
+  VkVertexInputBindingDescription binding{
+      .binding = 0,
+      .stride = desc.vertexLayout.stride,
+      .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+  };
+  vertexDesc.bindings.push_back(binding);
+
+  for (const auto &attr : desc.vertexLayout.attributes) {
+    VkVertexInputAttributeDescription vkAttr{
+        .location = attr.location,
+        .binding = 0,
+        .format = toVkFormat(attr.format),
+        .offset = attr.offset,
+    };
+    vertexDesc.attributes.push_back(vkAttr);
+  }
+
+  VkDescriptorSetLayout setLayouts[] = {
+      descriptorPool_.uboSetLayout(),
+      descriptorPool_.samplerSetLayout(),
+  };
+
+  auto impl = std::make_unique<VulkanPipelineImpl>();
+  if (!impl->init(device_, renderPass_.renderPass(), vertShader, fragShader,
+                  vertexDesc, desc.depthTestEnable, setLayouts, 2)) {
+    s_logger.error("Failed to create pipeline");
+    vertShader.shutdown();
+    fragShader.shutdown();
+    return nullptr;
+  }
+
+  vertShader.shutdown();
+  fragShader.shutdown();
+
+  s_logger.info("Pipeline created from PipelineDesc");
+  return impl;
+}
+
+std::unique_ptr<ITexture> VulkanDevice::createTexture(
+    const TextureDesc &desc) {
+  auto impl = std::make_unique<VulkanTextureImpl>();
+  if (!impl->init(device_, allocator_.handle(), graphicsQueue_, transferPool_,
+                  desc)) {
+    s_logger.error("Failed to create texture");
+    return nullptr;
+  }
+  return impl;
 }
 
 void VulkanDevice::shutdown() {
@@ -295,11 +432,24 @@ void VulkanDevice::shutdown() {
   depthImage_.shutdown();
   indexBuffer_.shutdown();
   vertexBuffer_.shutdown();
+
+  for (uint32_t i = 0; i < kMaxFrames; ++i) {
+    perFrame_[i].uniformBuffer.shutdown();
+  }
+  
+  descriptorPool_.shutdown();
+
   allocator_.shutdown();
   vertexShader_.shutdown();
   fragmentShader_.shutdown();
   renderPass_.shutdown();
   frameContext_.shutdown();
+
+  if (transferPool_ != VK_NULL_HANDLE) {
+    vkDestroyCommandPool(device_, transferPool_, nullptr);
+    transferPool_ = VK_NULL_HANDLE;
+  }
+
   swapchain_.shutdown();
 
   if (device_ != VK_NULL_HANDLE) {
@@ -510,6 +660,93 @@ bool VulkanDevice::drawFrame() {
   vkCmdBindVertexBuffers(cmd, 0, 1, &vertexBuffer, &offset);
   vkCmdBindIndexBuffer(cmd, indexBuffer_.buffer(), 0, VK_INDEX_TYPE_UINT16);
   vkCmdDrawIndexed(cmd, 3, 1, 0, 0, 0);
+
+  vkCmdEndRenderPass(cmd);
+
+  if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
+    s_logger.error("Failed to end command buffer");
+    return false;
+  }
+
+  if (!frameContext_.endFrame(swapchain_, graphicsQueue_, presentQueue_,
+                              imageIndex)) {
+    return recreateSwapchain();
+  }
+
+  return true;
+}
+
+bool VulkanDevice::drawFrame(const RenderCallback &callback) {
+  uint32_t imageIndex = 0;
+  if (!frameContext_.beginFrame(swapchain_, imageIndex)) {
+    return recreateSwapchain();
+  }
+
+  VkCommandBuffer cmd = frameContext_.currentCommandBuffer();
+
+  VkCommandBufferBeginInfo beginInfo{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+  };
+
+  if (vkBeginCommandBuffer(cmd, &beginInfo) != VK_SUCCESS) {
+    s_logger.error("Failed to begin command buffer");
+    return false;
+  }
+
+  std::array<VkClearValue, 2> clearValues{};
+  clearValues[0].color.float32[0] = 0.05f;
+  clearValues[0].color.float32[1] = 0.05f;
+  clearValues[0].color.float32[2] = 0.2f;
+  clearValues[0].color.float32[3] = 1.0f;
+  clearValues[1].depthStencil.depth = 1.0f;
+
+  VkRenderPassBeginInfo renderPassInfo{
+      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+      .renderPass = renderPass_.renderPass(),
+      .framebuffer = framebuffers_[imageIndex],
+      .renderArea = {{0, 0}, swapchain_.extent()},
+      .clearValueCount = 2,
+      .pClearValues = clearValues.data(),
+  };
+
+  vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+  // dynamic viewport + scissor (required for pipelines from createPipeline)
+  VkViewport viewport{};
+  viewport.x = 0.0f;
+  viewport.y = 0.0f;
+  viewport.width = static_cast<float>(swapchain_.extent().width);
+  viewport.height = static_cast<float>(swapchain_.extent().height);
+  viewport.minDepth = 0.0f;
+  viewport.maxDepth = 1.0f;
+  vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+  VkRect2D scissor{
+      .offset = {0, 0},
+      .extent = swapchain_.extent(),
+  };
+  vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+  // update frame uniforms
+  static uint32_t frameIndex = 0;
+  uint32_t idx = frameIndex++ % kMaxFrames;
+  auto &perFrame = perFrame_[idx];
+
+  float aspect = static_cast<float>(swapchain_.extent().width) /
+                 static_cast<float>(swapchain_.extent().height);
+  FrameUniforms uniforms{
+      .projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f),
+      .view = glm::lookAt(glm::vec3(0.0f, 0.0f, 3.0f), glm::vec3(0.0f),
+                          glm::vec3(0.0f, 1.0f, 0.0f)),
+      .extra = {totalTime_, 0.016f,
+                static_cast<float>(swapchain_.extent().width),
+                static_cast<float>(swapchain_.extent().height)},
+  };
+
+  perFrame.uniformBuffer.upload(&uniforms, sizeof(uniforms));
+
+  VulkanCommandBuffer vkCmdBuf(cmd, descriptorPool_, perFrame.uniformSet);
+  callback(vkCmdBuf);
 
   vkCmdEndRenderPass(cmd);
 

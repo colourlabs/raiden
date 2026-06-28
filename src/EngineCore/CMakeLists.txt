@@ -22,11 +22,23 @@ CPMAddPackage(
   GIT_TAG 1.0.3
 )
 
+CPMAddPackage(
+  NAME tomlplusplus
+  GITHUB_REPOSITORY marzer/tomlplusplus
+  GIT_TAG v3.4.0
+)
+
 add_library(EngineCore STATIC
   src/Application.cpp
   src/Logger.cpp
   
+  src/Core/OSFileSystem.cpp
+  
+  src/Engine/GamePluginLoader.cpp
+  
   src/Platform/SDL3/SDL3Platform.cpp
+  
+  src/Input/ActionMap.cpp
   
   src/Renderer/Vulkan/VulkanAllocator.cpp
   src/Renderer/Vulkan/VulkanDevice.cpp
@@ -35,11 +47,15 @@ add_library(EngineCore STATIC
   src/Renderer/Vulkan/VulkanRenderPass.cpp
   src/Renderer/Vulkan/VulkanShader.cpp
   src/Renderer/Vulkan/VulkanPipeline.cpp
+  src/Renderer/Vulkan/VulkanPipelineImpl.cpp
   src/Renderer/Vulkan/VulkanBuffer.cpp
   src/Renderer/Vulkan/VulkanImage.cpp
+  src/Renderer/Vulkan/VulkanTextureImpl.cpp
+  src/Renderer/Vulkan/VulkanCommandBuffer.cpp
+  src/Renderer/Vulkan/VulkanDescriptorPool.cpp
 )
 
-target_compile_definitions(EngineCore PRIVATE
+target_compile_definitions(EngineCore PUBLIC
   SHADERS_DIR="${CMAKE_BINARY_DIR}/shaders"
 )
 
@@ -53,4 +69,5 @@ target_link_libraries(EngineCore PUBLIC
   SDL3::SDL3
   glm::glm
   VulkanMemoryAllocator
+  tomlplusplus::tomlplusplus
 )

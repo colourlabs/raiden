@@ -6,6 +6,8 @@ namespace Raiden::Core {
 
 enum class RenderBackend {
   Vulkan,
+
+  // TODO: maybe OpenGL ES in the future?
 };
 
 struct WindowConfig {
