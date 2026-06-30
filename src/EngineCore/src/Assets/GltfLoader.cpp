@@ -161,7 +161,6 @@ std::vector<Mesh> loadGltf(IRenderDevice &device, const std::byte *data,
     glm::mat4 localXform(1.0f);
     if (auto *mat = std::get_if<fastgltf::math::fmat4x4>(&node.transform)) {
       std::memcpy(&localXform, mat->data(), sizeof(float) * 16);
-      // glTF matrices are column-major, glm is column-major, direct copy works
       localXform = glm::transpose(localXform);
     }
 
@@ -235,14 +234,14 @@ std::vector<Mesh> loadGltf(IRenderDevice &device, const std::byte *data,
             auto &v = vertices[i];
             glm::vec3 n = glm::abs(v.normal);
             float sx = v.pos.x + 0.5f;
-            float sy = 0.5f - v.pos.y;   // flip V: Vulkan (0,0)=top-left
+            float sy = 0.5f - v.pos.y; // flip V: Vulkan (0,0)=top-left
             float sz = v.pos.z + 0.5f;
             if (n.x > n.y && n.x > n.z)
-              v.uv = glm::vec2(sz, sy);  // X face: sy is vertical
+              v.uv = glm::vec2(sz, sy); // X face: sy is vertical
             else if (n.y > n.x && n.y > n.z)
-              v.uv = glm::vec2(sx, sz);  // Y face: horizontal projection
+              v.uv = glm::vec2(sx, sz); // Y face: horizontal projection
             else
-              v.uv = glm::vec2(sx, sy);  // Z face: sy is vertical
+              v.uv = glm::vec2(sx, sy); // Z face: sy is vertical
           }
         }
 

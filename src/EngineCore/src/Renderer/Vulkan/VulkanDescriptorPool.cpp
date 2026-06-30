@@ -8,8 +8,10 @@ static const Logger s_logger("Raiden::Core::VulkanDescriptorPool");
 VulkanDescriptorPool::~VulkanDescriptorPool() { shutdown(); }
 
 bool VulkanDescriptorPool::init(VkDevice device, VkPhysicalDevice physDev,
+                                VmaAllocator allocator,
                                 VkCommandPool transferPool,
                                 VkQueue graphicsQueue) {
+  allocator_ = allocator;
   device_ = device;
   physDev_ = physDev;
   transferPool_ = transferPool;
@@ -228,12 +230,9 @@ void VulkanDescriptorPool::shutdown() {
     fallbackImageView_ = VK_NULL_HANDLE;
   }
   if (fallbackImage_ != VK_NULL_HANDLE) {
-    vkDestroyImage(device_, fallbackImage_, nullptr);
+    vmaDestroyImage(allocator_, fallbackImage_, fallbackAllocation_);
     fallbackImage_ = VK_NULL_HANDLE;
-  }
-  if (fallbackMemory_ != VK_NULL_HANDLE) {
-    vkFreeMemory(device_, fallbackMemory_, nullptr);
-    fallbackMemory_ = VK_NULL_HANDLE;
+    fallbackAllocation_ = VK_NULL_HANDLE;
   }
   if (uboSetLayout_ != VK_NULL_HANDLE) {
     vkDestroyDescriptorSetLayout(device_, uboSetLayout_, nullptr);
@@ -271,85 +270,45 @@ bool VulkanDescriptorPool::createFallbackTexture() {
       .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
   };
 
-  if (vkCreateImage(device_, &imgInfo, nullptr, &fallbackImage_) !=
-      VK_SUCCESS) {
+  VmaAllocationCreateInfo imgAllocInfo{
+      .usage = VMA_MEMORY_USAGE_AUTO,
+      .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+  };
+
+  if (vmaCreateImage(allocator_, &imgInfo, &imgAllocInfo, &fallbackImage_,
+                     &fallbackAllocation_, nullptr) != VK_SUCCESS) {
     s_logger.error("Failed to create fallback image");
     return false;
   }
 
-  VkMemoryRequirements memReq;
-  vkGetImageMemoryRequirements(device_, fallbackImage_, &memReq);
-
-  VkMemoryAllocateInfo allocInfo{
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .allocationSize = memReq.size,
-      .memoryTypeIndex = ~0u,
-  };
-
-  VkPhysicalDeviceMemoryProperties memProps;
-  vkGetPhysicalDeviceMemoryProperties(physDev_, &memProps);
-  for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
-    if (memReq.memoryTypeBits & (1u << i) &&
-        (memProps.memoryTypes[i].propertyFlags &
-         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
-      allocInfo.memoryTypeIndex = i;
-      break;
-    }
-  }
-
-  if (allocInfo.memoryTypeIndex == ~0u) {
-    s_logger.error("No suitable memory type for fallback texture");
-    return false;
-  }
-
-  if (vkAllocateMemory(device_, &allocInfo, nullptr, &fallbackMemory_) !=
-      VK_SUCCESS) {
-    s_logger.error("Failed to allocate fallback texture memory");
-    return false;
-  }
-
-  vkBindImageMemory(device_, fallbackImage_, fallbackMemory_, 0);
-
   // write white pixel via staging buffer
-  VkBuffer stagingBuf = VK_NULL_HANDLE;
-  VkDeviceMemory stagingMem = VK_NULL_HANDLE;
-
   VkBufferCreateInfo bufInfo{
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
       .size = 4,
       .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
   };
-  if (vkCreateBuffer(device_, &bufInfo, nullptr, &stagingBuf) != VK_SUCCESS) {
+
+  VkBuffer stagingBuf = VK_NULL_HANDLE;
+  VmaAllocation stagingAlloc = VK_NULL_HANDLE;
+  VmaAllocationInfo stagingAllocInfo{};
+
+  VmaAllocationCreateInfo stagingCreateInfo{
+      .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+               VMA_ALLOCATION_CREATE_MAPPED_BIT,
+      .usage = VMA_MEMORY_USAGE_AUTO,
+  };
+
+  if (vmaCreateBuffer(allocator_, &bufInfo, &stagingCreateInfo, &stagingBuf,
+                      &stagingAlloc, &stagingAllocInfo) != VK_SUCCESS) {
     s_logger.error("Failed to create staging buffer");
     return false;
   }
 
-  VkMemoryRequirements bufMemReq;
-  vkGetBufferMemoryRequirements(device_, stagingBuf, &bufMemReq);
-  VkMemoryAllocateInfo bufAlloc{
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .allocationSize = bufMemReq.size,
-      .memoryTypeIndex = ~0u,
-  };
-  for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
-    if (bufMemReq.memoryTypeBits & (1u << i) &&
-        (memProps.memoryTypes[i].propertyFlags &
-         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
-      bufAlloc.memoryTypeIndex = i;
-      break;
-    }
-  }
-  vkAllocateMemory(device_, &bufAlloc, nullptr, &stagingMem);
-  vkBindBufferMemory(device_, stagingBuf, stagingMem, 0);
-
-  uint8_t *data;
-  vkMapMemory(device_, stagingMem, 0, VK_WHOLE_SIZE, 0,
-              reinterpret_cast<void **>(&data));
+  auto *data = static_cast<uint8_t *>(stagingAllocInfo.pMappedData);
   data[0] = 255;
   data[1] = 255;
   data[2] = 255;
   data[3] = 255;
-  vkUnmapMemory(device_, stagingMem);
 
   // create image view
   VkImageViewCreateInfo viewInfo{
@@ -363,8 +322,7 @@ bool VulkanDescriptorPool::createFallbackTexture() {
   if (vkCreateImageView(device_, &viewInfo, nullptr, &fallbackImageView_) !=
       VK_SUCCESS) {
     s_logger.error("Failed to create fallback image view");
-    vkDestroyBuffer(device_, stagingBuf, nullptr);
-    vkFreeMemory(device_, stagingMem, nullptr);
+    vmaDestroyBuffer(allocator_, stagingBuf, stagingAlloc);
     return false;
   }
 
@@ -438,8 +396,7 @@ bool VulkanDescriptorPool::createFallbackTexture() {
   vkQueueWaitIdle(graphicsQueue_);
 
   vkFreeCommandBuffers(device_, transferPool_, 1, &cmd);
-  vkDestroyBuffer(device_, stagingBuf, nullptr);
-  vkFreeMemory(device_, stagingMem, nullptr);
+  vmaDestroyBuffer(allocator_, stagingBuf, stagingAlloc);
 
   s_logger.info("Fallback 1x1 white texture created.");
   return true;

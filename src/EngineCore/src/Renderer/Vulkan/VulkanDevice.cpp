@@ -1,4 +1,4 @@
-#include "RaidenEngineCore/Renderer/Vulkan/VulkanMaterial.hpp"
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanMaterial.hpp>
 #include <RaidenEngineCore/ECS/Camera.hpp>
 #include <RaidenEngineCore/Logger.hpp>
 #include <RaidenEngineCore/Platform/IPlatform.hpp>
@@ -220,7 +220,7 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
     return false;
   }
 
-  if (!descriptorPool_.init(device_, physicalDevice_, transferPool_,
+  if (!descriptorPool_.init(device_, physicalDevice_, allocator_.handle(), transferPool_,
                             graphicsQueue_)) {
     s_logger.critical("Failed to create descriptor pool");
     return false;
