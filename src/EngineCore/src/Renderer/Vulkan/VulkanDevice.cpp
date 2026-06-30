@@ -209,7 +209,22 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
     return false;
   }
 
-  descriptorPool_.init(device_);
+  VkCommandPoolCreateInfo transferPoolInfo{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+      .queueFamilyIndex = graphicsQueueIndex_,
+  };
+  if (vkCreateCommandPool(device_, &transferPoolInfo, nullptr,
+                          &transferPool_) != VK_SUCCESS) {
+    s_logger.critical("Failed to create transfer command pool");
+    return false;
+  }
+
+  if (!descriptorPool_.init(device_, physicalDevice_, transferPool_,
+                            graphicsQueue_)) {
+    s_logger.critical("Failed to create descriptor pool");
+    return false;
+  }
 
   for (auto &[uniformBuffer, uniformSet] : perFrame_) {
     uniformBuffer.init(allocator_.handle(), sizeof(FrameUniforms),
@@ -245,17 +260,6 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
 
   if (!frameContext_.init(device_, graphicsQueueIndex_)) {
     s_logger.critical("Failed to create frame context");
-    return false;
-  }
-
-  VkCommandPoolCreateInfo transferPoolInfo{
-      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-      .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
-      .queueFamilyIndex = graphicsQueueIndex_,
-  };
-  if (vkCreateCommandPool(device_, &transferPoolInfo, nullptr,
-                          &transferPool_) != VK_SUCCESS) {
-    s_logger.critical("Failed to create transfer command pool");
     return false;
   }
 
@@ -648,6 +652,15 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
     });
   }
 
+  // extract camera position from the view matrix
+  glm::mat4 invView = glm::inverse(uniforms.view);
+  glm::vec3 camPos = glm::vec3(invView[3]);
+
+  uniforms.cameraPos = glm::vec4(camPos, 0.0f);
+  uniforms.lightDir =
+      glm::vec4(glm::normalize(glm::vec3(1.0f, 2.0f, 1.0f)), 2.0f);
+  uniforms.lightColor = glm::vec4(1.0f, 1.0f, 1.0f, 0.0f);
+
   perFrame.uniformBuffer.upload(&uniforms, sizeof(uniforms));
 
   VulkanCommandBuffer vkCmdBuf(cmd, descriptorPool_, perFrame.uniformSet);
@@ -685,7 +698,7 @@ std::shared_ptr<IMaterial> VulkanDevice::createMaterial(
 
   // resolve shader path
   std::string shaderPath = desc.shader == "builtin://pbr"
-                               ? "shaders/triangle.slang"
+                               ? "shaders/pbr.slang"
                                : std::string(desc.shader);
 
   namespace fs = std::filesystem;
@@ -737,14 +750,15 @@ std::shared_ptr<IMaterial> VulkanDevice::createMaterial(
   };
 
   VkDescriptorSetLayout setLayouts[] = {
-    descriptorPool_.uboSetLayout(),     // set 0
-    descriptorPool_.samplerSetLayout(), // set 1
-    descriptorPool_.textureSetLayout(), // set 2
+      descriptorPool_.uboSetLayout(),            // set 0
+      descriptorPool_.samplerSetLayout(),        // set 1
+      descriptorPool_.materialSetLayout(),       // set 2
+      descriptorPool_.materialParamsSetLayout(), // set 3
   };
 
   auto pipeline = std::make_unique<VulkanPipelineImpl>();
   if (!pipeline->init(device_, renderPass_.renderPass(), vertShader, fragShader,
-                      vertexDesc, desc.depthTest, setLayouts, 3)) {
+                      vertexDesc, desc.depthTest, setLayouts, 4)) {
     s_logger.error("createMaterial: failed to create pipeline");
     vertShader.shutdown();
     fragShader.shutdown();

@@ -66,7 +66,10 @@ struct alignas(16) FrameUniforms {
   glm::mat4 projection;
   glm::mat4 view;
   glm::mat4 model;
-  glm::vec4 extra; // x=time, y=dt, z=resolutionX, w=resolutionY
+  glm::vec4 extra;        // x=time, y=dt, z=resolutionX, w=resolutionY
+  glm::vec4 cameraPos;    // xyz=camera world position, w unused
+  glm::vec4 lightDir;     // xyz=direction toward light, w=intensity
+  glm::vec4 lightColor;   // rgb=color, w=unused
 };
 
 struct Vertex {

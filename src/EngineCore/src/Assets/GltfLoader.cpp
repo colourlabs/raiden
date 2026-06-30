@@ -234,15 +234,15 @@ std::vector<Mesh> loadGltf(IRenderDevice &device, const std::byte *data,
           for (size_t i = 0; i < vertexCount; ++i) {
             auto &v = vertices[i];
             glm::vec3 n = glm::abs(v.normal);
-            float sx = v.pos.x * 0.5f + 0.5f;
-            float sy = v.pos.y * 0.5f + 0.5f;
-            float sz = v.pos.z * 0.5f + 0.5f;
+            float sx = v.pos.x + 0.5f;
+            float sy = 0.5f - v.pos.y;   // flip V: Vulkan (0,0)=top-left
+            float sz = v.pos.z + 0.5f;
             if (n.x > n.y && n.x > n.z)
-              v.uv = glm::vec2(sz, sy);
+              v.uv = glm::vec2(sz, sy);  // X face: sy is vertical
             else if (n.y > n.x && n.y > n.z)
-              v.uv = glm::vec2(sx, sz);
+              v.uv = glm::vec2(sx, sz);  // Y face: horizontal projection
             else
-              v.uv = glm::vec2(sx, sy);
+              v.uv = glm::vec2(sx, sy);  // Z face: sy is vertical
           }
         }
 

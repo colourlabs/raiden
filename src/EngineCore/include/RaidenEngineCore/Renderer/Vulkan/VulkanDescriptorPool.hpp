@@ -14,7 +14,8 @@ public:
   VulkanDescriptorPool(VulkanDescriptorPool &&) = delete;
   VulkanDescriptorPool &operator=(VulkanDescriptorPool &&) = delete;
 
-  bool init(VkDevice device);
+  bool init(VkDevice device, VkPhysicalDevice physDev,
+            VkCommandPool transferPool, VkQueue graphicsQueue);
   void shutdown();
 
   VkDescriptorPool handle() const { return pool_; }
@@ -56,6 +57,9 @@ private:
   bool createFallbackTexture();
 
   VkDevice device_ = VK_NULL_HANDLE;
+  VkPhysicalDevice physDev_ = VK_NULL_HANDLE;
+  VkCommandPool transferPool_ = VK_NULL_HANDLE;
+  VkQueue graphicsQueue_ = VK_NULL_HANDLE;
   VkDescriptorPool pool_ = VK_NULL_HANDLE;
   VkDescriptorSetLayout uboSetLayout_ = VK_NULL_HANDLE;
   VkDescriptorSetLayout samplerSetLayout_ = VK_NULL_HANDLE;

@@ -7,8 +7,13 @@ static const Logger s_logger("Raiden::Core::VulkanDescriptorPool");
 
 VulkanDescriptorPool::~VulkanDescriptorPool() { shutdown(); }
 
-bool VulkanDescriptorPool::init(VkDevice device) {
+bool VulkanDescriptorPool::init(VkDevice device, VkPhysicalDevice physDev,
+                                VkCommandPool transferPool,
+                                VkQueue graphicsQueue) {
   device_ = device;
+  physDev_ = physDev;
+  transferPool_ = transferPool;
+  graphicsQueue_ = graphicsQueue;
 
   // set 0, frame UBO
   VkDescriptorSetLayoutBinding uboBinding{
@@ -68,23 +73,23 @@ bool VulkanDescriptorPool::init(VkDevice device) {
   // emissive, occlusion)
   std::array<VkDescriptorSetLayoutBinding, 5> materialBindings{{
       {.binding = 0,
-       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
        .descriptorCount = 1,
        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
       {.binding = 1,
-       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
        .descriptorCount = 1,
        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
       {.binding = 2,
-       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
        .descriptorCount = 1,
        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
       {.binding = 3,
-       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
        .descriptorCount = 1,
        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
       {.binding = 4,
-       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
        .descriptorCount = 1,
        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
   }};
@@ -141,12 +146,12 @@ bool VulkanDescriptorPool::init(VkDevice device) {
   }
 
   // pool sized for: 3 frame UBOs + 1 shared sampler
-  //               + 64 simple textures + 64 material texture sets + 64 material params UBOs
-  std::array<VkDescriptorPoolSize, 4> poolSizes{{
+  //               + 64 simple textures + 64 material texture sets + 64 material
+  //               params UBOs
+  std::array<VkDescriptorPoolSize, 3> poolSizes{{
       {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3 + 64},
       {VK_DESCRIPTOR_TYPE_SAMPLER, 1},
-      {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 64},
-      {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 64 * 5},
+      {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 64 + 64 * 5},
   }};
 
   VkDescriptorPoolCreateInfo poolInfo{
@@ -190,6 +195,11 @@ bool VulkanDescriptorPool::init(VkDevice device) {
       .pImageInfo = &samplerImageInfo,
   };
   vkUpdateDescriptorSets(device_, 1, &samplerWrite, 0, nullptr);
+
+  if (!createFallbackTexture()) {
+    s_logger.error("Failed to create fallback texture");
+    return false;
+  }
 
   s_logger.info("Descriptor pool created.");
   return true;
@@ -245,6 +255,194 @@ void VulkanDescriptorPool::shutdown() {
     vkDestroyDescriptorSetLayout(device_, materialParamsSetLayout_, nullptr);
     materialParamsSetLayout_ = VK_NULL_HANDLE;
   }
+}
+
+bool VulkanDescriptorPool::createFallbackTexture() {
+  VkImageCreateInfo imgInfo{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .imageType = VK_IMAGE_TYPE_2D,
+      .format = VK_FORMAT_R8G8B8A8_UNORM,
+      .extent = {1, 1, 1},
+      .mipLevels = 1,
+      .arrayLayers = 1,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .tiling = VK_IMAGE_TILING_OPTIMAL,
+      .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+  };
+
+  if (vkCreateImage(device_, &imgInfo, nullptr, &fallbackImage_) !=
+      VK_SUCCESS) {
+    s_logger.error("Failed to create fallback image");
+    return false;
+  }
+
+  VkMemoryRequirements memReq;
+  vkGetImageMemoryRequirements(device_, fallbackImage_, &memReq);
+
+  VkMemoryAllocateInfo allocInfo{
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize = memReq.size,
+      .memoryTypeIndex = ~0u,
+  };
+
+  VkPhysicalDeviceMemoryProperties memProps;
+  vkGetPhysicalDeviceMemoryProperties(physDev_, &memProps);
+  for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
+    if (memReq.memoryTypeBits & (1u << i) &&
+        (memProps.memoryTypes[i].propertyFlags &
+         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
+      allocInfo.memoryTypeIndex = i;
+      break;
+    }
+  }
+
+  if (allocInfo.memoryTypeIndex == ~0u) {
+    s_logger.error("No suitable memory type for fallback texture");
+    return false;
+  }
+
+  if (vkAllocateMemory(device_, &allocInfo, nullptr, &fallbackMemory_) !=
+      VK_SUCCESS) {
+    s_logger.error("Failed to allocate fallback texture memory");
+    return false;
+  }
+
+  vkBindImageMemory(device_, fallbackImage_, fallbackMemory_, 0);
+
+  // write white pixel via staging buffer
+  VkBuffer stagingBuf = VK_NULL_HANDLE;
+  VkDeviceMemory stagingMem = VK_NULL_HANDLE;
+
+  VkBufferCreateInfo bufInfo{
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .size = 4,
+      .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+  };
+  if (vkCreateBuffer(device_, &bufInfo, nullptr, &stagingBuf) != VK_SUCCESS) {
+    s_logger.error("Failed to create staging buffer");
+    return false;
+  }
+
+  VkMemoryRequirements bufMemReq;
+  vkGetBufferMemoryRequirements(device_, stagingBuf, &bufMemReq);
+  VkMemoryAllocateInfo bufAlloc{
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize = bufMemReq.size,
+      .memoryTypeIndex = ~0u,
+  };
+  for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
+    if (bufMemReq.memoryTypeBits & (1u << i) &&
+        (memProps.memoryTypes[i].propertyFlags &
+         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
+      bufAlloc.memoryTypeIndex = i;
+      break;
+    }
+  }
+  vkAllocateMemory(device_, &bufAlloc, nullptr, &stagingMem);
+  vkBindBufferMemory(device_, stagingBuf, stagingMem, 0);
+
+  uint8_t *data;
+  vkMapMemory(device_, stagingMem, 0, VK_WHOLE_SIZE, 0,
+              reinterpret_cast<void **>(&data));
+  data[0] = 255;
+  data[1] = 255;
+  data[2] = 255;
+  data[3] = 255;
+  vkUnmapMemory(device_, stagingMem);
+
+  // create image view
+  VkImageViewCreateInfo viewInfo{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .image = fallbackImage_,
+      .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .format = VK_FORMAT_R8G8B8A8_UNORM,
+      .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+  };
+
+  if (vkCreateImageView(device_, &viewInfo, nullptr, &fallbackImageView_) !=
+      VK_SUCCESS) {
+    s_logger.error("Failed to create fallback image view");
+    vkDestroyBuffer(device_, stagingBuf, nullptr);
+    vkFreeMemory(device_, stagingMem, nullptr);
+    return false;
+  }
+
+  // one-shot command buffer for layout transition + copy
+  VkCommandBufferAllocateInfo allocCmd{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+      .commandPool = transferPool_,
+      .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+      .commandBufferCount = 1,
+  };
+  VkCommandBuffer cmd;
+  vkAllocateCommandBuffers(device_, &allocCmd, &cmd);
+
+  VkCommandBufferBeginInfo beginInfo{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+  };
+  vkBeginCommandBuffer(cmd, &beginInfo);
+
+  // UNDEFINED -> TRANSFER_DST
+  VkImageMemoryBarrier preBarrier{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+      .srcAccessMask = 0,
+      .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+      .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .image = fallbackImage_,
+      .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+  };
+  vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                       VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0,
+                       nullptr, 1, &preBarrier);
+
+  VkBufferImageCopy copyRegion{
+      .bufferOffset = 0,
+      .bufferRowLength = 0,
+      .bufferImageHeight = 0,
+      .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+      .imageOffset = {0, 0, 0},
+      .imageExtent = {1, 1, 1},
+  };
+  vkCmdCopyBufferToImage(cmd, stagingBuf, fallbackImage_,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+
+  // TRANSFER_DST -> SHADER_READ_ONLY
+  VkImageMemoryBarrier postBarrier{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+      .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+      .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+      .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+      .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .image = fallbackImage_,
+      .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+  };
+  vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                       VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0,
+                       nullptr, 1, &postBarrier);
+
+  vkEndCommandBuffer(cmd);
+
+  VkSubmitInfo submit{
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .commandBufferCount = 1,
+      .pCommandBuffers = &cmd,
+  };
+  vkQueueSubmit(graphicsQueue_, 1, &submit, VK_NULL_HANDLE);
+  vkQueueWaitIdle(graphicsQueue_);
+
+  vkFreeCommandBuffers(device_, transferPool_, 1, &cmd);
+  vkDestroyBuffer(device_, stagingBuf, nullptr);
+  vkFreeMemory(device_, stagingMem, nullptr);
+
+  s_logger.info("Fallback 1x1 white texture created.");
+  return true;
 }
 
 VkDescriptorSet VulkanDescriptorPool::allocSamplerSet() {

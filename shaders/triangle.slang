@@ -17,7 +17,7 @@ struct VertexOutput
   float4 position : SV_Position;
   [[vk::location(0)]] float3 normal : NORMAL;
   [[vk::location(1)]] float3 color : COLOR;
-  [[vk::location(2)]] float2 uv : TEXCOORD; // <--- Force this to 2
+  [[vk::location(2)]] float2 uv : TEXCOORD;
   [[vk::location(3)]] float3 worldPos : TEXCOORD1;
 };
 
@@ -35,9 +35,7 @@ VertexOutput vertexMain(VertexInput input)
   output.worldPos = worldPos.xyz;
   output.position = mul(frameUBO.projection, mul(frameUBO.view, worldPos));
 
-  // transform normal into world space
-  // using model matrix, good enough for right now
-  output.normal = normalize(mul((float3x3)frameUBO.model, input.normal));
+  output.normal = normalize(mul((float3x3)model, input.normal));
 
   output.color = input.color;
 

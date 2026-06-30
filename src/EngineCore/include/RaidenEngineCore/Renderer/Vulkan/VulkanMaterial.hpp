@@ -38,6 +38,7 @@ private:
   void writeDescriptors(VulkanDescriptorPool &pool);
 
   VkDevice device_ = VK_NULL_HANDLE;
+  VulkanDescriptorPool *pool_ = nullptr;
   VkDescriptorSet materialSet_ = VK_NULL_HANDLE;
   VkDescriptorSet paramsSet_ = VK_NULL_HANDLE;
   VulkanBuffer paramsUbo_;

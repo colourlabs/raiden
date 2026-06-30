@@ -5,11 +5,13 @@
 #include <RaidenEngineCore/Engine/IGamePlugin.hpp>
 #include <RaidenEngineCore/Input/ActionMap.hpp>
 #include <RaidenEngineCore/Renderer/IBuffer.hpp>
+#include <RaidenEngineCore/Renderer/IMaterial.hpp>
 #include <RaidenEngineCore/Renderer/IPipeline.hpp>
 #include <RaidenEngineCore/Renderer/ITexture.hpp>
 #include <RaidenEngineCore/Renderer/Model.hpp>
 
 #include <memory>
+#include <vector>
 
 class ExampleGame : public Raiden::Core::IGamePlugin {
 public:
@@ -30,13 +32,18 @@ private:
   Raiden::Core::ActionMap actions_;
   Raiden::Core::IAssetManager *assets_ = nullptr;
 
+  struct PbrObject {
+    glm::vec3 position;
+    float rotation;
+    std::shared_ptr<Raiden::Core::IMaterial> material;
+  };
+
   std::unique_ptr<Raiden::Core::IPipeline> pipeline_;
   std::shared_ptr<Raiden::Core::ITexture> texture_;
   std::shared_ptr<Raiden::Core::Model> model_;
 
-  std::shared_ptr<Raiden::Core::IBuffer> quadVB_;
-  std::shared_ptr<Raiden::Core::IBuffer> quadIB_;
-  
+  std::vector<PbrObject> pbrObjects_;
+
   float rotation_ = 0.0f;
   bool quitRequested_ = false;
 };

@@ -35,6 +35,8 @@ public:
   void pushConstants(uint32_t offset, uint32_t size,
                      const void *data) override;
 
+  void setPipelineLayout(VkPipelineLayout layout) { currentLayout_ = layout; }
+
 private:
   VkCommandBuffer cmd_ = VK_NULL_HANDLE;
   VulkanDescriptorPool *pool_ = nullptr;

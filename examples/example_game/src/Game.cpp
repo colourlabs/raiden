@@ -10,6 +10,8 @@
 #include <RaidenEngineCore/Renderer/IRenderDevice.hpp>
 #include <RaidenEngineCore/Renderer/RenderTypes.hpp>
 
+// simple demo with PBR lighting, KTX2 textures and a glTF cube model
+
 static const Raiden::Core::Logger s_logger("ExampleGame");
 
 bool ExampleGame::init(Raiden::Core::IRenderDevice &device,
@@ -71,7 +73,62 @@ bool ExampleGame::init(Raiden::Core::IRenderDevice &device,
   }
 
   s_logger.info("Cube model loaded: {} meshes", model_->meshes.size());
-  s_logger.info("Example game initialized.");
+
+  // PBR test objects
+
+  struct PbrPreset {
+    glm::vec3 position;
+    glm::vec4 color;
+    float metallic;
+    float roughness;
+    const char *label;
+  };
+
+  PbrPreset presets[] = {
+      {{1.0f, 0.0f, 0.0f},
+       {1.0f, 0.2f, 0.2f, 1.0f},
+       0.0f,
+       0.8f,
+       "rough dielectric"},
+      {{-1.0f, 0.0f, 0.0f},
+       {0.2f, 0.4f, 1.0f, 1.0f},
+       0.0f,
+       0.2f,
+       "smooth dielectric"},
+      {{0.0f, 0.8f, 0.0f},
+       {0.8f, 0.8f, 0.8f, 1.0f},
+       0.9f,
+       0.4f,
+       "brushed metal"},
+      {{0.0f, -0.8f, 0.0f},
+       {1.0f, 0.8f, 0.2f, 1.0f},
+       0.9f,
+       0.1f,
+       "polished metal"},
+  };
+
+  for (auto &p : presets) {
+    Raiden::Core::MaterialDesc matDesc;
+    matDesc.shader = "builtin://pbr";
+    matDesc.baseColorFactor = p.color;
+    matDesc.metallicFactor = p.metallic;
+    matDesc.roughnessFactor = p.roughness;
+
+    // no texture paths -> uses white fallback texture, visible color comes from
+    // baseColorFactor
+    auto mat = device.createMaterial(matDesc, nullptr, nullptr, nullptr,
+                                     nullptr, nullptr);
+    if (mat) {
+      pbrObjects_.push_back({p.position, 0.0f, std::move(mat)});
+      s_logger.info("PBR object '{}' metallic={} roughness={}", p.label,
+                    p.metallic, p.roughness);
+    } else {
+      s_logger.error("Failed to create PBR material for '{}'", p.label);
+    }
+  }
+
+  s_logger.info("Example game initialized ({} PBR objects).",
+                pbrObjects_.size());
 
   return true;
 }
@@ -85,14 +142,20 @@ void ExampleGame::update(float deltaTime,
   }
 
   rotation_ += deltaTime * 45.0f;
+
+  for (auto &obj : pbrObjects_)
+    obj.rotation += deltaTime * 45.0f;
 }
 
 void ExampleGame::render(Raiden::Core::ICommandBuffer &cmd) {
+  // simple pipeline cube (rotating, checkerboard)
   cmd.bindPipeline(*pipeline_);
 
-  glm::mat4 model = glm::rotate(glm::mat4(1.0f), glm::radians(rotation_),
-                                glm::vec3(0.0f, 1.0f, 0.0f));
-  cmd.pushConstants(0, sizeof(glm::mat4), &model);
+  float const s = 0.5f;
+  glm::mat4 simpleModel = glm::scale(glm::mat4(1.0f), glm::vec3(s)) *
+                          glm::rotate(glm::mat4(1.0f), glm::radians(rotation_),
+                                      glm::vec3(0.0f, 1.0f, 0.0f));
+  cmd.pushConstants(0, sizeof(glm::mat4), &simpleModel);
   cmd.bindTexture(0, *texture_);
 
   for (auto &mesh : model_->meshes) {
@@ -101,6 +164,26 @@ void ExampleGame::render(Raiden::Core::ICommandBuffer &cmd) {
     cmd.bindVertexBuffer(*mesh.vertexBuffer);
     cmd.bindIndexBuffer(*mesh.indexBuffer);
     cmd.drawIndexed(mesh.indexCount);
+  }
+
+  // PBR material cubes
+  for (auto &obj : pbrObjects_) {
+    obj.material->bind(cmd);
+
+    glm::mat4 m = glm::translate(glm::mat4(1.0f), obj.position) *
+                  glm::scale(glm::mat4(1.0f), glm::vec3(0.5f)) *
+                  glm::rotate(glm::mat4(1.0f), glm::radians(obj.rotation),
+                              glm::vec3(0.0f, 1.0f, 0.0f));
+
+    cmd.pushConstants(0, sizeof(glm::mat4), &m);
+
+    for (auto &mesh : model_->meshes) {
+      if (!mesh.isValid())
+        continue;
+      cmd.bindVertexBuffer(*mesh.vertexBuffer);
+      cmd.bindIndexBuffer(*mesh.indexBuffer);
+      cmd.drawIndexed(mesh.indexCount);
+    }
   }
 }
 

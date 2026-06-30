@@ -39,6 +39,7 @@ bool VulkanMaterial::init(VkDevice device, VmaAllocator allocator,
                           std::shared_ptr<ITexture> emissive,
                           std::shared_ptr<ITexture> occlusion) {
   device_ = device;
+  pool_ = &pool;
   pipeline_ = pipeline;
 
   // keep textures alive as long as this material is alive
@@ -150,7 +151,7 @@ void VulkanMaterial::writeDescriptors(VulkanDescriptorPool &pool) {
           .dstSet = materialSet_,
           .dstBinding = 0, // albedo
           .descriptorCount = 1,
-          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+          .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
           .pImageInfo = &albedoInfo,
       },
       {
@@ -158,7 +159,7 @@ void VulkanMaterial::writeDescriptors(VulkanDescriptorPool &pool) {
           .dstSet = materialSet_,
           .dstBinding = 1, // normal
           .descriptorCount = 1,
-          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+          .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
           .pImageInfo = &normalInfo,
       },
       {
@@ -166,7 +167,7 @@ void VulkanMaterial::writeDescriptors(VulkanDescriptorPool &pool) {
           .dstSet = materialSet_,
           .dstBinding = 2, // metallicRoughness
           .descriptorCount = 1,
-          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+          .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
           .pImageInfo = &metallicRoughnessInfo,
       },
       {
@@ -174,7 +175,7 @@ void VulkanMaterial::writeDescriptors(VulkanDescriptorPool &pool) {
           .dstSet = materialSet_,
           .dstBinding = 3, // emissive
           .descriptorCount = 1,
-          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+          .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
           .pImageInfo = &emissiveInfo,
       },
       {
@@ -182,7 +183,7 @@ void VulkanMaterial::writeDescriptors(VulkanDescriptorPool &pool) {
           .dstSet = materialSet_,
           .dstBinding = 4, // occlusion
           .descriptorCount = 1,
-          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+          .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
           .pImageInfo = &occlusionInfo,
       },
   }};
@@ -222,10 +223,13 @@ void VulkanMaterial::bind(ICommandBuffer &cmd) {
   }
 
   if (vkPipeline) {
-    std::array<VkDescriptorSet, 2> sets = {materialSet_, paramsSet_};
+    vkCmd->setPipelineLayout(vkPipeline->layout());
+
+    VkDescriptorSet samplerSet = pool_->samplerSet();
+    std::array<VkDescriptorSet, 3> sets = {samplerSet, materialSet_, paramsSet_};
     vkCmdBindDescriptorSets(raw, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             vkPipeline->layout(),
-                            2, static_cast<uint32_t>(sets.size()), sets.data(),
+                            1, static_cast<uint32_t>(sets.size()), sets.data(),
                             0, nullptr);
   }
 }
