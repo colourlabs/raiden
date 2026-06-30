@@ -169,7 +169,7 @@ VkDescriptorSet VulkanTextureImpl::getOrCreateDescriptorSet(
   }
 
   VkDescriptorImageInfo imageInfo{
-      .sampler = sampler,
+      .sampler = VK_NULL_HANDLE,
       .imageView = image_.view(),
       .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
   };
@@ -179,7 +179,7 @@ VkDescriptorSet VulkanTextureImpl::getOrCreateDescriptorSet(
       .dstSet = descriptorSet_,
       .dstBinding = 0,
       .descriptorCount = 1,
-      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+      .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
       .pImageInfo = &imageInfo,
   };
 

@@ -25,8 +25,12 @@ public:
     return &uboSetLayout_;
   }
 
-  // set 1, legacy single sampler
+  // set 1, sampler (shared, used by both simple and material paths)
   VkDescriptorSetLayout samplerSetLayout() const { return samplerSetLayout_; }
+  VkDescriptorSet samplerSet() const { return samplerSet_; }
+
+  // set 2, simple single texture (VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, binding 0)
+  VkDescriptorSetLayout textureSetLayout() const { return textureSetLayout_; }
 
   // set 2, material textures (albedo, normal, metallicRoughness, emissive, occlusion)
   VkDescriptorSetLayout materialSetLayout() const { return materialSetLayout_; }
@@ -55,9 +59,11 @@ private:
   VkDescriptorPool pool_ = VK_NULL_HANDLE;
   VkDescriptorSetLayout uboSetLayout_ = VK_NULL_HANDLE;
   VkDescriptorSetLayout samplerSetLayout_ = VK_NULL_HANDLE;
+  VkDescriptorSetLayout textureSetLayout_ = VK_NULL_HANDLE;
   VkDescriptorSetLayout materialSetLayout_ = VK_NULL_HANDLE;
   VkDescriptorSetLayout materialParamsSetLayout_ = VK_NULL_HANDLE;
   VkSampler sampler_ = VK_NULL_HANDLE;
+  VkDescriptorSet samplerSet_ = VK_NULL_HANDLE;
 
   // 1x1 white fallback for unbound material texture slots
   VkImage fallbackImage_ = VK_NULL_HANDLE;

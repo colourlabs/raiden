@@ -11,7 +11,7 @@ namespace Raiden::Core {
 
 static const Logger s_logger("Raiden::Core::KtxLoader");
 
-// map KTX VkFormat back into 
+// map KTX VkFormat back into
 static Format vkFormatToFormat(VkFormat fmt) {
   switch (fmt) {
   case VK_FORMAT_R8G8B8A8_UNORM:
@@ -42,23 +42,13 @@ std::shared_ptr<ITexture> loadKtx2(IRenderDevice &device, const std::byte *data,
   }
 
   // transcode Basis Universal compressed data if needed
-  // BC7 on desktop, ASTC on mobile, BC7 is the safe desktop default
   if (ktxTexture2_NeedsTranscoding(ktxTex)) {
-    // pick best format based on what's available
-    ktx_transcode_fmt_e targetFormat = KTX_TTF_BC7_RGBA;
-
-    result = ktxTexture2_TranscodeBasis(ktxTex, targetFormat, 0);
+    result = ktxTexture2_TranscodeBasis(ktxTex, KTX_TTF_RGBA32, 0);
+    
     if (result != KTX_SUCCESS) {
-      s_logger.warn("BC7 transcode failed ({}), falling back to RGBA32",
-                    ktxErrorString(result));
-
-      // fall back to uncompressed RGBA, always supported
-      result = ktxTexture2_TranscodeBasis(ktxTex, KTX_TTF_RGBA32, 0);
-      if (result != KTX_SUCCESS) {
-        s_logger.error("RGBA32 transcode failed: {}", ktxErrorString(result));
-        ktxTexture_Destroy(ktxTexture(ktxTex));
-        return nullptr;
-      }
+      s_logger.error("RGBA32 transcode failed: {}", ktxErrorString(result));
+      ktxTexture_Destroy(ktxTexture(ktxTex));
+      return nullptr;
     }
   }
 
@@ -81,7 +71,11 @@ std::shared_ptr<ITexture> loadKtx2(IRenderDevice &device, const std::byte *data,
   }
 
   const ktx_uint8_t *pixels = ktxTexture_GetData(ktxTexture(ktxTex)) + offset;
-  ktx_size_t pixelSize = ktxTexture_GetDataSize(ktxTexture(ktxTex));
+
+  // only upload the base mip level data.
+  // ktxTexture_GetDataSize returns the total size of all mip levels, but the
+  // engine creates a single-level image, so we only need level 0's pixels.
+  ktx_size_t pixelSize = width * height * 4;
 
   // create texture through the device abstraction
   TextureDesc desc{

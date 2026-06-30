@@ -7,6 +7,7 @@
 #include <RaidenEngineCore/Renderer/IBuffer.hpp>
 #include <RaidenEngineCore/Renderer/IPipeline.hpp>
 #include <RaidenEngineCore/Renderer/ITexture.hpp>
+#include <RaidenEngineCore/Renderer/Model.hpp>
 
 #include <memory>
 
@@ -30,11 +31,11 @@ private:
   Raiden::Core::IAssetManager *assets_ = nullptr;
 
   std::unique_ptr<Raiden::Core::IPipeline> pipeline_;
-  std::unique_ptr<Raiden::Core::IBuffer> vertexBuffer_;
-  std::unique_ptr<Raiden::Core::IBuffer> indexBuffer_;
-  std::shared_ptr<Raiden::Core::ITexture>  texture_;
-  
-  uint32_t indexCount_ = 0;
+  std::shared_ptr<Raiden::Core::ITexture> texture_;
+  std::shared_ptr<Raiden::Core::Model> model_;
+
+  std::shared_ptr<Raiden::Core::IBuffer> quadVB_;
+  std::shared_ptr<Raiden::Core::IBuffer> quadIB_;
   
   float rotation_ = 0.0f;
   bool quitRequested_ = false;

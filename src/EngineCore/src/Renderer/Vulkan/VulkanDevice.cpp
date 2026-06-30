@@ -314,15 +314,14 @@ VulkanDevice::createPipeline(const PipelineDesc &desc) {
   }
 
   VkDescriptorSetLayout setLayouts[] = {
-      descriptorPool_.uboSetLayout(),            // set 0, frame UBO
-      descriptorPool_.samplerSetLayout(),        // set 1, legacy sampler
-      descriptorPool_.materialSetLayout(),       // set 2, material textures
-      descriptorPool_.materialParamsSetLayout(), // set 3, material params
+      descriptorPool_.uboSetLayout(),     // set 0
+      descriptorPool_.samplerSetLayout(), // set 1
+      descriptorPool_.textureSetLayout(), // set 2
   };
 
   auto impl = std::make_unique<VulkanPipelineImpl>();
   if (!impl->init(device_, renderPass_.renderPass(), vertShader, fragShader,
-                  vertexDesc, desc.depthTestEnable, setLayouts, 2)) {
+                  vertexDesc, desc.depthTestEnable, setLayouts, 3)) {
     s_logger.error("Failed to create pipeline");
     vertShader.shutdown();
     fragShader.shutdown();
@@ -711,11 +710,13 @@ std::shared_ptr<IMaterial> VulkanDevice::createMaterial(
   }
 
   VertexInputDescription vertexDesc;
+
   vertexDesc.bindings.push_back({
       .binding = 0,
       .stride = sizeof(Vertex),
       .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
   });
+
   vertexDesc.attributes = {
       {.location = 0,
        .binding = 0,
@@ -736,15 +737,14 @@ std::shared_ptr<IMaterial> VulkanDevice::createMaterial(
   };
 
   VkDescriptorSetLayout setLayouts[] = {
-      descriptorPool_.uboSetLayout(),
-      descriptorPool_.samplerSetLayout(),
-      descriptorPool_.materialSetLayout(),
-      descriptorPool_.materialParamsSetLayout(),
+    descriptorPool_.uboSetLayout(),     // set 0
+    descriptorPool_.samplerSetLayout(), // set 1
+    descriptorPool_.textureSetLayout(), // set 2
   };
 
   auto pipeline = std::make_unique<VulkanPipelineImpl>();
   if (!pipeline->init(device_, renderPass_.renderPass(), vertShader, fragShader,
-                      vertexDesc, desc.depthTest, setLayouts, 4)) {
+                      vertexDesc, desc.depthTest, setLayouts, 3)) {
     s_logger.error("createMaterial: failed to create pipeline");
     vertShader.shutdown();
     fragShader.shutdown();

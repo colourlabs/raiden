@@ -6,19 +6,24 @@ SamplerState samp;
 
 struct VertexInput
 {
-  float3 pos : POSITION;
-  float3 normal : NORMAL;
-  float3 color : COLOR;
-  float2 uv : TEXCOORD;
+  [[vk::location(0)]] float3 pos : POSITION;
+  [[vk::location(1)]] float3 normal : NORMAL;
+  [[vk::location(2)]] float3 color : COLOR;
+  [[vk::location(3)]] float2 uv : TEXCOORD;
 };
 
 struct VertexOutput
 {
   float4 position : SV_Position;
-  float3 normal : NORMAL;
-  float3 color : COLOR;
-  float2 uv : TEXCOORD;
-  float3 worldPos : TEXCOORD1;
+  [[vk::location(0)]] float3 normal : NORMAL;
+  [[vk::location(1)]] float3 color : COLOR;
+  [[vk::location(2)]] float2 uv : TEXCOORD; // <--- Force this to 2
+  [[vk::location(3)]] float3 worldPos : TEXCOORD1;
+};
+
+[[vk::push_constant]]
+cbuffer PushConstants {
+  float4x4 model;
 };
 
 [shader("vertex")]
@@ -26,7 +31,7 @@ VertexOutput vertexMain(VertexInput input)
 {
   VertexOutput output;
 
-  float4 worldPos = mul(frameUBO.model, float4(input.pos, 1.0));
+  float4 worldPos = mul(model, float4(input.pos, 1.0));
   output.worldPos = worldPos.xyz;
   output.position = mul(frameUBO.projection, mul(frameUBO.view, worldPos));
 
@@ -36,11 +41,8 @@ VertexOutput vertexMain(VertexInput input)
 
   output.color = input.color;
 
-  // apply UV transform from material
-  float s = sin(material.uvRotation);
-  float c = cos(material.uvRotation);
-  float2x2 rot = float2x2(c, -s, s, c);
-  output.uv = mul(rot, input.uv * material.uvScale + material.uvOffset);
+  // pass through UV directly (material transform is applied via material path)
+  output.uv = input.uv;
 
   return output;
 }
@@ -48,44 +50,5 @@ VertexOutput vertexMain(VertexInput input)
 [shader("fragment")]
 float4 fragmentMain(VertexOutput input) : SV_Target
 {
-  float2 uv = input.uv;
-
-  // sample albedo
-  float4 albedo = albedoMap.Sample(samp, uv) * material.baseColorFactor;
-
-  // vertex color blending
-  if (material.vertexColorMode == 1)      // Multiply
-    albedo.rgb *= input.color;
-  else if (material.vertexColorMode == 2) // Add
-    albedo.rgb += input.color;
-
-  // alpha
-  if (material.alphaMode == 1)
-  { 
-    // mask
-    if (albedo.a < material.alphaCutoff)
-      discard;
-  }
-
-  // occlusion
-  float ao = 1.0;
-  if (material.hasOcclusionMap != 0)
-    ao = occlusionMap.Sample(samp, uv).r * material.occlusionStrength;
-
-  // emissive
-  float3 emissive = material.emissiveFactor.rgb;
-  if (material.hasEmissiveMap != 0)
-    emissive *= emissiveMap.Sample(samp, uv).rgb;
-
-  // basic lighting, directional light, no PBR yet
-  // normal is already in world space from vertex shader
-  float3 N = normalize(input.normal);
-  float3 L = normalize(float3(0.5, 1.0, 0.5)); // hardcoded sun direction for now
-  float NdotL = max(dot(N, L), 0.0);
-  float3 ambient = albedo.rgb * 0.15 * ao;
-  float3 diffuse = albedo.rgb * NdotL * ao;
-
-  float3 finalColor = ambient + diffuse + emissive;
-
-  return float4(finalColor, albedo.a);
+  return albedoMap.Sample(samp, input.uv);
 }

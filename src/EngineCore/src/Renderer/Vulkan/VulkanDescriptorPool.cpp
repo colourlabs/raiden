@@ -28,10 +28,10 @@ bool VulkanDescriptorPool::init(VkDevice device) {
     return false;
   }
 
-  // set 1, legacy single sampler
+  // set 1, shared sampler (VK_DESCRIPTOR_TYPE_SAMPLER)
   VkDescriptorSetLayoutBinding samplerBinding{
       .binding = 0,
-      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+      .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
       .descriptorCount = 1,
       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
   };
@@ -43,6 +43,24 @@ bool VulkanDescriptorPool::init(VkDevice device) {
   if (vkCreateDescriptorSetLayout(device_, &samplerLayoutInfo, nullptr,
                                   &samplerSetLayout_) != VK_SUCCESS) {
     s_logger.error("Failed to create sampler descriptor set layout");
+    return false;
+  }
+
+  // set 2, simple single texture (VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, binding 0)
+  VkDescriptorSetLayoutBinding textureBinding{
+      .binding = 0,
+      .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+      .descriptorCount = 1,
+      .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+  };
+  VkDescriptorSetLayoutCreateInfo textureLayoutInfo{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .bindingCount = 1,
+      .pBindings = &textureBinding,
+  };
+  if (vkCreateDescriptorSetLayout(device_, &textureLayoutInfo, nullptr,
+                                  &textureSetLayout_) != VK_SUCCESS) {
+    s_logger.error("Failed to create texture descriptor set layout");
     return false;
   }
 
@@ -122,16 +140,18 @@ bool VulkanDescriptorPool::init(VkDevice device) {
     return false;
   }
 
-  // pool sized for: 3 frame UBOs + 64 legacy sampler sets
-  //               + 64 material texture sets + 64 material params UBOs
-  std::array<VkDescriptorPoolSize, 2> poolSizes{{
+  // pool sized for: 3 frame UBOs + 1 shared sampler
+  //               + 64 simple textures + 64 material texture sets + 64 material params UBOs
+  std::array<VkDescriptorPoolSize, 4> poolSizes{{
       {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3 + 64},
-      {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 64 + (64 * 5)},
+      {VK_DESCRIPTOR_TYPE_SAMPLER, 1},
+      {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 64},
+      {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 64 * 5},
   }};
 
   VkDescriptorPoolCreateInfo poolInfo{
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-      .maxSets = 3 + 64 + 64 + 64,
+      .maxSets = 3 + 1 + 64 + 64 + 64,
       .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
       .pPoolSizes = poolSizes.data(),
   };
@@ -141,6 +161,35 @@ bool VulkanDescriptorPool::init(VkDevice device) {
     s_logger.error("Failed to create descriptor pool");
     return false;
   }
+
+  // pre-allocate and write the shared sampler descriptor set (set 1)
+  VkDescriptorSetAllocateInfo sampAlloc{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+      .descriptorPool = pool_,
+      .descriptorSetCount = 1,
+      .pSetLayouts = &samplerSetLayout_,
+  };
+  if (vkAllocateDescriptorSets(device_, &sampAlloc, &samplerSet_) !=
+      VK_SUCCESS) {
+    s_logger.error("Failed to allocate sampler descriptor set");
+    return false;
+  }
+
+  VkDescriptorImageInfo samplerImageInfo{
+      .sampler = sampler_,
+      .imageView = VK_NULL_HANDLE,
+      .imageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+  };
+
+  VkWriteDescriptorSet samplerWrite{
+      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+      .dstSet = samplerSet_,
+      .dstBinding = 0,
+      .descriptorCount = 1,
+      .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+      .pImageInfo = &samplerImageInfo,
+  };
+  vkUpdateDescriptorSets(device_, 1, &samplerWrite, 0, nullptr);
 
   s_logger.info("Descriptor pool created.");
   return true;
@@ -183,6 +232,10 @@ void VulkanDescriptorPool::shutdown() {
   if (samplerSetLayout_ != VK_NULL_HANDLE) {
     vkDestroyDescriptorSetLayout(device_, samplerSetLayout_, nullptr);
     samplerSetLayout_ = VK_NULL_HANDLE;
+  }
+  if (textureSetLayout_ != VK_NULL_HANDLE) {
+    vkDestroyDescriptorSetLayout(device_, textureSetLayout_, nullptr);
+    textureSetLayout_ = VK_NULL_HANDLE;
   }
   if (materialSetLayout_ != VK_NULL_HANDLE) {
     vkDestroyDescriptorSetLayout(device_, materialSetLayout_, nullptr);

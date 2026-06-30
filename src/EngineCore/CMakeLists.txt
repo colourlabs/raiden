@@ -76,6 +76,7 @@ add_library(EngineCore STATIC
 
   src/Assets/AssetManager.cpp
   src/Assets/KtxLoader.cpp
+  src/Assets/GltfLoader.cpp
   
   src/Renderer/Vulkan/VulkanAllocator.cpp
   src/Renderer/Vulkan/VulkanDevice.cpp

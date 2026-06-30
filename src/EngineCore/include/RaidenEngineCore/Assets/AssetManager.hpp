@@ -17,7 +17,7 @@ public:
 
   std::shared_ptr<ITexture> loadTexture(std::string_view vfsPath) override;
   std::shared_ptr<IMaterial> loadMaterial(const MaterialDesc &desc) override;
-  std::shared_ptr<Mesh> loadMesh(std::string_view vfsPath) override;
+  std::shared_ptr<Model> loadMesh(std::string_view vfsPath) override;
 
   void releaseUnused() override;
   void processLoadQueue() override {}
@@ -32,7 +32,7 @@ private:
 
   std::unordered_map<std::string, std::weak_ptr<ITexture>> textureCache_;
   std::unordered_map<std::string, std::weak_ptr<IMaterial>> materialCache_;
-  std::unordered_map<std::string, std::weak_ptr<Mesh>> meshCache_;
+  std::unordered_map<std::string, std::weak_ptr<Model>> meshCache_;
 };
 
 } // namespace Raiden::Core

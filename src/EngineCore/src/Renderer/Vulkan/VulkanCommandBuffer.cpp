@@ -7,8 +7,7 @@ namespace Raiden::Core {
 
 void VulkanCommandBuffer::bindPipeline(const IPipeline &pipeline) {
   auto &vkPipeline = static_cast<const VulkanPipelineImpl &>(pipeline);
-  vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    vkPipeline.handle());
+  vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipeline.handle());
   currentLayout_ = vkPipeline.layout();
 
   if (uboSet_ != VK_NULL_HANDLE) {
@@ -29,21 +28,27 @@ void VulkanCommandBuffer::bindIndexBuffer(const IBuffer &buffer) {
   vkCmdBindIndexBuffer(cmd_, vkBuffer.handle(), 0, VK_INDEX_TYPE_UINT16);
 }
 
-void VulkanCommandBuffer::bindTexture(uint32_t slot,
-                                       const ITexture &texture) {
+void VulkanCommandBuffer::bindTexture(uint32_t slot, const ITexture &texture) {
   if (currentLayout_ == VK_NULL_HANDLE)
     return;
 
   auto &vkTex = static_cast<const VulkanTextureImpl &>(texture);
-  VkDescriptorSet set = vkTex.getOrCreateDescriptorSet(
-      pool_->device(), pool_->handle(), pool_->samplerSetLayout(),
+
+  // bind shared sampler at set 1
+  VkDescriptorSet samplerSet = pool_->samplerSet();
+  vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, currentLayout_,
+                          1, 1, &samplerSet, 0, nullptr);
+
+  // bind texture (sampled image) at set 2, binding 0
+  VkDescriptorSet texSet = vkTex.getOrCreateDescriptorSet(
+      pool_->device(), pool_->handle(), pool_->textureSetLayout(),
       pool_->sampler());
 
-  if (set == VK_NULL_HANDLE)
+  if (texSet == VK_NULL_HANDLE)
     return;
 
-  vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          currentLayout_, slot + 1, 1, &set, 0, nullptr);
+  vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, currentLayout_,
+                          2, 1, &texSet, 0, nullptr);
 }
 
 void VulkanCommandBuffer::drawIndexed(uint32_t indexCount) {
@@ -73,16 +78,16 @@ void VulkanCommandBuffer::setScissor(int x, int y, int w, int h) {
 }
 
 void VulkanCommandBuffer::draw(uint32_t vertexCount, uint32_t instanceCount,
-                                uint32_t firstVertex, uint32_t firstInstance) {
+                               uint32_t firstVertex, uint32_t firstInstance) {
   vkCmdDraw(cmd_, vertexCount, instanceCount, firstVertex, firstInstance);
   drawCalls_++;
 }
 
 void VulkanCommandBuffer::drawIndexedInstanced(uint32_t indexCount,
-                                                uint32_t instanceCount,
-                                                uint32_t firstIndex,
-                                                int32_t vertexOffset,
-                                                uint32_t firstInstance) {
+                                               uint32_t instanceCount,
+                                               uint32_t firstIndex,
+                                               int32_t vertexOffset,
+                                               uint32_t firstInstance) {
   vkCmdDrawIndexed(cmd_, indexCount, instanceCount, firstIndex, vertexOffset,
                    firstInstance);
   drawCalls_++;
@@ -90,7 +95,7 @@ void VulkanCommandBuffer::drawIndexedInstanced(uint32_t indexCount,
 }
 
 void VulkanCommandBuffer::pushConstants(uint32_t offset, uint32_t size,
-                                         const void *data) {
+                                        const void *data) {
   if (currentLayout_ == VK_NULL_HANDLE)
     return;
   vkCmdPushConstants(cmd_, currentLayout_, VK_SHADER_STAGE_VERTEX_BIT, offset,

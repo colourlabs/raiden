@@ -84,10 +84,18 @@ bool VulkanPipeline::initDynamic(VkDevice device, VkRenderPass renderPass,
       .pDynamicStates = dynamicStates,
   };
 
+  VkPushConstantRange pushRange{
+      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+      .offset = 0,
+      .size = 64, // size of glm:mat4
+  };
+
   VkPipelineLayoutCreateInfo layoutInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
       .setLayoutCount = setLayoutCount,
       .pSetLayouts = setLayouts,
+      .pushConstantRangeCount = 1,
+      .pPushConstantRanges = &pushRange,
   };
 
   if (vkCreatePipelineLayout(device_, &layoutInfo, nullptr, &layout_) !=

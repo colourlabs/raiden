@@ -160,6 +160,12 @@ VulkanSwapchain::choosePresentMode(const std::vector<VkPresentModeKHR> &modes,
                                    bool vsync) {
   if (!vsync) {
     for (const auto &m : modes) {
+      if (m == VK_PRESENT_MODE_IMMEDIATE_KHR) {
+        return m;
+      }
+    }
+  } else {
+    for (const auto &m : modes) {
       if (m == VK_PRESENT_MODE_MAILBOX_KHR) {
         return m;
       }

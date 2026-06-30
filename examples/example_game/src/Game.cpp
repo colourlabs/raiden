@@ -5,12 +5,10 @@
 #include <RaidenEngineCore/ECS/Transform.hpp>
 #include <RaidenEngineCore/ECS/World.hpp>
 #include <RaidenEngineCore/Logger.hpp>
+#include <RaidenEngineCore/Renderer/IBuffer.hpp>
 #include <RaidenEngineCore/Renderer/ICommandBuffer.hpp>
 #include <RaidenEngineCore/Renderer/IRenderDevice.hpp>
 #include <RaidenEngineCore/Renderer/RenderTypes.hpp>
-
-#include <array>
-#include <cstdint>
 
 static const Raiden::Core::Logger s_logger("ExampleGame");
 
@@ -57,46 +55,6 @@ bool ExampleGame::init(Raiden::Core::IRenderDevice &device,
     return false;
   }
 
-  // quad vertices
-  std::array<Raiden::Core::Vertex, 4> vertices = {{
-      {{-0.7f, -0.7f, 0.0f},
-       {0.0f, 0.0f, 1.0f},
-       {1.0f, 1.0f, 1.0f},
-       {0.0f, 1.0f}},
-      {{0.7f, -0.7f, 0.0f},
-       {0.0f, 0.0f, 1.0f},
-       {1.0f, 1.0f, 1.0f},
-       {1.0f, 1.0f}},
-      {{0.7f, 0.7f, 0.0f},
-       {0.0f, 0.0f, 1.0f},
-       {1.0f, 1.0f, 1.0f},
-       {1.0f, 0.0f}},
-      {{-0.7f, 0.7f, 0.0f},
-       {0.0f, 0.0f, 1.0f},
-       {1.0f, 1.0f, 1.0f},
-       {0.0f, 0.0f}},
-  }};
-
-  vertexBuffer_ =
-      device.createBuffer({sizeof(vertices), Raiden::Core::BufferUsage::Vertex,
-                           Raiden::Core::MemoryAccess::CpuToGpu});
-  if (!vertexBuffer_) {
-    s_logger.error("Failed to create vertex buffer");
-    return false;
-  }
-  vertexBuffer_->upload(vertices.data(), sizeof(vertices));
-
-  std::array<uint16_t, 6> indices = {{0, 1, 2, 0, 2, 3}};
-  indexBuffer_ =
-      device.createBuffer({sizeof(indices), Raiden::Core::BufferUsage::Index,
-                           Raiden::Core::MemoryAccess::CpuToGpu});
-  if (!indexBuffer_) {
-    s_logger.error("Failed to create index buffer");
-    return false;
-  }
-  indexBuffer_->upload(indices.data(), sizeof(indices));
-  indexCount_ = 6;
-
   // load KTX2 texture through asset manager
   texture_ = assets.loadTexture("game://textures/checkerboard.ktx2");
   if (!texture_) {
@@ -104,7 +62,17 @@ bool ExampleGame::init(Raiden::Core::IRenderDevice &device,
     return false;
   }
 
+  // load glTF cube model
+  model_ = assets.loadMesh("game://meshes/cube.glb");
+
+  if (!model_) {
+    s_logger.error("Failed to load cube model");
+    return false;
+  }
+
+  s_logger.info("Cube model loaded: {} meshes", model_->meshes.size());
   s_logger.info("Example game initialized.");
+
   return true;
 }
 
@@ -121,19 +89,27 @@ void ExampleGame::update(float deltaTime,
 
 void ExampleGame::render(Raiden::Core::ICommandBuffer &cmd) {
   cmd.bindPipeline(*pipeline_);
-  cmd.bindVertexBuffer(*vertexBuffer_);
-  cmd.bindIndexBuffer(*indexBuffer_);
+
+  glm::mat4 model = glm::rotate(glm::mat4(1.0f), glm::radians(rotation_),
+                                glm::vec3(0.0f, 1.0f, 0.0f));
+  cmd.pushConstants(0, sizeof(glm::mat4), &model);
   cmd.bindTexture(0, *texture_);
-  cmd.drawIndexed(indexCount_);
+
+  for (auto &mesh : model_->meshes) {
+    if (!mesh.isValid())
+      continue;
+    cmd.bindVertexBuffer(*mesh.vertexBuffer);
+    cmd.bindIndexBuffer(*mesh.indexBuffer);
+    cmd.drawIndexed(mesh.indexCount);
+  }
 }
 
 void ExampleGame::shutdown() {
   s_logger.info("Shutting down example game...");
 
   pipeline_.reset();
-  vertexBuffer_.reset();
-  indexBuffer_.reset();
   texture_.reset();
+  model_.reset();
 }
 
 extern "C" {

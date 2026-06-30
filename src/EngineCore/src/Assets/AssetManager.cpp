@@ -1,3 +1,4 @@
+#include "GltfLoader.hpp"
 #include "KtxLoader.hpp"
 
 #include <RaidenEngineCore/Assets/AssetManager.hpp>
@@ -86,7 +87,7 @@ AssetManager::loadMaterial(const MaterialDesc &desc) {
   return mat;
 }
 
-std::shared_ptr<Mesh> AssetManager::loadMesh(std::string_view vfsPath) {
+std::shared_ptr<Model> AssetManager::loadMesh(std::string_view vfsPath) {
   std::string key(vfsPath);
 
   auto it = meshCache_.find(key);
@@ -95,9 +96,35 @@ std::shared_ptr<Mesh> AssetManager::loadMesh(std::string_view vfsPath) {
       return live;
   }
 
-  // glTF loading comes next
-  s_logger.warn("Mesh loading not yet implemented: {}", vfsPath);
-  return nullptr;
+  auto bytes = vfs_.readBytes(vfsPath);
+  if (bytes.empty()) {
+    s_logger.error("Mesh file not found or empty: {}", vfsPath);
+    return nullptr;
+  }
+
+  std::string path(vfsPath);
+  bool isGlb =
+      path.size() > 4 && path.substr(path.size() - 4) == ".glb";
+  bool isGltf =
+      path.size() > 5 && path.substr(path.size() - 5) == ".gltf";
+
+  if (!isGlb && !isGltf) {
+    s_logger.warn("Unsupported mesh format: {}", vfsPath);
+    return nullptr;
+  }
+
+  auto meshes = loadGltf(device_, bytes.data(), bytes.size());
+  if (meshes.empty()) {
+    s_logger.error("Failed to load glTF: {}", vfsPath);
+    return nullptr;
+  }
+
+  auto model = std::make_shared<Model>();
+  model->meshes = std::move(meshes);
+  meshCache_[key] = model;
+  s_logger.info("glTF loaded: {} meshes from {}", model->meshes.size(),
+                vfsPath);
+  return model;
 }
 
 void AssetManager::releaseUnused() {
