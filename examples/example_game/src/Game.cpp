@@ -10,14 +10,18 @@
 #include <RaidenEngineCore/Renderer/IRenderDevice.hpp>
 #include <RaidenEngineCore/Renderer/RenderTypes.hpp>
 
-// simple demo with PBR lighting, KTX2 textures and a glTF cube model
+// simple demo with PBR lighting, KTX2 textures and a glTF cube model + example
+// first person camera + movement
 
 static const Raiden::Core::Logger s_logger("ExampleGame");
 
 bool ExampleGame::init(Raiden::Core::IRenderDevice &device,
                        Raiden::Core::IVirtualFileSystem &vfs,
                        Raiden::Core::IAssetManager &assets,
-                       Raiden::Core::IPlatform *platform) {
+                       Raiden::Core::IPlatform *platform,
+                       Raiden::Core::IAudioDevice *audio) {
+  // unsed for now
+  (void)audio;
   platform_ = platform;
   s_logger.info("Initializing example game...");
 
@@ -122,8 +126,6 @@ bool ExampleGame::init(Raiden::Core::IRenderDevice &device,
                                      nullptr, nullptr);
     if (mat) {
       pbrObjects_.push_back({p.position, 0.0f, std::move(mat)});
-      s_logger.info("PBR object '{}' metallic={} roughness={}", p.label,
-                    p.metallic, p.roughness);
     } else {
       s_logger.error("Failed to create PBR material for '{}'", p.label);
     }

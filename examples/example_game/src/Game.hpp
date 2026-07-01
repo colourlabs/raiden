@@ -19,7 +19,8 @@ public:
   bool init(Raiden::Core::IRenderDevice &device,
             Raiden::Core::IVirtualFileSystem &vfs,
             Raiden::Core::IAssetManager &assets,
-            Raiden::Core::IPlatform *platform) override;
+            Raiden::Core::IPlatform *platform,
+            Raiden::Core::IAudioDevice *audio = nullptr) override;
 
   void update(float deltaTime, const Raiden::Core::InputState &input) override;
   void render(Raiden::Core::ICommandBuffer &cmd) override;

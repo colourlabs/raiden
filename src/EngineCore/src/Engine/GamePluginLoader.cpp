@@ -31,6 +31,7 @@ bool GamePluginLoader::load(std::string_view path) {
   destroy_ = reinterpret_cast<void (*)(IGamePlugin *)>(
       GetProcAddress(reinterpret_cast<HMODULE>(handle_), "raiden_destroy_plugin"));
 #else
+
   handle_ = dlopen(path.data(), RTLD_NOW | RTLD_LOCAL);
   if (!handle_) {
     s_logger.error("Failed to load plugin '{}': {}", path, dlerror());

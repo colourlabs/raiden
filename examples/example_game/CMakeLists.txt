@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.14)
 set(GAME_DATAPACK_DIR "${CMAKE_BINARY_DIR}/games/ExampleGame")
 
 add_library(ExampleGame MODULE
-    src/Game.cpp
+  src/Game.cpp
 )
 
 target_include_directories(ExampleGame PRIVATE

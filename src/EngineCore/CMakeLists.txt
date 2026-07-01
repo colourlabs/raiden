@@ -58,26 +58,55 @@ CPMAddPackage(
   GIT_TAG v0.9.0
 )
 
+# audio
+CPMAddPackage(
+  NAME miniaudio
+  GITHUB_REPOSITORY mackron/miniaudio
+  GIT_TAG 0.11.22
+)
+
+CPMAddPackage(
+  NAME openal-soft
+  GITHUB_REPOSITORY kcat/openal-soft
+  GIT_TAG 1.24.2
+  OPTIONS
+    "ALSOFT_EXAMPLES OFF"
+    "ALSOFT_UTILS OFF"
+    "ALSOFT_INSTALL OFF"
+)
+
+CPMAddPackage(
+  NAME opus
+  GITHUB_REPOSITORY xiph/opus
+  GIT_TAG v1.5.2
+  OPTIONS
+    "OPUS_BUILD_SHARED_LIBRARY OFF"
+    "OPUS_BUILD_TESTING OFF"
+    "OPUS_BUILD_PROGRAMS OFF"
+)
+
 add_library(EngineCore STATIC
   src/Application.cpp
   src/Logger.cpp
-  
+
   src/Core/OSFileSystem.cpp
 
   src/ECS/World.cpp
-  
+
   src/Engine/GamePluginLoader.cpp
   src/Engine/ImGuiOverlay.cpp
   src/Engine/VulkanImGuiBackend.cpp
-  
+
   src/Platform/SDL3/SDL3Platform.cpp
-  
+
   src/Input/ActionMap.cpp
+
+  src/Audio/OpenALDevice.cpp
 
   src/Assets/AssetManager.cpp
   src/Assets/KtxLoader.cpp
   src/Assets/GltfLoader.cpp
-  
+
   src/Renderer/Vulkan/VulkanAllocator.cpp
   src/Renderer/Vulkan/VulkanDevice.cpp
   src/Renderer/Vulkan/VulkanSwapchain.cpp
@@ -135,4 +164,13 @@ target_link_libraries(EngineCore PUBLIC
   tomlplusplus::tomlplusplus
   ktx
   fastgltf::fastgltf
+  OpenAL::OpenAL
+  miniaudio
 )
+
+# opus support (optional)
+if(TARGET opus AND TARGET opusfile)
+  target_compile_definitions(EngineCore PRIVATE RAIDEN_HAS_OPUS)
+  target_link_libraries(EngineCore PRIVATE opus opusfile)
+  target_include_directories(EngineCore PRIVATE ${opus_SOURCE_DIR}/include ${opusfile_SOURCE_DIR}/include)
+endif()

@@ -1,5 +1,6 @@
 #include <RaidenEngineCore/Application.hpp>
 #include <RaidenEngineCore/Assets/AssetManager.hpp>
+#include <RaidenEngineCore/Audio/OpenALDevice.hpp>
 #include <RaidenEngineCore/Engine/VulkanImGuiBackend.hpp>
 #include <RaidenEngineCore/Logger.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/IVulkanRenderDevice.hpp>
@@ -38,6 +39,12 @@ bool Application::init(const EngineConfig &config) {
 
   assetManager_ = std::make_unique<AssetManager>(*device_, *vfs_);
 
+  audioDevice_ = std::make_unique<OpenALDevice>();
+  if (!audioDevice_->init(config_.audio, *vfs_)) {
+    s_logger.warn("Failed to initialize audio device.");
+    audioDevice_.reset();
+  }
+
   // init ImGui overlay
   if (auto *vkDevice = dynamic_cast<IVulkanRenderDevice *>(device_.get())) {
     auto backend = std::make_unique<VulkanImGuiBackend>(
@@ -59,7 +66,7 @@ bool Application::loadGamePlugin(std::string_view path) {
   }
 
   if (!pluginLoader_.plugin().init(*device_, *vfs_, *assetManager_,
-                                    platform_.get())) {
+                                    platform_.get(), audioDevice_.get())) {
     s_logger.error("Game plugin init failed.");
     pluginLoader_.unload();
     return false;
@@ -82,6 +89,7 @@ void Application::shutdown() {
     overlay_.reset();
     pluginLoader_.unload();
     assetManager_.reset();
+    audioDevice_.reset();
     device_->shutdown();
     platform_->shutdown();
   }

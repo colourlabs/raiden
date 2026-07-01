@@ -9,6 +9,7 @@ namespace Raiden::Core {
 class IVirtualFileSystem;
 class IAssetManager;
 class IPlatform;
+class IAudioDevice;
 
 }
 
@@ -22,7 +23,7 @@ class IGamePlugin {
 public:
   virtual ~IGamePlugin() = default;
   virtual const char *name() const = 0;
-  virtual bool init(IRenderDevice &device, IVirtualFileSystem &vfs, IAssetManager &assets, IPlatform *platform) = 0;
+  virtual bool init(IRenderDevice &device, IVirtualFileSystem &vfs, IAssetManager &assets, IPlatform *platform, IAudioDevice *audio = nullptr) = 0;
   virtual void update(float deltaTime, const InputState &input) = 0;
   virtual void render(ICommandBuffer &cmd) = 0;
   virtual Raiden::Core::World *getWorld() { return nullptr; }

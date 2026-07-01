@@ -12,3 +12,4 @@ validation = true
 
 [game.platform]
 linux = "lib/libExampleGame.so"
+windows = "lib/ExampleGame.dll"
