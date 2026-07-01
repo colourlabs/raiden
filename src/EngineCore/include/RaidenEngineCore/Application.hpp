@@ -5,6 +5,7 @@
 #include <RaidenEngineCore/Engine/GamePluginLoader.hpp>
 #include <RaidenEngineCore/Engine/ImGuiOverlay.hpp>
 #include <RaidenEngineCore/EngineConfig.hpp>
+#include <RaidenEngineCore/Jobs/JobSystem.hpp>
 #include <RaidenEngineCore/Platform/IPlatform.hpp>
 #include <RaidenEngineCore/Renderer/IRenderDevice.hpp>
 
@@ -34,6 +35,7 @@ public:
   [[nodiscard]] IPlatform &getPlatform() const { return *platform_; }
   [[nodiscard]] IRenderDevice &getDevice() const { return *device_; }
   [[nodiscard]] IVirtualFileSystem &getVFS() const { return *vfs_; }
+  [[nodiscard]] JobSystem &getJobSystem() { return jobSystem_; }
 
 private:
   std::unique_ptr<IPlatform> platform_;
@@ -43,6 +45,7 @@ private:
   std::unique_ptr<IAudioDevice> audioDevice_;
   std::unique_ptr<ImGuiOverlay> overlay_;
 
+  JobSystem jobSystem_;
   EngineConfig config_;
   GamePluginLoader pluginLoader_;
 

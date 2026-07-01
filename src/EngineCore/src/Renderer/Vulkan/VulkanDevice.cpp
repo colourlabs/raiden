@@ -672,7 +672,7 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
 
   // read camera from ECS world if available
   if (world_) {
-    world_->view<Camera>().each([&](Camera &cam) {
+    world_->view<Camera>().each([&](Entity, Camera &cam) {
       if (cam.active) {
         uniforms.view = cam.view;
         uniforms.projection = glm::perspective(

@@ -95,6 +95,8 @@ add_library(EngineCore STATIC
   src/Application.cpp
   src/Logger.cpp
 
+  src/Jobs/JobSystem.cpp
+
   src/Core/OSFileSystem.cpp
 
   src/ECS/World.cpp

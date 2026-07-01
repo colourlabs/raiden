@@ -22,7 +22,7 @@ struct Transform {
 };
 
 inline void updateTransforms(World &world) {
-  world.view<Transform>().each([&](Transform &t) {
+  world.view<Transform>().each([&](Entity, Transform &t) {
     if (t.parent == NullEntity) {
       t.worldMatrix = t.localMatrix();
     } else {

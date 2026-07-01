@@ -27,6 +27,8 @@ bool Application::init(const EngineConfig &config) {
 
   s_logger.info("Initializing application...");
 
+  jobSystem_.init();
+
   if (!platform_->init(config_.window, config_.renderBackend)) {
     s_logger.error("Failed to initialize platform.");
     return false;
@@ -90,6 +92,7 @@ void Application::shutdown() {
     pluginLoader_.unload();
     assetManager_.reset();
     audioDevice_.reset();
+    jobSystem_.shutdown();
     device_->shutdown();
     platform_->shutdown();
   }

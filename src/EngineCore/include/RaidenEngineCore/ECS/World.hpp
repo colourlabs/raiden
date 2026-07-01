@@ -5,6 +5,7 @@
 
 #include <cstring>
 #include <map>
+#include <string_view>
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
@@ -26,6 +27,7 @@ struct ComponentInfo {
   size_t size;
   void (*destruct)(void *);
   void (*move)(void *dst, void *src);
+  std::string_view name;
 };
 
 template <typename T> void componentDestruct(void *p) {
@@ -57,7 +59,8 @@ template <typename... Ts> struct View {
       size_t count = arch->entities.size();
       for (size_t r = 0; r < count; ++r) {
         [&]<size_t... I>(std::index_sequence<I...>) {
-          fn(*(Ts *)(arch->column(cols[I]) + r * sizeof(Ts))...);
+          fn(arch->entities[r],
+             *(Ts *)(arch->column(cols[I]) + r * sizeof(Ts))...);
         }(std::index_sequence_for<Ts...>{});
       }
     }
@@ -188,6 +191,26 @@ public:
         v.archetypes.push_back(&arch);
     }
     return v;
+  }
+
+  // set a human-readable name for a component type (used by forEachComponent)
+  template <typename T> void registerComponent(std::string_view name) {
+    registerIfNew<T>().name = name;
+  }
+
+  // iterate all components on an entity without knowing types at compile time
+  // visitor receives (Entity, ComponentId, std::string_view name, void *data)
+  template <typename F> void forEachComponent(Entity e, F &&visitor) {
+    auto &slot = slots_[e.index];
+    if (slot.generation != e.generation)
+      return;
+    auto *arch = slot.archetype;
+    for (size_t i = 0; i < arch->signature.size(); ++i) {
+      auto cid = arch->signature[i];
+      auto &info = componentInfo_[cid];
+      void *comp = arch->column(i) + slot.row * info.size;
+      visitor(e, cid, info.name, comp);
+    }
   }
 
 private:
