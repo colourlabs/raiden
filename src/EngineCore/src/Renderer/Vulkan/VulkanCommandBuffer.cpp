@@ -25,7 +25,7 @@ void VulkanCommandBuffer::bindVertexBuffer(const IBuffer &buffer) {
 
 void VulkanCommandBuffer::bindIndexBuffer(const IBuffer &buffer) {
   auto &vkBuffer = static_cast<const VulkanBufferImpl &>(buffer);
-  vkCmdBindIndexBuffer(cmd_, vkBuffer.handle(), 0, VK_INDEX_TYPE_UINT16);
+  vkCmdBindIndexBuffer(cmd_, vkBuffer.handle(), 0, vkBuffer.getVkIndexType());
 }
 
 void VulkanCommandBuffer::bindTexture(uint32_t slot, const ITexture &texture) {

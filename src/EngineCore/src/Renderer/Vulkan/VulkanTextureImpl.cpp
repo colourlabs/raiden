@@ -43,16 +43,41 @@ bool VulkanTextureImpl::init(VkDevice device, VmaAllocator allocator,
     return false;
   }
 
-  return image_.init(device_, allocator_, width_, height_, vkFormat_,
-                     VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                         VK_IMAGE_USAGE_SAMPLED_BIT,
-                     VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
-                     VK_IMAGE_ASPECT_COLOR_BIT);
+  if (!image_.init(device_, allocator_, width_, height_, vkFormat_,
+                   VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                       VK_IMAGE_USAGE_SAMPLED_BIT,
+                   VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+                   VK_IMAGE_ASPECT_COLOR_BIT))
+    return false;
+
+  VkSamplerCreateInfo samplerInfo{
+      .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+      .magFilter = VK_FILTER_LINEAR,
+      .minFilter = VK_FILTER_LINEAR,
+      .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+      .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+      .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+      .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+      .anisotropyEnable = VK_TRUE,
+      .maxAnisotropy = 16.0f,
+  };
+
+  if (vkCreateSampler(device_, &samplerInfo, nullptr, &sampler_) !=
+      VK_SUCCESS) {
+    s_logger.error("Failed to create texture sampler");
+    return false;
+  }
+
+  return true;
 }
 
 Format VulkanTextureImpl::getFormat() const { return format_; }
 
 void VulkanTextureImpl::shutdown() {
+  if (sampler_ != VK_NULL_HANDLE) {
+    vkDestroySampler(device_, sampler_, nullptr);
+    sampler_ = VK_NULL_HANDLE;
+  }
   image_.shutdown();
   device_ = VK_NULL_HANDLE;
   allocator_ = nullptr;
@@ -169,7 +194,7 @@ VkDescriptorSet VulkanTextureImpl::getOrCreateDescriptorSet(
   }
 
   VkDescriptorImageInfo imageInfo{
-      .sampler = VK_NULL_HANDLE,
+      .sampler = sampler_,
       .imageView = image_.view(),
       .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
   };

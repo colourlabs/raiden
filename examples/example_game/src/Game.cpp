@@ -16,7 +16,9 @@ static const Raiden::Core::Logger s_logger("ExampleGame");
 
 bool ExampleGame::init(Raiden::Core::IRenderDevice &device,
                        Raiden::Core::IVirtualFileSystem &vfs,
-                       Raiden::Core::IAssetManager &assets) {
+                       Raiden::Core::IAssetManager &assets,
+                       Raiden::Core::IPlatform *platform) {
+  platform_ = platform;
   s_logger.info("Initializing example game...");
 
   if (!actions_.loadFromFile(vfs, "game://config/actions.toml")) {
@@ -24,11 +26,11 @@ bool ExampleGame::init(Raiden::Core::IRenderDevice &device,
   }
 
   // camera
-  auto camEntity = world_.create();
-  world_.assign<Raiden::Core::Camera>(camEntity);
-  auto &cam = world_.get<Raiden::Core::Camera>(camEntity);
+  camEntity_ = world_.create();
+  world_.assign<Raiden::Core::Camera>(camEntity_);
+  auto &cam = world_.get<Raiden::Core::Camera>(camEntity_);
   cam.setLookAt({0.0f, 0.0f, 3.0f}, {0.0f, 0.0f, 0.0f});
-  cam.setPerspective(45.0f, 16.0f / 9.0f, 0.1f, 100.0f);
+  cam.setPerspective(45.0f, 1.0f, 0.1f, 100.0f);
 
   // pipeline
   Raiden::Core::PipelineDesc pipelineDesc{
@@ -140,6 +142,51 @@ void ExampleGame::update(float deltaTime,
   if (auto *quit = actions_.find("quit"); quit && quit->justPressed) {
     quitRequested_ = true;
   }
+
+  // toggle mouse capture on right-click
+  static bool prevRmb = false;
+  if (input.mouseButtons[2] && !prevRmb) {
+    bool wasCaptured = mouseCaptured_;
+    mouseCaptured_ = !wasCaptured;
+    platform_->setRelativeMouseMode(mouseCaptured_);
+  }
+  prevRmb = input.mouseButtons[2];
+
+  if (mouseCaptured_) {
+    float const sensitivity = 0.002f;
+    yaw_ += static_cast<float>(input.mouseDeltaX) * sensitivity;
+    pitch_ -= static_cast<float>(input.mouseDeltaY) * sensitivity;
+    pitch_ = glm::clamp(pitch_, glm::radians(-89.0f), glm::radians(89.0f));
+  }
+
+  // movement
+  float speed = 3.0f * deltaTime;
+  if (auto *fw = actions_.find("move_forward"); fw && fw->pressed) {
+    speed *= 2.0f; // sprint
+  }
+
+  glm::vec3 forward(std::cos(yaw_) * std::cos(pitch_), std::sin(pitch_),
+                    std::sin(yaw_) * std::cos(pitch_));
+  forward = glm::normalize(forward);
+
+  glm::vec3 right = glm::normalize(glm::cross(forward, {0.0f, 1.0f, 0.0f}));
+  glm::vec3 up = glm::cross(right, forward);
+
+  if (auto *mv = actions_.find("move_forward"); mv && mv->pressed)
+    position_ += forward * speed;
+  if (auto *mv = actions_.find("move_back"); mv && mv->pressed)
+    position_ -= forward * speed;
+  if (auto *mv = actions_.find("move_left"); mv && mv->pressed)
+    position_ -= right * speed;
+  if (auto *mv = actions_.find("move_right"); mv && mv->pressed)
+    position_ += right * speed;
+  if (auto *mv = actions_.find("move_up"); mv && mv->pressed)
+    position_ += up * speed;
+  if (auto *mv = actions_.find("move_down"); mv && mv->pressed)
+    position_ -= up * speed;
+
+  auto &cam = world_.get<Raiden::Core::Camera>(camEntity_);
+  cam.view = glm::lookAt(position_, position_ + forward, {0.0f, 1.0f, 0.0f});
 
   rotation_ += deltaTime * 45.0f;
 

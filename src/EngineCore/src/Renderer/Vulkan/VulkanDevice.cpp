@@ -357,10 +357,7 @@ void VulkanDevice::shutdown() {
 
   destroyFramebuffers();
   pipelineOwnership_.clear();
-  pipeline_.shutdown();
   depthImage_.shutdown();
-  indexBuffer_.shutdown();
-  vertexBuffer_.shutdown();
 
   for (auto &[uniformBuffer, uniformSet] : perFrame_) {
     uniformBuffer.shutdown();
@@ -374,8 +371,6 @@ void VulkanDevice::shutdown() {
   }
 
   allocator_.shutdown();
-  vertexShader_.shutdown();
-  fragmentShader_.shutdown();
   renderPass_.shutdown();
   frameContext_.shutdown();
 
@@ -647,7 +642,9 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
     world_->view<Camera>().each([&](Camera &cam) {
       if (cam.active) {
         uniforms.view = cam.view;
-        uniforms.projection = cam.projection;
+        uniforms.projection = glm::perspective(
+            glm::radians(cam.fov), aspect, cam.zNear, cam.zFar);
+        uniforms.projection[1][1] *= -1.0f;
       }
     });
   }

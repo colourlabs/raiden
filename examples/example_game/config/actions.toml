@@ -2,6 +2,30 @@ quit = [
   { source = "keyboard", code = "escape" },
 ]
 
+move_forward = [
+  { source = "keyboard", code = "w" },
+]
+
+move_back = [
+  { source = "keyboard", code = "s" },
+]
+
+move_left = [
+  { source = "keyboard", code = "a" },
+]
+
+move_right = [
+  { source = "keyboard", code = "d" },
+]
+
+move_up = [
+  { source = "keyboard", code = "e" },
+]
+
+move_down = [
+  { source = "keyboard", code = "q" },
+]
+
 rotate_speed = [
   { source = "keyboard", code = "r" },
 ]

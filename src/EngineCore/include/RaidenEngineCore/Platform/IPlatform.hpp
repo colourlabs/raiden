@@ -20,6 +20,8 @@ public:
   virtual void getWindowSize(int &width, int &height) const = 0;
 
   virtual const InputState &getInputState() const = 0;
+  virtual void setRelativeMouseMode(bool enabled) = 0;
+  virtual void endInputFrame() = 0;
 
   virtual std::vector<const char *> getRequiredInstanceExtensions() const = 0;
   virtual bool createVulkanSurface(VkInstance instance,

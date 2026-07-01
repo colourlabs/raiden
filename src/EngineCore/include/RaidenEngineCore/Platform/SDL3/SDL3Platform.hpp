@@ -24,6 +24,8 @@ public:
   void *getNativeWindowHandle() override;
 
   void getWindowSize(int &width, int &height) const override;
+  void setRelativeMouseMode(bool enabled) override;
+  void endInputFrame() override;
 
   const InputState &getInputState() const override { return inputState_; }
 

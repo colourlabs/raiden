@@ -10,6 +10,7 @@ class VulkanBufferImpl : public IBuffer {
 public:
   bool init(VmaAllocator allocator, const BufferDesc &desc) {
     size_ = desc.size;
+    indexType_ = desc.indexType;
 
     VkBufferUsageFlags vkUsage = 0;
     switch (desc.usage) {
@@ -51,10 +52,15 @@ public:
   void unmap() override { buffer_.unmap(); }
 
   VkBuffer handle() const { return buffer_.buffer(); }
+  VkIndexType getVkIndexType() const {
+    return indexType_ == IndexType::Uint32 ? VK_INDEX_TYPE_UINT32
+                                           : VK_INDEX_TYPE_UINT16;
+  }
 
 private:
   VulkanBuffer buffer_;
   size_t size_ = 0;
+  IndexType indexType_ = IndexType::Uint16;
 };
 
 } // namespace Raiden::Core

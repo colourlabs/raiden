@@ -134,7 +134,6 @@ bool SDL3Platform::pollEvents() {
     }
   }
 
-  inputState_.endFrame();
   return true;
 }
 
@@ -166,6 +165,14 @@ bool SDL3Platform::createVulkanSurface(VkInstance instance,
 
 void SDL3Platform::getWindowSize(int &width, int &height) const {
   SDL_GetWindowSizeInPixels(window_, &width, &height);
+}
+
+void SDL3Platform::setRelativeMouseMode(bool enabled) {
+  SDL_SetWindowRelativeMouseMode(window_, enabled);
+}
+
+void SDL3Platform::endInputFrame() {
+  inputState_.endFrame();
 }
 
 } // namespace Raiden::Core

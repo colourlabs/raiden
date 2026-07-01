@@ -289,7 +289,8 @@ std::vector<Mesh> loadGltf(IRenderDevice &device, const std::byte *data,
             }
 
             idxBuf = device.createBuffer(
-                {flat.size(), BufferUsage::Index, MemoryAccess::CpuToGpu});
+                {flat.size(), BufferUsage::Index, MemoryAccess::CpuToGpu,
+                 is32Bit ? IndexType::Uint32 : IndexType::Uint16});
             if (idxBuf) {
               idxBuf->upload(flat.data(), flat.size());
             }

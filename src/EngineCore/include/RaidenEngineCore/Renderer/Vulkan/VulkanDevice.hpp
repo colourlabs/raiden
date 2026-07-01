@@ -173,11 +173,6 @@ private:
 
   VkCommandPool transferPool_ = VK_NULL_HANDLE;
 
-  VulkanShader vertexShader_;
-  VulkanShader fragmentShader_;
-  VulkanPipeline pipeline_;
-  VulkanBuffer vertexBuffer_;
-  VulkanBuffer indexBuffer_;
   VulkanImage depthImage_;
   VkFormat depthFormat_ = VK_FORMAT_UNDEFINED;
 

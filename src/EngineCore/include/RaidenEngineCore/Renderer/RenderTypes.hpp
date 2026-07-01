@@ -19,10 +19,16 @@ enum class MemoryAccess {
   CpuToGpu,  // mappable, written by CPU, read by GPU
 };
 
+enum class IndexType {
+  Uint16,
+  Uint32,
+};
+
 struct BufferDesc {
   size_t size = 0;
   BufferUsage usage = BufferUsage::Vertex;
   MemoryAccess access = MemoryAccess::GpuOnly;
+  IndexType indexType = IndexType::Uint16;
 };
 
 // unified descriptor types for the public API

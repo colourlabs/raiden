@@ -58,7 +58,8 @@ bool Application::loadGamePlugin(std::string_view path) {
     return false;
   }
 
-  if (!pluginLoader_.plugin().init(*device_, *vfs_, *assetManager_)) {
+  if (!pluginLoader_.plugin().init(*device_, *vfs_, *assetManager_,
+                                    platform_.get())) {
     s_logger.error("Game plugin init failed.");
     pluginLoader_.unload();
     return false;
@@ -144,6 +145,8 @@ void Application::run() {
     if (overlay_) {
       overlay_->endFrame();
     }
+
+    platform_->endInputFrame();
   }
 
   s_logger.info("Exited main loop.");
