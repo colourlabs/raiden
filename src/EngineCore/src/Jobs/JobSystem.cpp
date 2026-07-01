@@ -216,11 +216,11 @@ int32_t JobSystem::currentWorkerIndex() {
   return tls_workerIndex;
 }
 
-// ---- job retrieval and execution ----
+// job retrieval and execution
 
 std::shared_ptr<JobSystem::InternalJob>
 JobSystem::tryGetJob(uint32_t workerIndex) {
-  // 1. Own queue (LIFO from back for cache locality)
+  // own queue (LIFO from back for cache locality)
   if (workerIndex < workers_.size()) {
     auto &worker = workers_[workerIndex];
     std::lock_guard<std::mutex> lock(worker->mutex);
@@ -231,7 +231,7 @@ JobSystem::tryGetJob(uint32_t workerIndex) {
     }
   }
 
-  // 2. Steal from a random victim (FIFO from front to minimise contention)
+  // steal from a random victim (FIFO from front to minimise contention)
   uint32_t numWorkers = static_cast<uint32_t>(workers_.size());
   if (numWorkers > 0) {
     uint32_t start =
@@ -251,7 +251,7 @@ JobSystem::tryGetJob(uint32_t workerIndex) {
     }
   }
 
-  // 3. Global queue (pick highest priority)
+  // global queue (pick highest priority)
   {
     std::lock_guard<std::mutex> lock(globalMutex_);
     if (!globalQueue_.empty()) {
@@ -318,7 +318,7 @@ bool JobSystem::tryExecuteOne(uint32_t workerIndex) {
   return true;
 }
 
-// ---- worker main ----
+// worker main
 
 void JobSystem::workerMain(uint32_t workerIndex) {
   tls_workerIndex = static_cast<int32_t>(workerIndex);
