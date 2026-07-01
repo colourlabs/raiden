@@ -1,16 +1,22 @@
 #include "GltfLoader.hpp"
 
+#include <RaidenEngineCore/Assets/IAssetManager.hpp>
 #include <RaidenEngineCore/Logger.hpp>
+#include <RaidenEngineCore/Renderer/IMaterial.hpp>
 #include <RaidenEngineCore/Renderer/IRenderDevice.hpp>
 #include <RaidenEngineCore/Renderer/RenderTypes.hpp>
 
+#include <fastgltf/base64.hpp>
 #include <fastgltf/core.hpp>
 #include <fastgltf/types.hpp>
 
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <string_view>
 #include <vector>
 
 namespace Raiden::Core {
@@ -19,13 +25,10 @@ static const Logger s_logger("Raiden::Core::GltfLoader");
 
 // helpers to extract raw bytes from a fastgltf DataSource
 static const std::byte *getBufferData(const fastgltf::Buffer &buffer) {
-  // GLB loads into sources::Array by default
-  if (auto *arr = std::get_if<fastgltf::sources::Array>(&buffer.data)) {
+  if (auto *arr = std::get_if<fastgltf::sources::Array>(&buffer.data))
     return arr->bytes.data();
-  }
-  if (auto *bv = std::get_if<fastgltf::sources::ByteView>(&buffer.data)) {
+  if (auto *bv = std::get_if<fastgltf::sources::ByteView>(&buffer.data))
     return bv->bytes.data();
-  }
   return nullptr;
 }
 
@@ -43,7 +46,6 @@ static const std::byte *getAccessorData(const fastgltf::Asset &asset,
   return base + bv.byteOffset + accessor.byteOffset;
 }
 
-// get effective byte stride for an accessor, accounting for buffer view stride
 static size_t getByteStride(const fastgltf::Asset &asset,
                             const fastgltf::Accessor &acc) {
   if (acc.bufferViewIndex.has_value()) {
@@ -54,7 +56,6 @@ static size_t getByteStride(const fastgltf::Asset &asset,
   return fastgltf::getElementByteSize(acc.type, acc.componentType);
 }
 
-// copy glTF attribute data into a specific vertex
 static void readVertexPos(const fastgltf::Asset &asset, const std::byte *src,
                           size_t index, const fastgltf::Accessor &acc,
                           glm::vec3 &dst) {
@@ -93,7 +94,7 @@ static void readVertexColor(const fastgltf::Asset &asset, const std::byte *src,
                             glm::vec3 &dst) {
   if (acc.componentType == fastgltf::ComponentType::Float) {
     size_t srcStride = getByteStride(asset, acc);
-    size_t compCount = fastgltf::getNumComponents(acc.type); // 3 or 4
+    size_t compCount = fastgltf::getNumComponents(acc.type);
     float tmp[4] = {1, 1, 1, 1};
     std::memcpy(tmp, src + index * srcStride, sizeof(float) * compCount);
     dst = glm::vec3(tmp[0], tmp[1], tmp[2]);
@@ -102,9 +103,140 @@ static void readVertexColor(const fastgltf::Asset &asset, const std::byte *src,
   }
 }
 
+// extract embedded image bytes (sources::Array or ByteView)
+// returns empty vector when the image uses an external URI
+static std::vector<std::byte>
+getEmbeddedImageData(const fastgltf::Image &image) {
+  if (auto *arr = std::get_if<fastgltf::sources::Array>(&image.data)) {
+    return {arr->bytes.begin(), arr->bytes.end()};
+  }
+  if (auto *bv = std::get_if<fastgltf::sources::ByteView>(&image.data)) {
+    return {bv->bytes.begin(), bv->bytes.end()};
+  }
+  return {};
+}
+
+// resolve a relative texture URI against the glTF's base VFS path
+static std::string resolveTextureUri(std::string_view basePath,
+                                     std::string_view uri) {
+  auto parent = std::filesystem::path(basePath).parent_path();
+  auto resolved = parent / std::filesystem::path(uri);
+  return resolved.generic_string();
+}
+
+// resolve a glTF texture index to a loadable VFS path
+// returns the VFS path (external URI or mem:// for embedded)
+static std::string resolveGltfTexture(const fastgltf::Asset &asset,
+                                      size_t texIdx,
+                                      std::string_view basePath) {
+  if (texIdx >= asset.textures.size())
+    return {};
+  auto &tex = asset.textures[texIdx];
+  if (!tex.imageIndex.has_value())
+    return {};
+
+  auto &image = asset.images[*tex.imageIndex];
+
+  // external URI — resolve relative to glTF path
+  if (auto *uri = std::get_if<fastgltf::sources::URI>(&image.data)) {
+    if (!uri->uri.isDataUri()) {
+      auto vfsPath = resolveTextureUri(basePath, uri->uri.string());
+
+      if (vfsPath.size() < 5 || vfsPath.substr(vfsPath.size() - 5) != ".ktx2") {
+        s_logger.warn(
+            "glTF texture '{}' is not KTX2 - consider converting for "
+            "optimal performance (smaller size, faster load and it's a GPU-ready format)!",
+            vfsPath);
+      }
+
+      return vfsPath;
+    }
+  }
+
+  // embedded (data URI, Array, or ByteView), served through mem:// VFS
+  // registered earlier in loadGltf()
+  return "mem://gltf/tex/" + std::to_string(*tex.imageIndex);
+}
+
+// load a glTF PBR material into an engine material
+static std::shared_ptr<IMaterial>
+loadMaterial(const fastgltf::Asset &asset, const fastgltf::Material &gltfMat,
+             std::string_view basePath, IRenderDevice &device,
+             IAssetManager &assets) {
+  MaterialDesc desc;
+  desc.shader = "builtin://pbr";
+
+  // base color
+  desc.baseColorFactor = glm::make_vec4(gltfMat.pbrData.baseColorFactor.data());
+
+  if (gltfMat.pbrData.baseColorTexture.has_value()) {
+    auto path = resolveGltfTexture(
+        asset, gltfMat.pbrData.baseColorTexture->textureIndex, basePath);
+    if (!path.empty())
+      desc.baseColorTexture = path;
+  }
+
+  // metallic-roughness
+  desc.metallicFactor = gltfMat.pbrData.metallicFactor;
+  desc.roughnessFactor = gltfMat.pbrData.roughnessFactor;
+
+  if (gltfMat.pbrData.metallicRoughnessTexture.has_value()) {
+    auto path = resolveGltfTexture(
+        asset, gltfMat.pbrData.metallicRoughnessTexture->textureIndex,
+        basePath);
+    if (!path.empty())
+      desc.metallicRoughnessTexture = path;
+  }
+
+  // normal map
+  if (gltfMat.normalTexture.has_value()) {
+    auto path = resolveGltfTexture(asset, gltfMat.normalTexture->textureIndex,
+                                   basePath);
+    if (!path.empty())
+      desc.normalTexture = path;
+  }
+
+  // emissive
+  desc.emissiveFactor = glm::make_vec3(gltfMat.emissiveFactor.data());
+
+  if (gltfMat.emissiveTexture.has_value()) {
+    auto path = resolveGltfTexture(asset, gltfMat.emissiveTexture->textureIndex,
+                                   basePath);
+    if (!path.empty())
+      desc.emissiveTexture = path;
+  }
+
+  // occlusion
+  if (gltfMat.occlusionTexture.has_value()) {
+    auto path = resolveGltfTexture(
+        asset, gltfMat.occlusionTexture->textureIndex, basePath);
+    if (!path.empty())
+      desc.occlusionTexture = path;
+    desc.occlusionStrength = gltfMat.occlusionTexture->strength;
+  }
+
+  // alpha
+  switch (gltfMat.alphaMode) {
+  case fastgltf::AlphaMode::Mask:
+    desc.alphaMode = MaterialDesc::AlphaMode::Mask;
+    break;
+  case fastgltf::AlphaMode::Blend:
+    desc.alphaMode = MaterialDesc::AlphaMode::Blend;
+    break;
+  default:
+    break;
+  }
+
+  desc.alphaCutoff = gltfMat.alphaCutoff;
+  desc.doubleSided = gltfMat.doubleSided;
+
+  return assets.loadMaterial(desc);
+}
+
 // main loader
-std::vector<Mesh> loadGltf(IRenderDevice &device, const std::byte *data,
-                           size_t size) {
+std::vector<Mesh> loadGltf(IRenderDevice &device, IAssetManager &assets,
+                           const std::byte *data, size_t size,
+                           std::string_view basePath) {
   std::vector<Mesh> result;
 
   // wrap the raw data for fastgltf
@@ -126,8 +258,60 @@ std::vector<Mesh> loadGltf(IRenderDevice &device, const std::byte *data,
   }
 
   auto &gltfAsset = asset.get();
-  s_logger.info("glTF loaded: {} meshes, {} materials", gltfAsset.meshes.size(),
-                gltfAsset.materials.size());
+  s_logger.info("glTF loaded: {} meshes, {} materials, {} images",
+                gltfAsset.meshes.size(), gltfAsset.materials.size(),
+                gltfAsset.images.size());
+
+  // register embedded images in the VFS under mem:// paths
+  // so loadMaterial() -> loadTexture() -> vfs.readBytes() can find them
+  for (size_t i = 0; i < gltfAsset.images.size(); ++i) {
+    const auto &image = gltfAsset.images[i];
+    std::vector<std::byte> imgData = getEmbeddedImageData(image);
+
+    // also decode data URIs (e.g. data:image/png;base64,...)
+    if (imgData.empty()) {
+      if (auto *uri = std::get_if<fastgltf::sources::URI>(&image.data)) {
+        if (uri->uri.isDataUri()) {
+          auto uriStr = uri->uri.string();
+          // format: "data:[<mime>][;base64],<base64data>"
+          if (auto comma = uriStr.find(','); comma != std::string_view::npos) {
+            auto b64 = uriStr.substr(comma + 1);
+            auto decoded = fastgltf::base64::decode(b64);
+            if (!decoded.empty()) {
+              auto *raw = reinterpret_cast<std::byte *>(decoded.data());
+              imgData.assign(raw, raw + decoded.size());
+            }
+          }
+        }
+      }
+    }
+
+    if (!imgData.empty()) {
+      auto memPath = "mem://gltf/tex/" + std::to_string(i);
+      assets.registerData(memPath, std::move(imgData));
+      s_logger.info("Registered embedded texture at {}", memPath);
+    }
+  }
+
+  // pre-load materials (indexed by position in glTF materials array)
+  // fastgltf uses std::nullopt to mean "use the default glTF material"
+  // glm::vec4(0.5, 0.5, 0.5, 1.0) baseColor, 0.0 metallic, 1.0 roughness
+  struct MaterialSlot {
+    std::shared_ptr<IMaterial> material;
+    bool needsDefault = false;
+  };
+  std::vector<MaterialSlot> materialSlots;
+  materialSlots.reserve(gltfAsset.materials.size());
+
+  for (size_t i = 0; i < gltfAsset.materials.size(); ++i) {
+    auto mat = loadMaterial(gltfAsset, gltfAsset.materials[i], basePath, device,
+                            assets);
+    if (mat) {
+      materialSlots.push_back({std::move(mat), false});
+    } else {
+      materialSlots.push_back({nullptr, true});
+    }
+  }
 
   // walk all nodes in the default scene (or all nodes if no scene)
   struct NodeStack {
@@ -185,15 +369,8 @@ std::vector<Mesh> loadGltf(IRenderDevice &device, const std::byte *data,
         bool hasUv = uvAttr != attrEnd;
         bool hasCol = colAttr != attrEnd;
 
-        if (hasUv) {
-          s_logger.info("Primitive has TEXCOORD_0, {} uvs",
-                        gltfAsset.accessors[uvAttr->accessorIndex].count);
-        } else {
-          s_logger.warn("Primitive has no TEXCOORD_0 - using fallback UVs");
-        }
-
         if (!hasPos)
-          continue; // position is required
+          continue;
 
         const auto &posAcc = gltfAsset.accessors[posAttr->accessorIndex];
         size_t vertexCount = posAcc.count;
@@ -234,14 +411,14 @@ std::vector<Mesh> loadGltf(IRenderDevice &device, const std::byte *data,
             auto &v = vertices[i];
             glm::vec3 n = glm::abs(v.normal);
             float sx = v.pos.x + 0.5f;
-            float sy = 0.5f - v.pos.y; // flip V: Vulkan (0,0)=top-left
+            float sy = 0.5f - v.pos.y;
             float sz = v.pos.z + 0.5f;
             if (n.x > n.y && n.x > n.z)
-              v.uv = glm::vec2(sz, sy); // X face: sy is vertical
+              v.uv = glm::vec2(sz, sy);
             else if (n.y > n.x && n.y > n.z)
-              v.uv = glm::vec2(sx, sz); // Y face: horizontal projection
+              v.uv = glm::vec2(sx, sz);
             else
-              v.uv = glm::vec2(sx, sy); // Z face: sy is vertical
+              v.uv = glm::vec2(sx, sy);
           }
         }
 
@@ -281,7 +458,6 @@ std::vector<Mesh> loadGltf(IRenderDevice &device, const std::byte *data,
                 idxAcc.componentType == fastgltf::ComponentType::UnsignedInt;
             size_t idxSize = is32Bit ? sizeof(uint32_t) : sizeof(uint16_t);
 
-            // copy indices accounting for buffer view stride
             std::vector<std::byte> flat(idxAcc.count * idxSize);
             size_t srcStride = getByteStride(gltfAsset, idxAcc);
             for (size_t i = 0; i < idxAcc.count; ++i) {
@@ -297,17 +473,27 @@ std::vector<Mesh> loadGltf(IRenderDevice &device, const std::byte *data,
           }
         }
 
-        // if there's no index buffer, skip (we only support indexed draw)
         if (!idxBuf || indexCount == 0) {
           s_logger.warn("glTF primitive has no index buffer, skipping");
           continue;
         }
 
-        // material
+        // resolve material for this primitive
         std::shared_ptr<IMaterial> material;
 
-        // store the world transform for the caller to use
-        // (the Mesh struct doesn't carry a transform, so it's discarded here)
+        if (primitive.materialIndex.has_value() &&
+            *primitive.materialIndex < materialSlots.size()) {
+          auto &slot = materialSlots[*primitive.materialIndex];
+          if (!slot.needsDefault) {
+            material = slot.material;
+          }
+        }
+
+        if (!material) {
+          // create a default PBR material
+          material = assets.loadMaterial(MaterialDesc{});
+        }
+
         result.push_back(Mesh{
             .vertexBuffer = std::move(vtxBuf),
             .indexBuffer = std::move(idxBuf),

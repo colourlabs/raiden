@@ -15,6 +15,8 @@ public:
   AssetManager(IRenderDevice &device, IVirtualFileSystem &vfs);
   ~AssetManager() override = default;
 
+  void registerData(std::string_view path,
+                    std::vector<std::byte> data) override;
   std::shared_ptr<ITexture> loadTexture(std::string_view vfsPath) override;
   std::shared_ptr<IMaterial> loadMaterial(const MaterialDesc &desc) override;
   std::shared_ptr<Model> loadMesh(std::string_view vfsPath) override;

@@ -58,6 +58,12 @@ CPMAddPackage(
   GIT_TAG v0.9.0
 )
 
+CPMAddPackage(
+  NAME stb
+  GITHUB_REPOSITORY nothings/stb
+  GIT_TAG master
+)
+
 # audio
 CPMAddPackage(
   NAME miniaudio
@@ -106,6 +112,7 @@ add_library(EngineCore STATIC
   src/Assets/AssetManager.cpp
   src/Assets/KtxLoader.cpp
   src/Assets/GltfLoader.cpp
+  src/Assets/StbImageLoader.cpp
 
   src/Renderer/Vulkan/VulkanAllocator.cpp
   src/Renderer/Vulkan/VulkanDevice.cpp
@@ -144,6 +151,7 @@ target_include_directories(EngineCore PRIVATE
   ${imgui_SOURCE_DIR}
   ${imgui_SOURCE_DIR}/backends
   ${implot_SOURCE_DIR}
+  ${stb_SOURCE_DIR}
 )
 
 target_sources(EngineCore PRIVATE

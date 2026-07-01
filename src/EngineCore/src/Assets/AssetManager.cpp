@@ -1,5 +1,6 @@
 #include "GltfLoader.hpp"
 #include "KtxLoader.hpp"
+#include "StbImageLoader.hpp"
 
 #include <RaidenEngineCore/Assets/AssetManager.hpp>
 #include <RaidenEngineCore/Logger.hpp>
@@ -11,6 +12,11 @@ static const Logger s_logger("Raiden::Core::AssetManager");
 
 AssetManager::AssetManager(IRenderDevice &device, IVirtualFileSystem &vfs)
     : device_(device), vfs_(vfs) {}
+
+void AssetManager::registerData(std::string_view path,
+                                std::vector<std::byte> data) {
+  vfs_.registerData(path, std::move(data));
+}
 
 std::shared_ptr<ITexture> AssetManager::loadTexture(std::string_view vfsPath) {
   std::string key(vfsPath);
@@ -40,16 +46,36 @@ std::shared_ptr<ITexture> AssetManager::loadTexture(std::string_view vfsPath) {
     return tex;
   }
 
-  s_logger.warn("Raw texture loading from VFS not yet implemented: {}",
-                vfsPath);
-  return nullptr;
+  s_logger.warn(
+      "Loading raw texture '{}' - consider using .ktx2 for optimal "
+      "performance (smaller size, faster load and it's a GPU-ready format)!",
+      vfsPath);
+
+  auto tex = loadStbImage(device_, bytes.data(), bytes.size());
+  if (!tex) {
+    s_logger.error("Failed to load texture: {}", vfsPath);
+    return nullptr;
+  }
+  textureCache_[key] = tex;
+  return tex;
 }
 
 std::shared_ptr<IMaterial>
 AssetManager::loadMaterial(const MaterialDesc &desc) {
-  std::string key = desc.shader + "|" + desc.baseColorTexture + "|" +
-                    desc.normalTexture + "|" + desc.metallicRoughnessTexture +
-                    "|" + desc.emissiveTexture + "|" + desc.occlusionTexture;
+  std::string key = desc.shader;
+  
+  auto append = [&](const auto &s) {
+    if (!s.empty()) {
+      key += '|';
+      key += s;
+    }
+  };
+
+  append(desc.baseColorTexture);
+  append(desc.normalTexture);
+  append(desc.metallicRoughnessTexture);
+  append(desc.emissiveTexture);
+  append(desc.occlusionTexture);
 
   auto it = materialCache_.find(key);
   if (it != materialCache_.end()) {
@@ -103,17 +129,15 @@ std::shared_ptr<Model> AssetManager::loadMesh(std::string_view vfsPath) {
   }
 
   std::string path(vfsPath);
-  bool isGlb =
-      path.size() > 4 && path.substr(path.size() - 4) == ".glb";
-  bool isGltf =
-      path.size() > 5 && path.substr(path.size() - 5) == ".gltf";
+  bool isGlb = path.size() > 4 && path.substr(path.size() - 4) == ".glb";
+  bool isGltf = path.size() > 5 && path.substr(path.size() - 5) == ".gltf";
 
   if (!isGlb && !isGltf) {
     s_logger.warn("Unsupported mesh format: {}", vfsPath);
     return nullptr;
   }
 
-  auto meshes = loadGltf(device_, bytes.data(), bytes.size());
+  auto meshes = loadGltf(device_, *this, bytes.data(), bytes.size(), vfsPath);
   if (meshes.empty()) {
     s_logger.error("Failed to load glTF: {}", vfsPath);
     return nullptr;
