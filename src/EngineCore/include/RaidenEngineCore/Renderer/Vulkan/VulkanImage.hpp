@@ -12,12 +12,13 @@ public:
 
   VulkanImage(const VulkanImage &) = delete;
   VulkanImage &operator=(const VulkanImage &) = delete;
-  VulkanImage(VulkanImage &&) = delete;
-  VulkanImage &operator=(VulkanImage &&) = delete;
+  VulkanImage(VulkanImage &&other) noexcept;
+  VulkanImage &operator=(VulkanImage &&other) noexcept;
 
   bool init(VkDevice device, VmaAllocator allocator, uint32_t width,
             uint32_t height, VkFormat format, VkImageUsageFlags usage,
-            VmaMemoryUsage memoryUsage, VkImageAspectFlags aspectFlags);
+            VmaMemoryUsage memoryUsage, VkImageAspectFlags aspectFlags,
+            VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT);
 
   void shutdown();
 

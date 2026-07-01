@@ -18,6 +18,7 @@ public:
   bool init(VkDevice device, VkRenderPass renderPass,
             const VulkanShader &vertShader, const VulkanShader &fragShader,
             const VertexInputDescription &vertexDesc, bool depthTestEnable,
+            VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT,
             VkDescriptorSetLayout *setLayouts = nullptr,
             uint32_t setLayoutCount = 0);
   void shutdown();

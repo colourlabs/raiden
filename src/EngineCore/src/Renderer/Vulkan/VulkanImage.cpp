@@ -10,10 +10,39 @@ static const Logger s_logger("Raiden::Core::VulkanImage");
 
 VulkanImage::~VulkanImage() { shutdown(); }
 
+VulkanImage::VulkanImage(VulkanImage &&other) noexcept
+    : device_(other.device_), allocator_(other.allocator_),
+      allocation_(other.allocation_), image_(other.image_),
+      view_(other.view_) {
+  other.device_ = VK_NULL_HANDLE;
+  other.allocator_ = nullptr;
+  other.allocation_ = nullptr;
+  other.image_ = VK_NULL_HANDLE;
+  other.view_ = VK_NULL_HANDLE;
+}
+
+VulkanImage &VulkanImage::operator=(VulkanImage &&other) noexcept {
+  if (this != &other) {
+    shutdown();
+    device_ = other.device_;
+    allocator_ = other.allocator_;
+    allocation_ = other.allocation_;
+    image_ = other.image_;
+    view_ = other.view_;
+    other.device_ = VK_NULL_HANDLE;
+    other.allocator_ = nullptr;
+    other.allocation_ = nullptr;
+    other.image_ = VK_NULL_HANDLE;
+    other.view_ = VK_NULL_HANDLE;
+  }
+  return *this;
+}
+
 bool VulkanImage::init(VkDevice device, VmaAllocator allocator,
                        uint32_t width, uint32_t height, VkFormat format,
                        VkImageUsageFlags usage, VmaMemoryUsage memoryUsage,
-                       VkImageAspectFlags aspectFlags) {
+                       VkImageAspectFlags aspectFlags,
+                       VkSampleCountFlagBits sampleCount) {
   device_ = device;
   allocator_ = allocator;
 
@@ -24,7 +53,7 @@ bool VulkanImage::init(VkDevice device, VmaAllocator allocator,
       .extent = {width, height, 1},
       .mipLevels = 1,
       .arrayLayers = 1,
-      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .samples = sampleCount,
       .tiling = VK_IMAGE_TILING_OPTIMAL,
       .usage = usage,
       .sharingMode = VK_SHARING_MODE_EXCLUSIVE,

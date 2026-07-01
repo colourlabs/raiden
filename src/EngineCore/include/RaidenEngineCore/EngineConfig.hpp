@@ -10,6 +10,13 @@ enum class RenderBackend {
   // TODO: maybe OpenGL ES in the future?
 };
 
+enum class Antialiasing {
+  None,
+  MSAAx2,
+  MSAAx4,
+  MSAAx8,
+};
+
 struct WindowConfig {
   std::string title = "raiden example game";
   int width = 800;
@@ -35,6 +42,7 @@ struct EngineConfig {
   WindowConfig window;
   AudioConfig audio;
   RenderBackend renderBackend = RenderBackend::Vulkan;
+  Antialiasing antialiasing = Antialiasing::None;
 
   bool enableValidation = false;
   PluginConfig plugin;

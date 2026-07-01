@@ -13,6 +13,7 @@ bool VulkanPipeline::initDynamic(VkDevice device, VkRenderPass renderPass,
                                  const VulkanShader &fragmentShader,
                                  const VertexInputDescription &vertexDesc,
                                  bool depthTestEnable,
+                                 VkSampleCountFlagBits sampleCount,
                                  VkDescriptorSetLayout *setLayouts,
                                  uint32_t setLayoutCount) {
   device_ = device;
@@ -51,7 +52,7 @@ bool VulkanPipeline::initDynamic(VkDevice device, VkRenderPass renderPass,
 
   VkPipelineMultisampleStateCreateInfo multisampling{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-      .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+      .rasterizationSamples = sampleCount,
   };
 
   VkPipelineColorBlendAttachmentState colorBlendAttachment{

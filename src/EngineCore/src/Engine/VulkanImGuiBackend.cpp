@@ -29,7 +29,7 @@ bool VulkanImGuiBackend::init() {
   initInfo.Subpass = 0;
   initInfo.MinImageCount = imageCount_;
   initInfo.ImageCount = imageCount_;
-  initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+  initInfo.MSAASamples = device_.getSampleCount();
   initInfo.MinAllocationSize = 1024ull * 1024;
 
   if (!ImGui_ImplVulkan_Init(&initInfo)) {

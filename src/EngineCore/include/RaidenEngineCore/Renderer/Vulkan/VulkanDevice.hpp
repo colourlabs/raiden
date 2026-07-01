@@ -81,6 +81,10 @@ public:
     return static_cast<uint32_t>(swapchain_.imageViews().size());
   }
 
+  VkSampleCountFlagBits getSampleCount() const override {
+    return sampleCount_;
+  }
+
   void setWorld(World *world) override { world_ = world; }
 
   float gpuTimeMs() const { return gpuTimeMs_; }
@@ -175,6 +179,8 @@ private:
 
   VulkanImage depthImage_;
   VkFormat depthFormat_ = VK_FORMAT_UNDEFINED;
+  VkSampleCountFlagBits sampleCount_ = VK_SAMPLE_COUNT_1_BIT;
+  std::vector<VulkanImage> msaaColorImages_;
 
   float totalTime_ = 0.0f;
 

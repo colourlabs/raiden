@@ -41,6 +41,16 @@ static bool loadConfig(Raiden::Core::IVirtualFileSystem &vfs,
                                     ? Raiden::Core::RenderBackend::Vulkan
                                     : Raiden::Core::RenderBackend::Vulkan;
       outConfig.enableValidation = (*rend)["validation"].value_or(false);
+
+      auto aa = (*rend)["antialiasing"].value_or(std::string("none"));
+      if (aa == "msaa_x2")
+        outConfig.antialiasing = Raiden::Core::Antialiasing::MSAAx2;
+      else if (aa == "msaa_x4")
+        outConfig.antialiasing = Raiden::Core::Antialiasing::MSAAx4;
+      else if (aa == "msaa_x8")
+        outConfig.antialiasing = Raiden::Core::Antialiasing::MSAAx8;
+      else
+        outConfig.antialiasing = Raiden::Core::Antialiasing::None;
     }
 
     if (auto game = table["game"].as_table()) {

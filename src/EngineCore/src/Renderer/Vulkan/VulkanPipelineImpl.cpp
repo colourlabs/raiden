@@ -9,11 +9,12 @@ bool VulkanPipelineImpl::init(VkDevice device, VkRenderPass renderPass,
                               const VulkanShader &fragShader,
                               const VertexInputDescription &vertexDesc,
                               bool depthTestEnable,
+                              VkSampleCountFlagBits sampleCount,
                               VkDescriptorSetLayout *setLayouts,
                               uint32_t setLayoutCount) {
   return pipeline_.initDynamic(device, renderPass, vertShader, fragShader,
-                               vertexDesc, depthTestEnable, setLayouts,
-                               setLayoutCount);
+                               vertexDesc, depthTestEnable, sampleCount,
+                               setLayouts, setLayoutCount);
 }
 
 void VulkanPipelineImpl::shutdown() { pipeline_.shutdown(); }

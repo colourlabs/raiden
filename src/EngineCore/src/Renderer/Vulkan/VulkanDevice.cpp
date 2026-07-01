@@ -16,6 +16,19 @@ namespace Raiden::Core {
 
 static const Logger s_logger("Raiden::Core::VulkanDevice");
 
+static VkSampleCountFlagBits toVkSampleCount(Antialiasing aa) {
+  switch (aa) {
+  case Antialiasing::MSAAx2:
+    return VK_SAMPLE_COUNT_2_BIT;
+  case Antialiasing::MSAAx4:
+    return VK_SAMPLE_COUNT_4_BIT;
+  case Antialiasing::MSAAx8:
+    return VK_SAMPLE_COUNT_8_BIT;
+  default:
+    return VK_SAMPLE_COUNT_1_BIT;
+  }
+}
+
 VulkanDevice::~VulkanDevice() { shutdown(); }
 
 bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
@@ -170,6 +183,21 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
   vkGetPhysicalDeviceProperties(physicalDevice_, &props);
   timestampPeriod_ = props.limits.timestampPeriod;
 
+  // resolve MSAA sample count
+  sampleCount_ = toVkSampleCount(config_.antialiasing);
+  if (sampleCount_ > VK_SAMPLE_COUNT_1_BIT) {
+    VkSampleCountFlags colorCounts =
+        props.limits.framebufferColorSampleCounts;
+    VkSampleCountFlags depthCounts =
+        props.limits.framebufferDepthSampleCounts;
+    if (!(colorCounts & sampleCount_) || !(depthCounts & sampleCount_)) {
+      s_logger.warn("MSAAx{} not supported, falling back to no MSAA",
+                    static_cast<int>(sampleCount_));
+      sampleCount_ = VK_SAMPLE_COUNT_1_BIT;
+      config_.antialiasing = Antialiasing::None;
+    }
+  }
+
   VkQueryPoolCreateInfo qpInfo{
       .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
       .queryType = VK_QUERY_TYPE_TIMESTAMP,
@@ -190,7 +218,8 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
 
   depthFormat_ = chooseDepthFormat();
 
-  if (!renderPass_.init(device_, swapchain_.imageFormat(), depthFormat_)) {
+  if (!renderPass_.init(device_, swapchain_.imageFormat(), depthFormat_,
+                         sampleCount_)) {
     s_logger.critical("Failed to create render pass");
     return false;
   }
@@ -199,7 +228,7 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
                         swapchain_.extent().height, depthFormat_,
                         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
                         VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
-                        VK_IMAGE_ASPECT_DEPTH_BIT)) {
+                        VK_IMAGE_ASPECT_DEPTH_BIT, sampleCount_)) {
     s_logger.critical("Failed to create depth image");
     return false;
   }
@@ -325,7 +354,8 @@ VulkanDevice::createPipeline(const PipelineDesc &desc) {
 
   auto impl = std::make_unique<VulkanPipelineImpl>();
   if (!impl->init(device_, renderPass_.renderPass(), vertShader, fragShader,
-                  vertexDesc, desc.depthTestEnable, setLayouts, 3)) {
+                  vertexDesc, desc.depthTestEnable, sampleCount_, setLayouts,
+                  3)) {
     s_logger.error("Failed to create pipeline");
     vertShader.shutdown();
     fragShader.shutdown();
@@ -357,6 +387,9 @@ void VulkanDevice::shutdown() {
 
   destroyFramebuffers();
   pipelineOwnership_.clear();
+  for (auto &img : msaaColorImages_)
+    img.shutdown();
+  msaaColorImages_.clear();
   depthImage_.shutdown();
 
   for (auto &[uniformBuffer, uniformSet] : perFrame_) {
@@ -580,7 +613,7 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
   vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, queryPool_,
                       idx * 2);
 
-  std::array<VkClearValue, 2> clearValues{};
+  VkClearValue clearValues[2]{};
   clearValues[0].color.float32[0] = 0.05f;
   clearValues[0].color.float32[1] = 0.05f;
   clearValues[0].color.float32[2] = 0.2f;
@@ -593,7 +626,7 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
       .framebuffer = framebuffers_[imageIndex],
       .renderArea = {{0, 0}, swapchain_.extent()},
       .clearValueCount = 2,
-      .pClearValues = clearValues.data(),
+      .pClearValues = clearValues,
   };
 
   vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -755,7 +788,7 @@ std::shared_ptr<IMaterial> VulkanDevice::createMaterial(
 
   auto pipeline = std::make_unique<VulkanPipelineImpl>();
   if (!pipeline->init(device_, renderPass_.renderPass(), vertShader, fragShader,
-                      vertexDesc, desc.depthTest, setLayouts, 4)) {
+                      vertexDesc, desc.depthTest, sampleCount_, setLayouts, 4)) {
     s_logger.error("createMaterial: failed to create pipeline");
     vertShader.shutdown();
     fragShader.shutdown();
@@ -783,16 +816,46 @@ std::shared_ptr<IMaterial> VulkanDevice::createMaterial(
 }
 
 bool VulkanDevice::createFramebuffers() {
+  bool msaa = sampleCount_ != VK_SAMPLE_COUNT_1_BIT;
+
+  // create MSAA color images
+  if (msaa) {
+    msaaColorImages_.resize(swapchain_.imageViews().size());
+    for (size_t i = 0; i < msaaColorImages_.size(); ++i) {
+      if (!msaaColorImages_[i].init(
+              device_, allocator_.handle(), swapchain_.extent().width,
+              swapchain_.extent().height, swapchain_.imageFormat(),
+              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                  VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
+              VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, VK_IMAGE_ASPECT_COLOR_BIT,
+              sampleCount_)) {
+        s_logger.error("Failed to create MSAA color image");
+        return false;
+      }
+    }
+  }
+
   framebuffers_.resize(swapchain_.imageViews().size());
 
   for (size_t i = 0; i < framebuffers_.size(); ++i) {
-    std::array<VkImageView, 2> attachments = {swapchain_.imageViews()[i],
-                                              depthImage_.view()};
+    std::array<VkImageView, 3> attachments{};
+    uint32_t attachmentCount = 1;
+
+    if (msaa) {
+      attachments[0] = msaaColorImages_[i].view(); // MSAA color
+      attachments[1] = depthImage_.view();          // MSAA depth
+      attachments[2] = swapchain_.imageViews()[i];  // resolve target
+      attachmentCount = depthFormat_ != VK_FORMAT_UNDEFINED ? 3u : 2u;
+    } else {
+      attachments[0] = swapchain_.imageViews()[i];  // color
+      attachments[1] = depthImage_.view();           // depth
+      attachmentCount = depthFormat_ != VK_FORMAT_UNDEFINED ? 2u : 1u;
+    }
 
     VkFramebufferCreateInfo fbInfo{
         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
         .renderPass = renderPass_.renderPass(),
-        .attachmentCount = renderPass_.hasDepth() ? 2u : 1u,
+        .attachmentCount = attachmentCount,
         .pAttachments = attachments.data(),
         .width = swapchain_.extent().width,
         .height = swapchain_.extent().height,
@@ -806,7 +869,7 @@ bool VulkanDevice::createFramebuffers() {
     }
   }
 
-  s_logger.info("Framebuffers created.");
+  s_logger.info("Framebuffers created (MSAA: {}).", msaa ? "yes" : "no");
   return true;
 }
 
@@ -815,6 +878,9 @@ void VulkanDevice::destroyFramebuffers() {
     vkDestroyFramebuffer(device_, fb, nullptr);
   }
   framebuffers_.clear();
+  for (auto &img : msaaColorImages_)
+    img.shutdown();
+  msaaColorImages_.clear();
 }
 
 bool VulkanDevice::recreateSwapchain() {
@@ -848,7 +914,7 @@ bool VulkanDevice::recreateSwapchain() {
                         swapchain_.extent().height, depthFormat_,
                         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
                         VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
-                        VK_IMAGE_ASPECT_DEPTH_BIT)) {
+                        VK_IMAGE_ASPECT_DEPTH_BIT, sampleCount_)) {
     s_logger.error("Failed to recreate depth image");
     return false;
   }

@@ -27,6 +27,7 @@ public:
                    const VulkanShader &fragmentShader,
                    const VertexInputDescription &vertexInput,
                    bool depthTestEnable,
+                   VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT,
                    VkDescriptorSetLayout *setLayouts = nullptr,
                    uint32_t setLayoutCount = 0);
   void shutdown();

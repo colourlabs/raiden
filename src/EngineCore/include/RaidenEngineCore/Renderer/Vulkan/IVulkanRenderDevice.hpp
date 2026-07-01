@@ -20,6 +20,7 @@ public:
   virtual bool hasValidation() const = 0;
   virtual VkRenderPass getRenderPass() const = 0;
   virtual uint32_t getSwapchainImageCount() const = 0;
+  virtual VkSampleCountFlagBits getSampleCount() const = 0;
 
   virtual void setWorld(World *world) = 0;
 };

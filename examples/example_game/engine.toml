@@ -9,6 +9,7 @@ vsync = false
 [render]
 backend = "vulkan"
 validation = true
+antialiasing = "msaa_x8"
 
 [game.platform]
 linux = "lib/libExampleGame.so"
