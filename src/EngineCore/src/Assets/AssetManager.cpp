@@ -1,3 +1,4 @@
+#include "DecodedTextureData.hpp"
 #include "GltfLoader.hpp"
 #include "KtxLoader.hpp"
 #include "StbImageLoader.hpp"
@@ -18,7 +19,8 @@ void AssetManager::registerData(std::string_view path,
   vfs_.registerData(path, std::move(data));
 }
 
-std::shared_ptr<ITexture> AssetManager::loadTexture(std::string_view vfsPath) {
+std::shared_ptr<ITexture> AssetManager::loadTextureSync(
+    std::string_view vfsPath) {
   std::string key(vfsPath);
 
   auto it = textureCache_.find(key);
@@ -36,34 +38,146 @@ std::shared_ptr<ITexture> AssetManager::loadTexture(std::string_view vfsPath) {
   std::string path(vfsPath);
   bool isKtx2 = path.size() > 5 && path.substr(path.size() - 5) == ".ktx2";
 
-  if (isKtx2) {
-    auto tex = loadKtx2(device_, bytes.data(), bytes.size());
-    if (!tex) {
-      s_logger.error("Failed to load KTX2: {}", vfsPath);
-      return nullptr;
-    }
-    textureCache_[key] = tex;
-    return tex;
-  }
+  auto decoded = isKtx2 ? decodeKtx2(bytes.data(), bytes.size())
+                        : decodeStbImage(bytes.data(), bytes.size());
 
-  s_logger.warn(
-      "Loading raw texture '{}' - consider using .ktx2 for optimal "
-      "performance (smaller size, faster load and it's a GPU-ready format)!",
-      vfsPath);
-
-  auto tex = loadStbImage(device_, bytes.data(), bytes.size());
-  if (!tex) {
-    s_logger.error("Failed to load texture: {}", vfsPath);
+  if (!decoded) {
+    s_logger.error("Failed to decode texture: {}", vfsPath);
     return nullptr;
   }
-  textureCache_[key] = tex;
-  return tex;
+
+  if (!isKtx2) {
+    s_logger.warn(
+        "Loading raw texture '{}' - consider using .ktx2 for optimal "
+        "performance (smaller size, faster load and it's a GPU-ready format)!",
+        vfsPath);
+  }
+
+  TextureDesc desc{
+      .width = static_cast<uint32_t>(decoded->width),
+      .height = static_cast<uint32_t>(decoded->height),
+      .format = decoded->format,
+      .type = decoded->type,
+  };
+
+  auto tex = device_.createTexture(desc);
+  if (!tex) {
+    s_logger.error("Failed to create GPU texture for: {}", vfsPath);
+    return nullptr;
+  }
+
+  tex->upload(decoded->pixels.data(), decoded->pixels.size());
+  auto texShared = std::shared_ptr<ITexture>(std::move(tex));
+  textureCache_[key] = texShared;
+  return texShared;
 }
 
+std::shared_ptr<ITexture> AssetManager::_loadTextureSync(
+    std::string_view vfsPath) {
+  return loadTextureSync(vfsPath);
+}
+
+// async texture load (decode on worker, upload deferred to processLoadQueue)
+std::shared_ptr<ITexture> AssetManager::loadTexture(std::string_view vfsPath) {
+  std::string key(vfsPath);
+
+  // check cache
+  auto it = textureCache_.find(key);
+  if (it != textureCache_.end()) {
+    if (auto live = it->second.lock())
+      return live;
+  }
+
+  // check if already pending
+  for (auto &p : pendingTextures_) {
+    if (p->key == key)
+      return nullptr;
+  }
+
+  if (!js_) {
+    s_logger.warn("No JobSystem set, falling back to synchronous load: {}",
+                  vfsPath);
+    return _loadTextureSync(vfsPath);
+  }
+
+  auto pending = std::make_unique<PendingTexture>();
+  pending->key = key;
+
+  auto *rawPtr = pending.get();
+
+  auto ctr = js_->submit(
+      {.task = [this, rawPtr, path = std::string(vfsPath)]() {
+        auto bytes = vfs_.readBytes(path);
+        if (bytes.empty()) {
+          rawPtr->failed = true;
+          return;
+        }
+
+        bool isKtx2 =
+            path.size() > 5 && path.substr(path.size() - 5) == ".ktx2";
+        auto decoded = isKtx2
+                           ? decodeKtx2(bytes.data(), bytes.size())
+                           : decodeStbImage(bytes.data(), bytes.size());
+
+        if (decoded) {
+          rawPtr->width = decoded->width;
+          rawPtr->height = decoded->height;
+          rawPtr->format = decoded->format;
+          rawPtr->type = decoded->type;
+          rawPtr->pixels = std::move(decoded->pixels);
+        } else {
+          rawPtr->failed = true;
+        }
+      }});
+
+  pending->counter = std::move(ctr);
+  pendingTextures_.push_back(std::move(pending));
+  return nullptr;
+}
+
+// processLoadQueue, called each frame on the main thread
+void AssetManager::processLoadQueue() {
+  for (auto it = pendingTextures_.begin(); it != pendingTextures_.end();) {
+    auto &p = *it;
+    if (!p->counter.isComplete()) {
+      ++it;
+      continue;
+    }
+
+    if (p->failed) {
+      s_logger.error("Async texture load failed: {}", p->key);
+      it = pendingTextures_.erase(it);
+      continue;
+    }
+
+    // decode finished, create GPU texture and upload on main thread
+    TextureDesc desc{
+        .width = static_cast<uint32_t>(p->width),
+        .height = static_cast<uint32_t>(p->height),
+        .format = p->format,
+        .type = p->type,
+    };
+
+    auto tex = device_.createTexture(desc);
+    if (tex) {
+      tex->upload(p->pixels.data(), p->pixels.size());
+      textureCache_[p->key] = std::shared_ptr<ITexture>(std::move(tex));
+      s_logger.info("Async texture loaded: {} ({}x{})", p->key, p->width,
+                    p->height);
+    } else {
+      s_logger.error("Failed to create GPU texture for async load: {}",
+                     p->key);
+    }
+
+    it = pendingTextures_.erase(it);
+  }
+}
+
+// material loading (internally uses synchronous texture loads)
 std::shared_ptr<IMaterial>
 AssetManager::loadMaterial(const MaterialDesc &desc) {
   std::string key = desc.shader;
-  
+
   auto append = [&](const auto &s) {
     if (!s.empty()) {
       key += '|';
@@ -90,17 +204,16 @@ AssetManager::loadMaterial(const MaterialDesc &desc) {
   std::shared_ptr<ITexture> occlusion;
 
   if (!desc.baseColorTexture.empty())
-    albedo = loadTexture(desc.baseColorTexture);
+    albedo = _loadTextureSync(desc.baseColorTexture);
   if (!desc.normalTexture.empty())
-    normal = loadTexture(desc.normalTexture);
+    normal = _loadTextureSync(desc.normalTexture);
   if (!desc.metallicRoughnessTexture.empty())
-    metallicRoughness = loadTexture(desc.metallicRoughnessTexture);
+    metallicRoughness = _loadTextureSync(desc.metallicRoughnessTexture);
   if (!desc.emissiveTexture.empty())
-    emissive = loadTexture(desc.emissiveTexture);
+    emissive = _loadTextureSync(desc.emissiveTexture);
   if (!desc.occlusionTexture.empty())
-    occlusion = loadTexture(desc.occlusionTexture);
+    occlusion = _loadTextureSync(desc.occlusionTexture);
 
-  // device handles all backend-specific details internally
   auto mat = device_.createMaterial(desc, albedo, normal, metallicRoughness,
                                     emissive, occlusion);
   if (!mat) {
@@ -113,6 +226,7 @@ AssetManager::loadMaterial(const MaterialDesc &desc) {
   return mat;
 }
 
+// mesh loading (synchronous, glTF parse + texture/material loads)
 std::shared_ptr<Model> AssetManager::loadMesh(std::string_view vfsPath) {
   std::string key(vfsPath);
 

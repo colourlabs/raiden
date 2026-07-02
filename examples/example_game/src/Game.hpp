@@ -47,6 +47,13 @@ private:
   std::shared_ptr<Raiden::Core::ITexture> texture_;
   std::shared_ptr<Raiden::Core::Model> model_;
 
+  // skybox
+  std::unique_ptr<Raiden::Core::IPipeline> skyboxPipeline_;
+  std::shared_ptr<Raiden::Core::ITexture> skyboxTexture_;
+  std::unique_ptr<Raiden::Core::IBuffer> skyboxVertexBuffer_;
+  std::unique_ptr<Raiden::Core::IBuffer> skyboxIndexBuffer_;
+  uint32_t skyboxIndexCount_ = 0;
+
   std::vector<PbrObject> pbrObjects_;
 
   float rotation_ = 0.0f;

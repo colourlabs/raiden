@@ -147,12 +147,31 @@ bool VulkanDescriptorPool::init(VkDevice device, VkPhysicalDevice physDev,
     return false;
   }
 
-  // pool sized for: 3 frame UBOs + 1 shared sampler
+  // clamp-to-edge sampler for cubemaps
+  VkSamplerCreateInfo clampSamplerInfo{
+      .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+      .magFilter = VK_FILTER_LINEAR,
+      .minFilter = VK_FILTER_LINEAR,
+      .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+      .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .anisotropyEnable = VK_TRUE,
+      .maxAnisotropy = 16.0f,
+  };
+
+  if (vkCreateSampler(device_, &clampSamplerInfo, nullptr, &clampSampler_) !=
+      VK_SUCCESS) {
+    s_logger.error("Failed to create clamp sampler");
+    return false;
+  }
+
+  // pool sized for: 3 frame UBOs + 1 shared sampler + 1 clamp sampler
   //               + 64 simple textures + 64 material texture sets + 64 material
   //               params UBOs
   std::array<VkDescriptorPoolSize, 3> poolSizes{{
       {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3 + 64},
-      {VK_DESCRIPTOR_TYPE_SAMPLER, 1},
+      {VK_DESCRIPTOR_TYPE_SAMPLER, 2},
       {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 64 + 64 * 5},
   }};
 
@@ -198,6 +217,35 @@ bool VulkanDescriptorPool::init(VkDevice device, VkPhysicalDevice physDev,
   };
   vkUpdateDescriptorSets(device_, 1, &samplerWrite, 0, nullptr);
 
+  // clamp sampler descriptor set
+  VkDescriptorSetAllocateInfo clampAlloc{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+      .descriptorPool = pool_,
+      .descriptorSetCount = 1,
+      .pSetLayouts = &samplerSetLayout_,
+  };
+  if (vkAllocateDescriptorSets(device_, &clampAlloc, &clampSamplerSet_) !=
+      VK_SUCCESS) {
+    s_logger.error("Failed to allocate clamp sampler descriptor set");
+    return false;
+  }
+
+  VkDescriptorImageInfo clampImageInfo{
+      .sampler = clampSampler_,
+      .imageView = VK_NULL_HANDLE,
+      .imageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+  };
+
+  VkWriteDescriptorSet clampWrite{
+      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+      .dstSet = clampSamplerSet_,
+      .dstBinding = 0,
+      .descriptorCount = 1,
+      .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+      .pImageInfo = &clampImageInfo,
+  };
+  vkUpdateDescriptorSets(device_, 1, &clampWrite, 0, nullptr);
+
   if (!createFallbackTexture()) {
     s_logger.error("Failed to create fallback texture");
     return false;
@@ -224,6 +272,10 @@ void VulkanDescriptorPool::shutdown() {
   if (sampler_ != VK_NULL_HANDLE) {
     vkDestroySampler(device_, sampler_, nullptr);
     sampler_ = VK_NULL_HANDLE;
+  }
+  if (clampSampler_ != VK_NULL_HANDLE) {
+    vkDestroySampler(device_, clampSampler_, nullptr);
+    clampSampler_ = VK_NULL_HANDLE;
   }
   if (fallbackImageView_ != VK_NULL_HANDLE) {
     vkDestroyImageView(device_, fallbackImageView_, nullptr);

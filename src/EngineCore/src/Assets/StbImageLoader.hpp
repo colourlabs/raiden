@@ -1,16 +1,14 @@
 #pragma once
 
-#include <RaidenEngineCore/Renderer/ITexture.hpp>
+#include "DecodedTextureData.hpp"
 #include <cstddef>
-#include <memory>
+#include <optional>
 
 namespace Raiden::Core {
 
-class IRenderDevice;
-
-// loads PNG, JPEG, BMP, GIF, etc. via stb_image
-// returns a ready-to-use ITexture or nullptr on failure
-std::shared_ptr<ITexture> loadStbImage(IRenderDevice &device,
-                                       const std::byte *data, size_t size);
+// decodes PNG, JPEG, BMP, GIF, etc. via stb_image (no GPU upload)
+// suitable for calling on worker threads
+std::optional<DecodedTextureData> decodeStbImage(const std::byte *data,
+                                                 size_t size);
 
 } // namespace Raiden::Core

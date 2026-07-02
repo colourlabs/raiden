@@ -2,18 +2,18 @@
 
 namespace Raiden::Core {
 
-World::World() { rootArchetype_ = &archetypes_[{}]; }
+World::World() { rootArchetype_ = &archetypes_[0]; }
 
 World::~World() {
   // destruct all components in all archetypes
-  for (auto &[sig, arch] : archetypes_) {
-    for (size_t i = 0; i < sig.size(); ++i) {
-      auto cid = sig[i];
+  for (auto &[mask, arch] : archetypes_) {
+    for (size_t i = 0; i < arch.signature.size(); ++i) {
+      auto cid = arch.signature[i];
       auto &info = componentInfo_[cid];
       if (!info.destruct)
         continue;
       for (int32_t r = 0; r < static_cast<int32_t>(arch.entities.size()); ++r)
-        info.destruct(arch.column(static_cast<int32_t>(i)) + r * info.size);
+        info.destruct(arch.data(i, r));
     }
   }
 }
@@ -41,16 +41,27 @@ void World::destroy(Entity e) {
     return;
 
   auto *arch = slot.archetype;
+
+  // destruct all components
   for (size_t i = 0; i < arch->signature.size(); ++i) {
     auto cid = arch->signature[i];
     auto &info = componentInfo_[cid];
     if (info.destruct)
-      info.destruct(arch->column(i) + slot.row * info.size);
+      info.destruct(arch->data(static_cast<int32_t>(i), slot.row));
   }
 
-  Entity moved = arch->swapRemove(slot.row);
+  // remove from archetype (destructs last-row components via callback)
+  int32_t oldRow = slot.row;
+  Entity moved = arch->swapRemove(oldRow, [&](int32_t r) {
+    for (size_t i = 0; i < arch->signature.size(); ++i) {
+      auto cid = arch->signature[i];
+      auto &cinfo = componentInfo_[cid];
+      if (cinfo.destruct)
+        cinfo.destruct(arch->data(static_cast<int32_t>(i), r));
+    }
+  });
   if (moved.index != uint32_t(-1))
-    slots_[moved.index].row = slot.row;
+    slots_[moved.index].row = oldRow;
 
   slot.archetype = nullptr;
   slot.row = -1;
@@ -60,7 +71,15 @@ void World::destroy(Entity e) {
 }
 
 Archetype *World::findOrCreateArchetype(const std::vector<ComponentId> &sig) {
-  auto it = archetypes_.find(sig);
+  // build mask from signature
+  uint64_t mask = 0;
+  for (auto cid : sig) {
+    auto it = componentInfo_.find(cid);
+    if (it != componentInfo_.end())
+      mask |= (uint64_t(1) << it->second.bitIndex);
+  }
+
+  auto it = archetypes_.find(mask);
   if (it != archetypes_.end())
     return &it->second;
 
@@ -70,10 +89,11 @@ Archetype *World::findOrCreateArchetype(const std::vector<ComponentId> &sig) {
   for (auto cid : sig)
     sizes.push_back(componentInfo_[cid].size);
 
-  auto &arch = archetypes_[sig];
+  auto &arch = archetypes_[mask];
+  arch.mask = mask;
   arch.signature = sig;
   arch.componentSizes = std::move(sizes);
-  arch.columns.resize(arch.signature.size());
+  arch.columns_.resize(arch.signature.size());
   return &arch;
 }
 

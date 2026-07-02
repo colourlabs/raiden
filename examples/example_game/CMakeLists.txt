@@ -62,6 +62,18 @@ foreach(TEX ${TEXTURE_SOURCES})
   list(APPEND TEXTURE_OUTPUTS "${OUTPUT}")
 endforeach()
 
+set(SKYBOX_INPUT "${CMAKE_CURRENT_SOURCE_DIR}/textures/skybox.ktx2")
+set(SKYBOX_OUTPUT "${GAME_DATAPACK_DIR}/textures/skybox.ktx2")
+
+add_custom_command(
+  OUTPUT ${SKYBOX_OUTPUT}
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SKYBOX_INPUT} ${SKYBOX_OUTPUT}
+  DEPENDS ${SKYBOX_INPUT}
+  COMMENT "Copying skybox texture"
+  VERBATIM
+)
+list(APPEND TEXTURE_OUTPUTS ${SKYBOX_OUTPUT})
+
 if(TEXTURE_OUTPUTS)
   add_custom_target(ExampleGameTextures ALL
     DEPENDS ${TEXTURE_OUTPUTS}

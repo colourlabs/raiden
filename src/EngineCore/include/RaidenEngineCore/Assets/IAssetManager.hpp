@@ -10,15 +10,23 @@
 
 namespace Raiden::Core {
 
+class JobSystem;
+
 class IAssetManager {
 public:
   virtual ~IAssetManager() = default;
+
+  virtual void setJobSystem(JobSystem &js) = 0;
 
   // register in-memory data at a virtual path (e.g. for embedded glTF textures)
   virtual void registerData(std::string_view path,
                             std::vector<std::byte> data) = 0;
 
+  // async: returns nullptr while decode is pending on a worker thread
   virtual std::shared_ptr<ITexture> loadTexture(std::string_view vfsPath) = 0;
+
+  // synchronous: decode + GPU upload complete before returning
+  virtual std::shared_ptr<ITexture> loadTextureSync(std::string_view vfsPath) = 0;
   virtual std::shared_ptr<IMaterial> loadMaterial(const MaterialDesc &desc) = 0;
   virtual std::shared_ptr<Model> loadMesh(std::string_view vfsPath) = 0;
 

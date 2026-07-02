@@ -34,8 +34,10 @@ void VulkanCommandBuffer::bindTexture(uint32_t slot, const ITexture &texture) {
 
   auto &vkTex = static_cast<const VulkanTextureImpl &>(texture);
 
-  // bind shared sampler at set 1
-  VkDescriptorSet samplerSet = pool_->samplerSet();
+  // bind sampler at set 1 (clamp-to-edge for cubemaps, repeat otherwise)
+  bool isCube = (vkTex.getType() == TextureType::TextureCube);
+  VkDescriptorSet samplerSet =
+      isCube ? pool_->clampSamplerSet() : pool_->samplerSet();
   vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, currentLayout_,
                           1, 1, &samplerSet, 0, nullptr);
 

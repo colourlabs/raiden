@@ -36,6 +36,7 @@ bool VulkanTextureImpl::init(VkDevice device, VmaAllocator allocator,
   width_ = desc.width;
   height_ = desc.height;
   format_ = desc.format;
+  type_ = desc.type;
   vkFormat_ = toVkFormat(desc.format);
 
   if (vkFormat_ == VK_FORMAT_UNDEFINED) {
@@ -43,11 +44,20 @@ bool VulkanTextureImpl::init(VkDevice device, VmaAllocator allocator,
     return false;
   }
 
-  if (!image_.init(device_, allocator_, width_, height_, vkFormat_,
-                   VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                       VK_IMAGE_USAGE_SAMPLED_BIT,
-                   VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
-                   VK_IMAGE_ASPECT_COLOR_BIT))
+  bool isCube = (desc.type == TextureType::TextureCube);
+
+  VulkanImageInfo imgInfo{
+      .width = width_,
+      .height = height_,
+      .format = vkFormat_,
+      .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+      .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+      .aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT,
+      .arrayLayers = isCube ? 6u : 1u,
+      .createFlags = isCube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0u,
+      .viewType = isCube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D,
+  };
+  if (!image_.init(device_, allocator_, imgInfo))
     return false;
 
   VkSamplerCreateInfo samplerInfo{
@@ -55,9 +65,12 @@ bool VulkanTextureImpl::init(VkDevice device, VmaAllocator allocator,
       .magFilter = VK_FILTER_LINEAR,
       .minFilter = VK_FILTER_LINEAR,
       .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
-      .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-      .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-      .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+      .addressModeU = isCube ? VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE
+                             : VK_SAMPLER_ADDRESS_MODE_REPEAT,
+      .addressModeV = isCube ? VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE
+                             : VK_SAMPLER_ADDRESS_MODE_REPEAT,
+      .addressModeW = isCube ? VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE
+                             : VK_SAMPLER_ADDRESS_MODE_REPEAT,
       .anisotropyEnable = VK_TRUE,
       .maxAnisotropy = 16.0f,
   };
@@ -90,9 +103,15 @@ void VulkanTextureImpl::upload(const void *data, size_t size) {
     return;
   }
 
+  uint32_t layerCount = image_.arrayLayers();
+  // For a cubemap, data should contain all 6 faces consecutively,
+  // each face = width * height * bytesPerPixel.
+  uint32_t faceSize = width_ * height_ * 4;
+  size_t expectedSize = faceSize * layerCount;
+
   // staging buffer
   VulkanBuffer staging;
-  if (!staging.init(allocator_, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+  if (!staging.init(allocator_, expectedSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                     VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
                     VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)) {
     s_logger.error("Failed to create staging buffer for texture upload");
@@ -104,7 +123,7 @@ void VulkanTextureImpl::upload(const void *data, size_t size) {
     staging.shutdown();
     return;
   }
-  staging.upload(data, size);
+  staging.upload(data, expectedSize);
   staging.unmap();
 
   // temporary command buffer for the transfer
@@ -132,15 +151,23 @@ void VulkanTextureImpl::upload(const void *data, size_t size) {
   transitionLayout(cmd, VK_IMAGE_LAYOUT_UNDEFINED,
                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
-  VkBufferImageCopy copyRegion{
-      .bufferOffset = 0,
-      .bufferRowLength = 0,
-      .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
-      .imageExtent = {width_, height_, 1},
-  };
+  // one copy region per array layer (face)
+  std::vector<VkBufferImageCopy> copyRegions;
+  copyRegions.reserve(layerCount);
+  for (uint32_t i = 0; i < layerCount; i++) {
+    VkBufferImageCopy region{
+        .bufferOffset = static_cast<VkDeviceSize>(faceSize) * i,
+        .bufferRowLength = 0,
+        .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, i, 1},
+        .imageExtent = {width_, height_, 1},
+    };
+    copyRegions.push_back(region);
+  }
+
   vkCmdCopyBufferToImage(cmd, staging.buffer(), image_.image(),
-                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
-                         &copyRegion);
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                         static_cast<uint32_t>(copyRegions.size()),
+                         copyRegions.data());
 
   transitionLayout(cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -220,6 +247,7 @@ VkDescriptorSet VulkanTextureImpl::getOrCreateDescriptorSet(
 void VulkanTextureImpl::transitionLayout(VkCommandBuffer cmd,
                                          VkImageLayout oldLayout,
                                          VkImageLayout newLayout) {
+  uint32_t layerCount = image_.arrayLayers();
   VkImageMemoryBarrier barrier{
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
       .oldLayout = oldLayout,
@@ -227,7 +255,7 @@ void VulkanTextureImpl::transitionLayout(VkCommandBuffer cmd,
       .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
       .image = image_.image(),
-      .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+      .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, layerCount},
   };
 
   VkPipelineStageFlags srcStage;

@@ -50,6 +50,8 @@ public:
   }
 
   VkSampler sampler() const { return sampler_; }
+  VkSampler clampSampler() const { return clampSampler_; }
+  VkDescriptorSet clampSamplerSet() const { return clampSamplerSet_; }
   VkDevice device() const { return device_; }
 
   VkDescriptorSet allocSamplerSet();
@@ -72,6 +74,9 @@ private:
   VkDescriptorSetLayout materialParamsSetLayout_ = VK_NULL_HANDLE;
   VkSampler sampler_ = VK_NULL_HANDLE;
   VkDescriptorSet samplerSet_ = VK_NULL_HANDLE;
+
+  VkSampler clampSampler_ = VK_NULL_HANDLE;
+  VkDescriptorSet clampSamplerSet_ = VK_NULL_HANDLE;
 
   // 1x1 white fallback for unbound material texture slots
   VkImage fallbackImage_ = VK_NULL_HANDLE;

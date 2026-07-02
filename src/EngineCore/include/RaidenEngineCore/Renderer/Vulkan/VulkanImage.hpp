@@ -5,6 +5,19 @@
 
 namespace Raiden::Core {
 
+struct VulkanImageInfo {
+  uint32_t width;
+  uint32_t height;
+  VkFormat format;
+  VkImageUsageFlags usage;
+  VmaMemoryUsage memoryUsage;
+  VkImageAspectFlags aspectFlags;
+  VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT;
+  uint32_t arrayLayers = 1;
+  VkImageCreateFlags createFlags = 0;
+  VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D;
+};
+
 class VulkanImage {
 public:
   VulkanImage() = default;
@@ -15,6 +28,9 @@ public:
   VulkanImage(VulkanImage &&other) noexcept;
   VulkanImage &operator=(VulkanImage &&other) noexcept;
 
+  bool init(VkDevice device, VmaAllocator allocator,
+            const VulkanImageInfo &info);
+
   bool init(VkDevice device, VmaAllocator allocator, uint32_t width,
             uint32_t height, VkFormat format, VkImageUsageFlags usage,
             VmaMemoryUsage memoryUsage, VkImageAspectFlags aspectFlags,
@@ -24,6 +40,7 @@ public:
 
   VkImage image() const { return image_; }
   VkImageView view() const { return view_; }
+  uint32_t arrayLayers() const { return arrayLayers_; }
 
 private:
   VkDevice device_ = VK_NULL_HANDLE;
@@ -32,6 +49,7 @@ private:
 
   VkImage image_ = VK_NULL_HANDLE;
   VkImageView view_ = VK_NULL_HANDLE;
+  uint32_t arrayLayers_ = 1;
 };
 
 VkFormat findDepthFormat(VkPhysicalDevice physicalDevice);

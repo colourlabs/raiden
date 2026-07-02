@@ -63,8 +63,8 @@ bool ExampleGame::init(Raiden::Core::IRenderDevice &device,
     return false;
   }
 
-  // load KTX2 texture through asset manager
-  texture_ = assets.loadTexture("game://textures/checkerboard.ktx2");
+  // load KTX2 texture through asset manager (synchronous for boot assets)
+  texture_ = assets.loadTextureSync("game://textures/checkerboard.ktx2");
   if (!texture_) {
     s_logger.error("Failed to load checkerboard texture");
     return false;
@@ -134,6 +134,71 @@ bool ExampleGame::init(Raiden::Core::IRenderDevice &device,
   s_logger.info("Example game initialized ({} PBR objects).",
                 pbrObjects_.size());
 
+  // -----------------------------------------------------------------------
+  // skybox
+  // -----------------------------------------------------------------------
+
+  // unit cube vertices (just position, 36 vertices for indexed drawing)
+  struct Pos { float x, y, z; };
+
+  Pos cubeVerts[8] = {
+      {-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1},
+      {-1, -1, 1},  {1, -1, 1},  {1, 1, 1},  {-1, 1, 1},
+  };
+
+  uint32_t cubeIndices[36] = {
+      0, 1, 2, 0, 2, 3, // back
+      4, 6, 5, 4, 7, 6, // front
+      3, 7, 4, 3, 4, 0, // left
+      1, 5, 6, 1, 6, 2, // right
+      3, 2, 6, 3, 6, 7, // top
+      0, 4, 5, 0, 5, 1, // bottom
+  };
+
+  skyboxIndexCount_ = 36;
+
+  skyboxVertexBuffer_ = device.createBuffer({
+      .size = sizeof(cubeVerts),
+      .usage = Raiden::Core::BufferUsage::Vertex,
+      .access = Raiden::Core::MemoryAccess::CpuToGpu,
+  });
+  if (skyboxVertexBuffer_)
+    skyboxVertexBuffer_->upload(cubeVerts, sizeof(cubeVerts));
+
+  skyboxIndexBuffer_ = device.createBuffer({
+      .size = sizeof(cubeIndices),
+      .usage = Raiden::Core::BufferUsage::Index,
+      .access = Raiden::Core::MemoryAccess::CpuToGpu,
+      .indexType = Raiden::Core::IndexType::Uint32,
+  });
+  if (skyboxIndexBuffer_)
+    skyboxIndexBuffer_->upload(cubeIndices, sizeof(cubeIndices));
+
+  // load real skybox texture
+  skyboxTexture_ = assets.loadTextureSync("game://textures/skybox.ktx2");
+  if (!skyboxTexture_) {
+    s_logger.warn("Failed to load skybox cubemap texture, continuing without");
+  }
+
+  // skybox pipeline: position-only vertex, depth test LEQUAL, no depth write,
+  // no culling
+  skyboxPipeline_ = device.createPipeline(
+      {.shader = {"shaders/skybox.slang"},
+       .vertexLayout =
+           {
+               .stride = sizeof(Pos),
+               .attributes =
+                   {
+                       {0, Raiden::Core::Format::R32G32B32_Float,
+                        offsetof(Pos, x)},
+                   },
+           },
+       .depthTestEnable = true,
+       .depthWriteEnable = false,
+       .cullMode = Raiden::Core::CullMode::None,
+       .depthCompareOp = Raiden::Core::CompareOp::LessOrEqual,
+      });
+
   return true;
 }
 
@@ -197,6 +262,16 @@ void ExampleGame::update(float deltaTime,
 }
 
 void ExampleGame::render(Raiden::Core::ICommandBuffer &cmd) {
+  // skybox (rendered first with depth test LEQUAL, no depth write)
+  if (skyboxPipeline_ && skyboxTexture_ && skyboxVertexBuffer_ &&
+      skyboxIndexBuffer_) {
+    cmd.bindPipeline(*skyboxPipeline_);
+    cmd.bindTexture(0, *skyboxTexture_);
+    cmd.bindVertexBuffer(*skyboxVertexBuffer_);
+    cmd.bindIndexBuffer(*skyboxIndexBuffer_);
+    cmd.drawIndexed(skyboxIndexCount_);
+  }
+
   // simple pipeline cube (rotating, checkerboard)
   cmd.bindPipeline(*pipeline_);
 
@@ -240,6 +315,10 @@ void ExampleGame::shutdown() {
   s_logger.info("Shutting down example game...");
 
   pbrObjects_.clear();
+  skyboxPipeline_.reset();
+  skyboxTexture_.reset();
+  skyboxVertexBuffer_.reset();
+  skyboxIndexBuffer_.reset();
   pipeline_.reset();
   texture_.reset();
   model_.reset();

@@ -26,7 +26,9 @@ public:
                    const VulkanShader &vertexShader,
                    const VulkanShader &fragmentShader,
                    const VertexInputDescription &vertexInput,
-                   bool depthTestEnable,
+                   bool depthTestEnable, bool depthWriteEnable = true,
+                   VkCompareOp depthCompareOp = VK_COMPARE_OP_LESS,
+                   VkCullModeFlags cullMode = VK_CULL_MODE_BACK_BIT,
                    VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT,
                    VkDescriptorSetLayout *setLayouts = nullptr,
                    uint32_t setLayoutCount = 0);

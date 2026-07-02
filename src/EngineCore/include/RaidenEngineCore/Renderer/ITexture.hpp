@@ -15,6 +15,7 @@ public:
   virtual uint32_t getWidth() const = 0;
   virtual uint32_t getHeight() const = 0;
   virtual Format getFormat() const = 0;
+  virtual TextureType getType() const = 0;
   virtual uint32_t getMipLevels() const = 0;
 };
 

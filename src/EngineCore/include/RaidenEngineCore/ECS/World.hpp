@@ -4,13 +4,14 @@
 #include "Entity.hpp"
 
 #include <cstring>
-#include <map>
 #include <string_view>
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
 
 namespace Raiden::Core {
+
+static constexpr uint32_t kMaxComponentTypes = 64;
 
 // entity slot (internal)
 
@@ -28,6 +29,7 @@ struct ComponentInfo {
   void (*destruct)(void *);
   void (*move)(void *dst, void *src);
   std::string_view name;
+  uint32_t bitIndex;
 };
 
 template <typename T> void componentDestruct(void *p) {
@@ -60,7 +62,7 @@ template <typename... Ts> struct View {
       for (size_t r = 0; r < count; ++r) {
         [&]<size_t... I>(std::index_sequence<I...>) {
           fn(arch->entities[r],
-             *(Ts *)(arch->column(cols[I]) + r * sizeof(Ts))...);
+             *(Ts *)(arch->data(cols[I], static_cast<int32_t>(r)))...);
         }(std::index_sequence_for<Ts...>{});
       }
     }
@@ -106,22 +108,38 @@ public:
     Archetype *dst = findOrCreateArchetype(sig);
     int32_t dstRow = dst->add(Entity{e.index, slot.generation});
 
+    // move existing components from src to dst using proper move semantics
     for (size_t i = 0; i < src->signature.size(); ++i) {
       auto cid = src->signature[i];
-      size_t sz = componentInfo_[cid].size;
+      auto &cinfo = componentInfo_[cid];
       auto col = dst->indexOf(cid);
-      std::memcpy(dst->column(col) + dstRow * sz,
-                  src->column(static_cast<int32_t>(i)) + slot.row * sz, sz);
+      cinfo.move(dst->data(col, dstRow), src->data(static_cast<int32_t>(i), slot.row));
+    }
+
+    // destruct source components (moved-from)
+    for (size_t i = 0; i < src->signature.size(); ++i) {
+      auto cid = src->signature[i];
+      auto &cinfo = componentInfo_[cid];
+      if (cinfo.destruct)
+        cinfo.destruct(src->data(static_cast<int32_t>(i), slot.row));
     }
 
     // construct the new component
     auto &info = componentInfo_[componentId<T>()];
-    new (dst->column(dst->indexOf(componentId<T>())) + dstRow * info.size)
+    new (dst->data(dst->indexOf(componentId<T>()), dstRow))
         T(std::forward<Args>(args)...);
 
-    // remove from src
+    // remove from src (destructs last-row components via callback)
     int32_t oldRow = slot.row;
-    Entity moved = src->swapRemove(oldRow);
+    auto *srcArch = src;
+    Entity moved = srcArch->swapRemove(oldRow, [&](int32_t r) {
+      for (size_t i = 0; i < srcArch->signature.size(); ++i) {
+        auto cid = srcArch->signature[i];
+        auto &cinfo = componentInfo_[cid];
+        if (cinfo.destruct)
+          cinfo.destruct(srcArch->data(static_cast<int32_t>(i), r));
+      }
+    });
     if (moved.index != uint32_t(-1))
       slots_[moved.index].row = oldRow;
 
@@ -148,25 +166,33 @@ public:
     Archetype *dst = findOrCreateArchetype(sig);
     int32_t dstRow = dst->add(Entity{e.index, slot.generation});
 
-    // copy all except the removed component
+    // move all except the removed component
     for (size_t i = 0; i < src->signature.size(); ++i) {
       auto cid = src->signature[i];
       if (cid == componentId<T>())
         continue;
-      size_t sz = componentInfo_[cid].size;
+      auto &cinfo = componentInfo_[cid];
       auto col = dst->indexOf(cid);
-      std::memcpy(dst->column(col) + dstRow * sz,
-                  src->column(static_cast<int32_t>(i)) + slot.row * sz, sz);
+      cinfo.move(dst->data(col, dstRow), src->data(static_cast<int32_t>(i), slot.row));
     }
 
     // destruct removed component
-    auto &info = componentInfo_[componentId<T>()];
+    auto &rinfo = componentInfo_[componentId<T>()];
     auto remCol = src->indexOf(componentId<T>());
-    if (info.destruct)
-      info.destruct(src->column(remCol) + slot.row * info.size);
+    if (rinfo.destruct)
+      rinfo.destruct(src->data(remCol, slot.row));
 
+    // remove from src (destructs last-row components via callback)
     int32_t oldRow = slot.row;
-    Entity moved = src->swapRemove(oldRow);
+    auto *srcArch = src;
+    Entity moved = srcArch->swapRemove(oldRow, [&](int32_t r) {
+      for (size_t i = 0; i < srcArch->signature.size(); ++i) {
+        auto cid = srcArch->signature[i];
+        auto &cinfo = componentInfo_[cid];
+        if (cinfo.destruct)
+          cinfo.destruct(srcArch->data(static_cast<int32_t>(i), r));
+      }
+    });
     if (moved.index != uint32_t(-1))
       slots_[moved.index].row = oldRow;
 
@@ -179,15 +205,20 @@ public:
     (void)slot.generation;
     auto &info = registerIfNew<T>();
     auto col = slot.archetype->indexOf(componentId<T>());
-    return *(T *)(slot.archetype->column(col) + slot.row * info.size);
+    return *(T *)(slot.archetype->data(col, slot.row));
   }
 
   template <typename... Ts> auto view() {
     (registerIfNew<Ts>(), ...);
 
+    uint64_t queryMask = 0;
+    ((queryMask |=
+       (uint64_t(1) << componentInfo_[componentId<Ts>()].bitIndex)),
+     ...);
+
     View<Ts...> v;
-    for (auto &[sig, arch] : archetypes_) {
-      if (((arch.indexOf(componentId<Ts>()) != -1) && ...))
+    for (auto &[mask, arch] : archetypes_) {
+      if ((mask & queryMask) == queryMask)
         v.archetypes.push_back(&arch);
     }
     return v;
@@ -208,19 +239,21 @@ public:
     for (size_t i = 0; i < arch->signature.size(); ++i) {
       auto cid = arch->signature[i];
       auto &info = componentInfo_[cid];
-      void *comp = arch->column(i) + slot.row * info.size;
+      void *comp = arch->data(static_cast<int32_t>(i), slot.row);
       visitor(e, cid, info.name, comp);
     }
   }
 
 private:
   ComponentInfo &ensureComponent(ComponentId id, size_t sz,
-                                 void (*dtor)(void *) = nullptr,
-                                 void (*mv)(void *, void *) = nullptr) {
+                                  void (*dtor)(void *) = nullptr,
+                                  void (*mv)(void *, void *) = nullptr) {
     auto it = componentInfo_.find(id);
     if (it != componentInfo_.end())
       return it->second;
-    return componentInfo_.emplace(id, ComponentInfo{sz, dtor, mv})
+    uint32_t bit = nextComponentBit_++;
+    return componentInfo_
+        .emplace(id, ComponentInfo{sz, dtor, mv, {}, bit})
         .first->second;
   }
 
@@ -233,8 +266,9 @@ private:
 
   std::vector<Slot> slots_;
   uint32_t freeHead_ = uint32_t(-1);
-  std::map<std::vector<ComponentId>, Archetype> archetypes_;
+  std::unordered_map<uint64_t, Archetype> archetypes_;
   Archetype *rootArchetype_ = nullptr;
+  uint32_t nextComponentBit_ = 0;
   std::unordered_map<ComponentId, ComponentInfo> componentInfo_;
 };
 

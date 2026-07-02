@@ -42,6 +42,7 @@ bool Application::init(const EngineConfig &config) {
   device_->setJobSystem(jobSystem_);
 
   assetManager_ = std::make_unique<AssetManager>(*device_, *vfs_);
+  assetManager_->setJobSystem(jobSystem_);
 
   audioDevice_ = std::make_unique<OpenALDevice>();
   auto *audioDev = static_cast<OpenALDevice *>(audioDevice_.get());
@@ -128,6 +129,8 @@ void Application::run() {
     if (audioDevice_) {
       audioDevice_->processPendingLoads();
     }
+
+    assetManager_->processLoadQueue();
 
     if (overlay_) {
       int w, h;

@@ -13,12 +13,13 @@ VulkanImage::~VulkanImage() { shutdown(); }
 VulkanImage::VulkanImage(VulkanImage &&other) noexcept
     : device_(other.device_), allocator_(other.allocator_),
       allocation_(other.allocation_), image_(other.image_),
-      view_(other.view_) {
+      view_(other.view_), arrayLayers_(other.arrayLayers_) {
   other.device_ = VK_NULL_HANDLE;
   other.allocator_ = nullptr;
   other.allocation_ = nullptr;
   other.image_ = VK_NULL_HANDLE;
   other.view_ = VK_NULL_HANDLE;
+  other.arrayLayers_ = 1;
 }
 
 VulkanImage &VulkanImage::operator=(VulkanImage &&other) noexcept {
@@ -29,39 +30,40 @@ VulkanImage &VulkanImage::operator=(VulkanImage &&other) noexcept {
     allocation_ = other.allocation_;
     image_ = other.image_;
     view_ = other.view_;
+    arrayLayers_ = other.arrayLayers_;
     other.device_ = VK_NULL_HANDLE;
     other.allocator_ = nullptr;
     other.allocation_ = nullptr;
     other.image_ = VK_NULL_HANDLE;
     other.view_ = VK_NULL_HANDLE;
+    other.arrayLayers_ = 1;
   }
   return *this;
 }
 
 bool VulkanImage::init(VkDevice device, VmaAllocator allocator,
-                       uint32_t width, uint32_t height, VkFormat format,
-                       VkImageUsageFlags usage, VmaMemoryUsage memoryUsage,
-                       VkImageAspectFlags aspectFlags,
-                       VkSampleCountFlagBits sampleCount) {
+                       const VulkanImageInfo &info) {
   device_ = device;
   allocator_ = allocator;
+  arrayLayers_ = info.arrayLayers;
 
   VkImageCreateInfo imageInfo{
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .flags = info.createFlags,
       .imageType = VK_IMAGE_TYPE_2D,
-      .format = format,
-      .extent = {width, height, 1},
+      .format = info.format,
+      .extent = {info.width, info.height, 1},
       .mipLevels = 1,
-      .arrayLayers = 1,
-      .samples = sampleCount,
+      .arrayLayers = info.arrayLayers,
+      .samples = info.sampleCount,
       .tiling = VK_IMAGE_TILING_OPTIMAL,
-      .usage = usage,
+      .usage = info.usage,
       .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
       .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
   };
 
   VmaAllocationCreateInfo allocInfo{
-      .usage = memoryUsage,
+      .usage = info.memoryUsage,
   };
 
   if (vmaCreateImage(allocator_, &imageInfo, &allocInfo, &image_,
@@ -73,9 +75,9 @@ bool VulkanImage::init(VkDevice device, VmaAllocator allocator,
   VkImageViewCreateInfo viewInfo{
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
       .image = image_,
-      .viewType = VK_IMAGE_VIEW_TYPE_2D,
-      .format = format,
-      .subresourceRange = {aspectFlags, 0, 1, 0, 1},
+      .viewType = info.viewType,
+      .format = info.format,
+      .subresourceRange = {info.aspectFlags, 0, 1, 0, info.arrayLayers},
   };
 
   if (vkCreateImageView(device_, &viewInfo, nullptr, &view_) != VK_SUCCESS) {
@@ -84,6 +86,23 @@ bool VulkanImage::init(VkDevice device, VmaAllocator allocator,
   }
 
   return true;
+}
+
+bool VulkanImage::init(VkDevice device, VmaAllocator allocator,
+                       uint32_t width, uint32_t height, VkFormat format,
+                       VkImageUsageFlags usage, VmaMemoryUsage memoryUsage,
+                       VkImageAspectFlags aspectFlags,
+                       VkSampleCountFlagBits sampleCount) {
+  VulkanImageInfo info{
+      .width = width,
+      .height = height,
+      .format = format,
+      .usage = usage,
+      .memoryUsage = memoryUsage,
+      .aspectFlags = aspectFlags,
+      .sampleCount = sampleCount,
+  };
+  return init(device, allocator, info);
 }
 
 void VulkanImage::shutdown() {
@@ -100,6 +119,7 @@ void VulkanImage::shutdown() {
 
   device_ = VK_NULL_HANDLE;
   allocator_ = nullptr;
+  arrayLayers_ = 1;
 }
 
 static VkFormat findSupportedFormat(VkPhysicalDevice physicalDevice,

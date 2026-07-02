@@ -27,6 +27,7 @@ public:
   uint32_t getWidth() const override { return width_; }
   uint32_t getHeight() const override { return height_; }
   Format getFormat() const override;
+  TextureType getType() const override { return type_; }
   uint32_t getMipLevels() const override { return 1; }
 
   VkImageView view() const { return image_.view(); }
@@ -47,6 +48,7 @@ private:
   VulkanImage image_;
   VkFormat vkFormat_ = VK_FORMAT_UNDEFINED;
   Format format_ = Format::R8G8B8A8_UNORM;
+  TextureType type_ = TextureType::Texture2D;
   VkSampler sampler_ = VK_NULL_HANDLE;
   uint32_t width_ = 0;
   uint32_t height_ = 0;

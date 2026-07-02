@@ -1,16 +1,14 @@
 #pragma once
 
-#include <RaidenEngineCore/Renderer/ITexture.hpp>
+#include "DecodedTextureData.hpp"
 #include <cstddef>
-#include <memory>
+#include <optional>
 
 namespace Raiden::Core {
 
-class IRenderDevice;
-
-// loads and transcodes a KTX2 file from memory
-// returns a ready-to-use ITexture or nullptr on failure
-std::shared_ptr<ITexture> loadKtx2(IRenderDevice &device, const std::byte *data,
-                                   size_t size);
+// decodes and transcodes a KTX2 file from memory (no GPU upload)
+// suitable for calling on worker threads
+std::optional<DecodedTextureData> decodeKtx2(const std::byte *data,
+                                             size_t size);
 
 } // namespace Raiden::Core

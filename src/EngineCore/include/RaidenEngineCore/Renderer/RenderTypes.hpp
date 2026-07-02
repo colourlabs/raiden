@@ -56,16 +56,36 @@ struct ShaderDesc {
   std::string_view path;
 };
 
+enum class CullMode : uint8_t {
+  None,
+  Front,
+  Back,
+};
+
+enum class CompareOp : uint8_t {
+  Less,
+  LessOrEqual,
+};
+
 struct PipelineDesc {
   ShaderDesc shader;
   VertexLayout vertexLayout;
   bool depthTestEnable = true;
+  bool depthWriteEnable = true;
+  CullMode cullMode = CullMode::Back;
+  CompareOp depthCompareOp = CompareOp::Less;
+};
+
+enum class TextureType : uint8_t {
+  Texture2D,
+  TextureCube,
 };
 
 struct TextureDesc {
   uint32_t width;
   uint32_t height;
   Format format;
+  TextureType type = TextureType::Texture2D;
 };
 
 struct alignas(16) FrameUniforms {

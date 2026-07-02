@@ -351,9 +351,17 @@ VulkanDevice::createPipeline(const PipelineDesc &desc) {
   };
 
   auto impl = std::make_unique<VulkanPipelineImpl>();
+  VkCompareOp depthOp = (desc.depthCompareOp == CompareOp::LessOrEqual)
+                            ? VK_COMPARE_OP_LESS_OR_EQUAL
+                            : VK_COMPARE_OP_LESS;
+
   if (!impl->init(device_, renderPass_.renderPass(), vertShader, fragShader,
-                  vertexDesc, desc.depthTestEnable, sampleCount_, setLayouts,
-                  3)) {
+                  vertexDesc, desc.depthTestEnable, desc.depthWriteEnable,
+                  depthOp,
+                  desc.cullMode == CullMode::None  ? VK_CULL_MODE_NONE
+                  : desc.cullMode == CullMode::Front ? VK_CULL_MODE_FRONT_BIT
+                                                     : VK_CULL_MODE_BACK_BIT,
+                  sampleCount_, setLayouts, 3)) {
     s_logger.error("Failed to create pipeline");
     vertShader.shutdown();
     fragShader.shutdown();
@@ -682,6 +690,9 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
   uniforms.projection =
       glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
   uniforms.projection[1][1] *= -1.0f;
+  // convert from OpenGL [-1,1] to Vulkan [0,1] depth range
+  uniforms.projection[2][2] = 0.5f * uniforms.projection[2][2] + 0.5f * uniforms.projection[3][2];
+  uniforms.projection[2][3] = 0.5f * uniforms.projection[2][3];
   uniforms.extra = {totalTime_, dt,
                     static_cast<float>(swapchain_.extent().width),
                     static_cast<float>(swapchain_.extent().height)};
@@ -692,8 +703,10 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
       if (cam.active) {
         uniforms.view = cam.view;
         uniforms.projection = glm::perspective(glm::radians(cam.fov), aspect,
-                                               cam.zNear, cam.zFar);
+                                                cam.zNear, cam.zFar);
         uniforms.projection[1][1] *= -1.0f;
+        uniforms.projection[2][2] = 0.5f * uniforms.projection[2][2] + 0.5f * uniforms.projection[3][2];
+        uniforms.projection[2][3] = 0.5f * uniforms.projection[2][3];
       }
     });
   }
@@ -908,8 +921,8 @@ std::shared_ptr<IMaterial> VulkanDevice::createMaterial(
 
   auto pipeline = std::make_unique<VulkanPipelineImpl>();
   if (!pipeline->init(device_, renderPass_.renderPass(), vertShader, fragShader,
-                      vertexDesc, desc.depthTest, sampleCount_, setLayouts,
-                      4)) {
+                      vertexDesc, desc.depthTest, true, VK_COMPARE_OP_LESS,
+                      VK_CULL_MODE_BACK_BIT, sampleCount_, setLayouts, 4)) {
     s_logger.error("createMaterial: failed to create pipeline");
     vertShader.shutdown();
     fragShader.shutdown();
