@@ -3,6 +3,7 @@
 #include <RaidenEngineCore/Core/IVirtualFileSystem.hpp>
 
 #include <cstdio>
+#include <shared_mutex>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -57,6 +58,7 @@ public:
   std::string resolveToRealPath(std::string_view virtualPath) const;
 
 private:
+  mutable std::shared_mutex mutex_;
   std::vector<MountPoint> mounts_;
   std::unordered_map<std::string, std::vector<std::byte>> memData_;
 };

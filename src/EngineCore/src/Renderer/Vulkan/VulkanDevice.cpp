@@ -1,9 +1,9 @@
-#include <RaidenEngineCore/Renderer/Vulkan/VulkanMaterial.hpp>
 #include <RaidenEngineCore/ECS/Camera.hpp>
 #include <RaidenEngineCore/Logger.hpp>
 #include <RaidenEngineCore/Platform/IPlatform.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanBufferImpl.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanDevice.hpp>
+#include <RaidenEngineCore/Renderer/Vulkan/VulkanMaterial.hpp>
 
 #include <array>
 #include <chrono>
@@ -155,12 +155,6 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
       .pEnabledFeatures = &deviceFeatures,
   };
 
-  if (enableValidation_) {
-    deviceCreateInfo.enabledLayerCount =
-        static_cast<uint32_t>(validationLayers_.size());
-    deviceCreateInfo.ppEnabledLayerNames = validationLayers_.data();
-  }
-
   if (vkCreateDevice(physicalDevice_, &deviceCreateInfo, nullptr, &device_) !=
       VK_SUCCESS) {
     s_logger.critical("Failed to create logical device");
@@ -186,10 +180,8 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
   // resolve MSAA sample count
   sampleCount_ = toVkSampleCount(config_.antialiasing);
   if (sampleCount_ > VK_SAMPLE_COUNT_1_BIT) {
-    VkSampleCountFlags colorCounts =
-        props.limits.framebufferColorSampleCounts;
-    VkSampleCountFlags depthCounts =
-        props.limits.framebufferDepthSampleCounts;
+    VkSampleCountFlags colorCounts = props.limits.framebufferColorSampleCounts;
+    VkSampleCountFlags depthCounts = props.limits.framebufferDepthSampleCounts;
     if (!(colorCounts & sampleCount_) || !(depthCounts & sampleCount_)) {
       s_logger.warn("MSAAx{} not supported, falling back to no MSAA",
                     static_cast<int>(sampleCount_));
@@ -219,7 +211,7 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
   depthFormat_ = chooseDepthFormat();
 
   if (!renderPass_.init(device_, swapchain_.imageFormat(), depthFormat_,
-                         sampleCount_)) {
+                        sampleCount_)) {
     s_logger.critical("Failed to create render pass");
     return false;
   }
@@ -249,8 +241,10 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
     return false;
   }
 
-  if (!descriptorPool_.init(device_, physicalDevice_, allocator_.handle(), transferPool_,
-                            graphicsQueue_)) {
+  // per-worker secondary command pools created lazily in drawFrame
+
+  if (!descriptorPool_.init(device_, physicalDevice_, allocator_.handle(),
+                            transferPool_, graphicsQueue_)) {
     s_logger.critical("Failed to create descriptor pool");
     return false;
   }
@@ -287,10 +281,14 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
     vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
   }
 
-  if (!frameContext_.init(device_, graphicsQueueIndex_)) {
+  auto const imageCount = static_cast<uint32_t>(swapchain_.imageViews().size());
+
+  if (!frameContext_.init(device_, graphicsQueueIndex_, imageCount)) {
     s_logger.critical("Failed to create frame context");
     return false;
   }
+
+  frameSecondaries_.resize(imageCount);
 
   // initialise frame timing
   lastFrameTime_ = std::chrono::steady_clock::now();
@@ -406,6 +404,17 @@ void VulkanDevice::shutdown() {
   allocator_.shutdown();
   renderPass_.shutdown();
   frameContext_.shutdown();
+
+  for (auto &frame : frameSecondaries_) {
+    frame.cbs.clear();
+  }
+
+  for (auto pool : workerPools_) {
+    if (pool != VK_NULL_HANDLE) {
+      vkDestroyCommandPool(device_, pool, nullptr);
+    }
+  }
+  workerPools_.clear();
 
   if (transferPool_ != VK_NULL_HANDLE) {
     vkDestroyCommandPool(device_, transferPool_, nullptr);
@@ -629,8 +638,6 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
       .pClearValues = clearValues,
   };
 
-  vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
   VkViewport viewport{
       .x = 0.0f,
       .y = 0.0f,
@@ -639,13 +646,21 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
       .minDepth = 0.0f,
       .maxDepth = 1.0f,
   };
-  vkCmdSetViewport(cmd, 0, 1, &viewport);
-
   VkRect2D scissor{
       .offset = {0, 0},
       .extent = swapchain_.extent(),
   };
-  vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+  bool useMT = (jobSystem_ != nullptr) && (jobSystem_->workerCount() > 1) &&
+               (lastDrawCalls_ >= kMinDrawCallsForMT);
+  if (!useMT) {
+    vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+  } else {
+    vkCmdBeginRenderPass(cmd, &renderPassInfo,
+                         VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+  }
 
   // delta time
   auto now = std::chrono::steady_clock::now();
@@ -675,8 +690,8 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
     world_->view<Camera>().each([&](Entity, Camera &cam) {
       if (cam.active) {
         uniforms.view = cam.view;
-        uniforms.projection = glm::perspective(
-            glm::radians(cam.fov), aspect, cam.zNear, cam.zFar);
+        uniforms.projection = glm::perspective(glm::radians(cam.fov), aspect,
+                                               cam.zNear, cam.zFar);
         uniforms.projection[1][1] *= -1.0f;
       }
     });
@@ -693,8 +708,114 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
 
   perFrame.uniformBuffer.upload(&uniforms, sizeof(uniforms));
 
-  VulkanCommandBuffer vkCmdBuf(cmd, descriptorPool_, perFrame.uniformSet);
-  callback(vkCmdBuf);
+  if (useMT) {
+    uint32_t frameCtx = frameContext_.currentFrame();
+    uint32_t numWorkers = jobSystem_->workerCount();
+
+    // ensure per-worker pools exist
+    if (workerPools_.size() < numWorkers) {
+      workerPools_.resize(numWorkers, VK_NULL_HANDLE);
+    }
+    for (uint32_t i = 0; i < numWorkers; ++i) {
+      if (workerPools_[i] == VK_NULL_HANDLE) {
+        VkCommandPoolCreateInfo poolInfo{
+            .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+            .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+            .queueFamilyIndex = graphicsQueueIndex_,
+        };
+        vkCreateCommandPool(device_, &poolInfo, nullptr, &workerPools_[i]);
+      }
+    }
+
+    auto &secondaries = frameSecondaries_[frameCtx];
+    if (secondaries.cbs.size() < numWorkers) {
+      secondaries.cbs.resize(numWorkers, VK_NULL_HANDLE);
+    }
+
+    // ensure/reset secondary CBs from per-worker pools
+    for (uint32_t i = 0; i < numWorkers; ++i) {
+      if (secondaries.cbs[i] == VK_NULL_HANDLE) {
+        VkCommandBufferAllocateInfo allocInfo{
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .commandPool = workerPools_[i],
+            .level = VK_COMMAND_BUFFER_LEVEL_SECONDARY,
+            .commandBufferCount = 1,
+        };
+        vkAllocateCommandBuffers(device_, &allocInfo, &secondaries.cbs[i]);
+      } else {
+        vkResetCommandBuffer(secondaries.cbs[i], 0);
+      }
+    }
+
+    // inheritance info for secondary CBs
+    VkCommandBufferInheritanceInfo inheritance{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
+        .renderPass = renderPass_.renderPass(),
+        .subpass = 0,
+        .framebuffer = framebuffers_[imageIndex],
+    };
+
+    std::atomic<uint32_t> readyCount{0};
+    uint32_t workerStats[32][2]{}; // [worker][0]=drawCalls, [1]=triangles
+    uint32_t cappedWorkers = std::min(numWorkers, 32u);
+
+    // phase 1: begin all secondary CBs on the main thread
+    for (uint32_t i = 0; i < cappedWorkers; ++i) {
+      VkCommandBuffer secCmd = secondaries.cbs[i];
+
+      VkCommandBufferBeginInfo secBegin{
+          .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+          .flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT,
+          .pInheritanceInfo = &inheritance,
+      };
+      vkBeginCommandBuffer(secCmd, &secBegin);
+    }
+
+    // phase 2: submit all jobs (workers record into their own pool's CB)
+    for (uint32_t i = 0; i < cappedWorkers; ++i) {
+      VkCommandBuffer secCmd = secondaries.cbs[i];
+
+      JobDesc desc;
+      desc.task = [&callback, secCmd, &pool = descriptorPool_,
+                   uboSet = perFrame.uniformSet, &readyCount,
+                   &stats = workerStats[i], i, cappedWorkers, viewport,
+                   scissor]() {
+        VulkanCommandBuffer vkCmdBuf(secCmd, pool, uboSet);
+        vkCmdBuf.setViewport(static_cast<int>(viewport.x),
+                             static_cast<int>(viewport.y),
+                             static_cast<int>(viewport.width),
+                             static_cast<int>(viewport.height));
+        vkCmdBuf.setScissor(scissor.offset.x, scissor.offset.y,
+                            scissor.extent.width, scissor.extent.height);
+        callback(vkCmdBuf, i, cappedWorkers);
+        vkEndCommandBuffer(secCmd);
+        stats[0] = vkCmdBuf.drawCalls();
+        stats[1] = vkCmdBuf.triangles();
+        readyCount.fetch_add(1, std::memory_order_release);
+      };
+      jobSystem_->submit(std::move(desc));
+    }
+
+    // wait for all workers, assisting other jobs
+    while (readyCount.load(std::memory_order_acquire) < cappedWorkers)
+      jobSystem_->assistOnce();
+
+    // execute secondaries from primary
+    vkCmdExecuteCommands(cmd, cappedWorkers, secondaries.cbs.data());
+
+    // aggregate draw statistics
+    lastDrawCalls_ = 0;
+    lastTriangles_ = 0;
+    for (uint32_t i = 0; i < cappedWorkers; ++i) {
+      lastDrawCalls_ += workerStats[i][0];
+      lastTriangles_ += workerStats[i][1];
+    }
+  } else {
+    VulkanCommandBuffer vkCmdBuf(cmd, descriptorPool_, perFrame.uniformSet);
+    callback(vkCmdBuf, 0, 1);
+    lastDrawCalls_ = vkCmdBuf.drawCalls();
+    lastTriangles_ = vkCmdBuf.triangles();
+  }
 
   vkCmdEndRenderPass(cmd);
 
@@ -702,8 +823,6 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
                       idx * 2 + 1);
 
   timestampReady_[idx] = true;
-  lastDrawCalls_ = vkCmdBuf.drawCalls();
-  lastTriangles_ = vkCmdBuf.triangles();
 
   frameIndex_++;
 
@@ -788,7 +907,8 @@ std::shared_ptr<IMaterial> VulkanDevice::createMaterial(
 
   auto pipeline = std::make_unique<VulkanPipelineImpl>();
   if (!pipeline->init(device_, renderPass_.renderPass(), vertShader, fragShader,
-                      vertexDesc, desc.depthTest, sampleCount_, setLayouts, 4)) {
+                      vertexDesc, desc.depthTest, sampleCount_, setLayouts,
+                      4)) {
     s_logger.error("createMaterial: failed to create pipeline");
     vertShader.shutdown();
     fragShader.shutdown();
@@ -843,12 +963,12 @@ bool VulkanDevice::createFramebuffers() {
 
     if (msaa) {
       attachments[0] = msaaColorImages_[i].view(); // MSAA color
-      attachments[1] = depthImage_.view();          // MSAA depth
-      attachments[2] = swapchain_.imageViews()[i];  // resolve target
+      attachments[1] = depthImage_.view();         // MSAA depth
+      attachments[2] = swapchain_.imageViews()[i]; // resolve target
       attachmentCount = depthFormat_ != VK_FORMAT_UNDEFINED ? 3u : 2u;
     } else {
-      attachments[0] = swapchain_.imageViews()[i];  // color
-      attachments[1] = depthImage_.view();           // depth
+      attachments[0] = swapchain_.imageViews()[i]; // color
+      attachments[1] = depthImage_.view();         // depth
       attachmentCount = depthFormat_ != VK_FORMAT_UNDEFINED ? 2u : 1u;
     }
 

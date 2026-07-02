@@ -9,9 +9,7 @@ class VulkanSwapchain;
 
 class VulkanFrameContext {
 public:
-  static constexpr uint32_t kMaxFramesInFlight = 2;
-
-  bool init(VkDevice device, uint32_t graphicsFamily);
+  bool init(VkDevice device, uint32_t graphicsFamily, uint32_t imageCount);
   void shutdown();
 
   // returns false if the swapchain is out of date and needs recreation
@@ -20,6 +18,7 @@ public:
   VkCommandBuffer currentCommandBuffer() const {
     return commandBuffers_[currentFrame_];
   }
+  uint32_t currentFrame() const { return currentFrame_; }
 
   // submits the recorded command buffer and presents. returns false if the
   // swapchain is out of date / suboptimal and needs recreation.
@@ -35,6 +34,7 @@ private:
   std::vector<VkSemaphore> renderFinishedSemaphores_;
   std::vector<VkFence> inFlightFences_;
 
+  uint32_t frameCount_ = 0;
   uint32_t currentFrame_ = 0;
 };
 

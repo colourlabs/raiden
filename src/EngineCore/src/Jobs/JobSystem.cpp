@@ -38,9 +38,7 @@ struct JobSystem::WorkerThread {
 
 JobSystem::JobSystem() = default;
 
-JobSystem::~JobSystem() {
-  shutdown();
-}
+JobSystem::~JobSystem() { shutdown(); }
 
 void JobSystem::init(const JobSystemConfig &config) {
   if (initialized_)
@@ -79,8 +77,10 @@ void JobSystem::shutdown() {
 
   {
     std::lock_guard<std::mutex> lock(globalMutex_);
-    globalQueue_.clear();
+    for (auto &q : globalQueues_)
+      q.clear();
   }
+
   {
     std::lock_guard<std::mutex> lock(pendingMutex_);
     pendingJobs_.clear();
@@ -93,26 +93,26 @@ bool JobSystem::dependencyUnmet(const InternalJob &job) {
   return job.dependency.impl_ && !job.dependency.isComplete();
 }
 
-void JobSystem::wakeOne() {
-  wakeCV_.notify_one();
-}
+void JobSystem::wakeOne() { wakeCV_.notify_one(); }
 
-void JobSystem::wakeAll() {
-  wakeCV_.notify_all();
-}
+void JobSystem::wakeAll() { wakeCV_.notify_all(); }
 
 void JobSystem::enqueue(std::shared_ptr<InternalJob> job) {
   if (!job)
     return;
   std::lock_guard<std::mutex> lock(globalMutex_);
-  globalQueue_.push_back(std::move(job));
+  globalQueues_[static_cast<size_t>(job->priority)].push_back(std::move(job));
 }
 
 JobCounter JobSystem::submit(JobDesc desc) {
+  // NOTE: JobCounter::Impl is intentionally NOT pooled. The caller retains
+  // their own long-lived shared_ptr to this Impl via the returned
+  // JobCounter, so the job system can never safely reclaim/reset it -
+  // doing so would corrupt state the caller might still be reading.
   auto counter = std::make_shared<JobCounter::Impl>();
   counter->counter.store(1, std::memory_order_relaxed);
 
-  auto job = std::make_shared<InternalJob>();
+  auto job = jobPool_.acquire();
   job->task = std::move(desc.task);
   job->priority = desc.priority;
   job->label = desc.label;
@@ -141,14 +141,17 @@ JobCounter JobSystem::submitBatch(std::span<JobDesc> descs) {
     return result;
   }
 
+  // Same rationale as submit(): counters are never pooled.
   auto counter = std::make_shared<JobCounter::Impl>();
   counter->counter.store(static_cast<int32_t>(descs.size()),
                          std::memory_order_relaxed);
 
   bool enqueuedAny = false;
+  uint32_t numWorkers = static_cast<uint32_t>(workers_.size());
+  uint32_t w = 0;
 
   for (auto &desc : descs) {
-    auto job = std::make_shared<InternalJob>();
+    auto job = jobPool_.acquire();
     job->task = desc.task;
     job->priority = desc.priority;
     job->label = desc.label;
@@ -158,10 +161,18 @@ JobCounter JobSystem::submitBatch(std::span<JobDesc> descs) {
     if (dependencyUnmet(*job)) {
       std::lock_guard<std::mutex> lock(pendingMutex_);
       pendingJobs_.push_back(std::move(job));
-    } else {
-      enqueue(std::move(job));
-      enqueuedAny = true;
+      continue;
     }
+
+    if (numWorkers > 0) {
+      auto &worker = workers_[w % numWorkers];
+      std::lock_guard<std::mutex> lock(worker->mutex);
+      worker->queue.push_back(std::move(job));
+      ++w;
+    } else {
+      enqueue(std::move(job)); // fallback: no workers, use global queue
+    }
+    enqueuedAny = true;
   }
 
   if (enqueuedAny)
@@ -212,9 +223,7 @@ bool JobSystem::assistOnce() {
   return tryExecuteOne(UINT32_MAX);
 }
 
-int32_t JobSystem::currentWorkerIndex() {
-  return tls_workerIndex;
-}
+int32_t JobSystem::currentWorkerIndex() { return tls_workerIndex; }
 
 // job retrieval and execution
 
@@ -234,8 +243,7 @@ JobSystem::tryGetJob(uint32_t workerIndex) {
   // steal from a random victim (FIFO from front to minimise contention)
   uint32_t numWorkers = static_cast<uint32_t>(workers_.size());
   if (numWorkers > 0) {
-    uint32_t start =
-        static_cast<uint32_t>(std::rand()) % numWorkers;
+    uint32_t start = static_cast<uint32_t>(std::rand()) % numWorkers;
     for (uint32_t i = 0; i < numWorkers; ++i) {
       uint32_t victimIndex = (start + i) % numWorkers;
       if (victimIndex == workerIndex)
@@ -254,15 +262,13 @@ JobSystem::tryGetJob(uint32_t workerIndex) {
   // global queue (pick highest priority)
   {
     std::lock_guard<std::mutex> lock(globalMutex_);
-    if (!globalQueue_.empty()) {
-      auto bestIt = globalQueue_.begin();
-      for (auto it = globalQueue_.begin(); it != globalQueue_.end(); ++it) {
-        if ((*it)->priority > (*bestIt)->priority)
-          bestIt = it;
+    for (int p = static_cast<int>(JobPriority::Count) - 1; p >= 0; --p) {
+      auto &q = globalQueues_[p];
+      if (!q.empty()) {
+        auto job = std::move(q.back());
+        q.pop_back();
+        return job;
       }
-      auto job = std::move(*bestIt);
-      globalQueue_.erase(bestIt);
-      return job;
     }
   }
 
@@ -282,9 +288,15 @@ void JobSystem::executeJob(std::shared_ptr<InternalJob> job) {
   if (job->task)
     job->task();
 
-  if (job->counterToDecrement) {
-    int32_t prev =
-        job->counterToDecrement->counter.fetch_sub(1, std::memory_order_acq_rel);
+  auto counter = job->counterToDecrement;
+  job->counterToDecrement.reset();
+  job->task = nullptr; // release captured state before pooling
+  job->dependency = JobCounter{};
+
+  jobPool_.release(std::move(job));
+
+  if (counter) {
+    int32_t prev = counter->counter.fetch_sub(1, std::memory_order_acq_rel);
     if (prev == 1) {
       counterReachedZero();
     }

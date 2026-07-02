@@ -41,6 +41,10 @@ public:
 
   virtual void setMasterVolume(float vol) = 0;
   virtual float masterVolume() const = 0;
+
+  // called once per frame from the main thread to finalize
+  // background-decoded audio (uploads OpenAL buffers)
+  virtual void processPendingLoads() = 0;
 };
 
 } // namespace Raiden::Core

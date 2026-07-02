@@ -12,7 +12,7 @@ namespace Raiden::Core {
 
 static const Logger s_logger("Raiden::Core::OSFileSystem");
 
-// ---- MemFile ----
+// MemFile
 
 MemFile::MemFile(std::vector<std::byte> data) : data_(std::move(data)) {}
 
@@ -52,7 +52,7 @@ void MemFile::close() {
   pos_ = 0;
 }
 
-// ---- OSFile ----
+// OSFile
 
 OSFile::OSFile(const std::string &path) {
   fp_ = std::fopen(path.c_str(), "rb");
@@ -92,14 +92,17 @@ void OSFile::close() {
   }
 }
 
-// ---- OSFileSystem ----
+// OSFileSystem
 
 void OSFileSystem::registerData(std::string_view path,
                                 std::vector<std::byte> data) {
+  std::lock_guard lock(mutex_);
   memData_[std::string(path)] = std::move(data);
 }
 
 std::unique_ptr<IFile> OSFileSystem::open(std::string_view path) {
+  std::shared_lock lock(mutex_);
+
   // check in-memory data first
   {
     auto it = memData_.find(std::string(path));
@@ -109,6 +112,8 @@ std::unique_ptr<IFile> OSFileSystem::open(std::string_view path) {
   }
 
   std::string realPath = resolveToRealPath(path);
+  lock.unlock();
+
   auto file = std::make_unique<OSFile>(realPath);
   if (file->size() == 0 && !std::filesystem::exists(realPath)) {
     s_logger.error("File not found: '{}' (resolved: '{}')", path, realPath);
@@ -118,13 +123,28 @@ std::unique_ptr<IFile> OSFileSystem::open(std::string_view path) {
 }
 
 bool OSFileSystem::exists(std::string_view path) const {
+  std::shared_lock lock(mutex_);
+
   if (memData_.contains(std::string(path)))
     return true;
   std::string realPath = resolveToRealPath(path);
+  lock.unlock();
+
   return std::filesystem::exists(realPath);
 }
 
 std::string OSFileSystem::readAll(std::string_view path) {
+  // fast path: in-memory data
+  {
+    std::shared_lock lock(mutex_);
+    auto it = memData_.find(std::string(path));
+    if (it != memData_.end()) {
+      auto data = it->second;
+      return std::string(reinterpret_cast<const char *>(data.data()),
+                         data.size());
+    }
+  }
+
   auto file = open(path);
   if (!file)
     return {};
@@ -138,11 +158,12 @@ std::string OSFileSystem::readAll(std::string_view path) {
 }
 
 std::vector<std::byte> OSFileSystem::readBytes(std::string_view path) {
-  // check in-memory data first (fast path avoids IFile allocation)
+  // fast path: in-memory data (returns a copy)
   {
+    std::shared_lock lock(mutex_);
     auto it = memData_.find(std::string(path));
     if (it != memData_.end()) {
-      return it->second; // return a copy
+      return it->second;
     }
   }
 
@@ -175,12 +196,16 @@ bool OSFileSystem::mount(std::string_view virtualPath,
   if (!rp.empty() && rp.back() != '/')
     rp.push_back('/');
 
-  mounts_.push_back({std::move(vp), std::move(rp)});
+  {
+    std::lock_guard lock(mutex_);
+    mounts_.push_back({std::move(vp), std::move(rp)});
+  }
   s_logger.info("Mounted '{}' -> '{}'", virtualPath, realPath);
   return true;
 }
 
 std::string OSFileSystem::resolveToRealPath(std::string_view path) const {
+  // caller must hold mutex_ (shared or exclusive)
   // find the longest matching prefix
   const MountPoint *best = nullptr;
   size_t bestLen = 0;

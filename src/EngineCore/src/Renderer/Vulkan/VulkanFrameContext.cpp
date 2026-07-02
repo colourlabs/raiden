@@ -6,8 +6,10 @@ namespace Raiden::Core {
 
 static const Logger s_logger("Raiden::Core::VulkanFrameContext");
 
-bool VulkanFrameContext::init(VkDevice device, uint32_t graphicsFamily) {
+bool VulkanFrameContext::init(VkDevice device, uint32_t graphicsFamily,
+                              uint32_t imageCount) {
   device_ = device;
+  frameCount_ = imageCount;
 
   // command pool
   VkCommandPoolCreateInfo poolInfo{
@@ -23,13 +25,13 @@ bool VulkanFrameContext::init(VkDevice device, uint32_t graphicsFamily) {
   }
 
   // command buffers, one per frame in flight
-  commandBuffers_.resize(kMaxFramesInFlight);
+  commandBuffers_.resize(imageCount);
 
   VkCommandBufferAllocateInfo allocInfo{
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
       .commandPool = commandPool_,
       .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-      .commandBufferCount = kMaxFramesInFlight,
+      .commandBufferCount = imageCount,
   };
 
   if (vkAllocateCommandBuffers(device_, &allocInfo, commandBuffers_.data()) !=
@@ -38,10 +40,10 @@ bool VulkanFrameContext::init(VkDevice device, uint32_t graphicsFamily) {
     return false;
   }
 
-  // sync objects, one set per frame in flight
-  imageAvailableSemaphores_.resize(kMaxFramesInFlight);
-  renderFinishedSemaphores_.resize(kMaxFramesInFlight);
-  inFlightFences_.resize(kMaxFramesInFlight);
+  // sync objects, one set per swapchain image
+  imageAvailableSemaphores_.resize(imageCount);
+  renderFinishedSemaphores_.resize(imageCount);
+  inFlightFences_.resize(imageCount);
 
   VkSemaphoreCreateInfo semInfo{
       .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
@@ -53,7 +55,7 @@ bool VulkanFrameContext::init(VkDevice device, uint32_t graphicsFamily) {
                                              // beginFrame doesn't block forever
   };
 
-  for (uint32_t i = 0; i < kMaxFramesInFlight; ++i) {
+  for (uint32_t i = 0; i < imageCount; ++i) {
     if (vkCreateSemaphore(device_, &semInfo, nullptr,
                           &imageAvailableSemaphores_[i]) != VK_SUCCESS ||
         vkCreateSemaphore(device_, &semInfo, nullptr,
@@ -65,7 +67,7 @@ bool VulkanFrameContext::init(VkDevice device, uint32_t graphicsFamily) {
     }
   }
 
-  s_logger.info("Frame context created.");
+  s_logger.info("Frame context created ({} sync sets).", imageCount);
   return true;
 }
 
@@ -116,7 +118,8 @@ bool VulkanFrameContext::endFrame(VulkanSwapchain &swapchain,
   VkSemaphore waitSemaphores[] = {imageAvailableSemaphores_[currentFrame_]};
   VkPipelineStageFlags waitStages[] = {
       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-  VkSemaphore signalSemaphores[] = {renderFinishedSemaphores_[currentFrame_]};
+  VkSemaphore signalSemaphores[] = {
+      renderFinishedSemaphores_[imageIndex]};
 
   VkSubmitInfo submitInfo{
       .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -140,7 +143,8 @@ bool VulkanFrameContext::endFrame(VulkanSwapchain &swapchain,
   VkPresentInfoKHR presentInfo{
       .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
       .waitSemaphoreCount = 1,
-      .pWaitSemaphores = signalSemaphores,
+      .pWaitSemaphores =
+          signalSemaphores,
       .swapchainCount = 1,
       .pSwapchains = swapchains,
       .pImageIndices = &imageIndex,
@@ -148,7 +152,7 @@ bool VulkanFrameContext::endFrame(VulkanSwapchain &swapchain,
 
   VkResult result = vkQueuePresentKHR(presentQueue, &presentInfo);
 
-  currentFrame_ = (currentFrame_ + 1) % kMaxFramesInFlight;
+  currentFrame_ = (currentFrame_ + 1) % frameCount_;
 
   if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
     return false; // caller should recreate swapchain

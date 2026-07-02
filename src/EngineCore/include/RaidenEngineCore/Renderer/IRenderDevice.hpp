@@ -11,6 +11,8 @@
 #include <functional>
 #include <memory>
 
+namespace Raiden::Core { class JobSystem; }
+
 namespace Raiden::Core {
 
 class IPlatform;
@@ -33,9 +35,14 @@ public:
                  std::shared_ptr<ITexture> emissive = nullptr,
                  std::shared_ptr<ITexture> occlusion = nullptr) = 0;
 
+  virtual void setJobSystem(class JobSystem &js) = 0;
+
   virtual void waitIdle() = 0;
 
-  using RenderCallback = std::function<void(ICommandBuffer &)>;
+  // workerIndex / totalWorkers let the callback split work across threads
+  using RenderCallback =
+      std::function<void(ICommandBuffer &, uint32_t workerIndex,
+                         uint32_t totalWorkers)>;
   virtual bool drawFrame(const RenderCallback &callback) = 0;
 };
 

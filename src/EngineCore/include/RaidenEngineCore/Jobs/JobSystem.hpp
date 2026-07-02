@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <cassert>
 #include <condition_variable>
@@ -28,12 +29,7 @@ private:
   std::shared_ptr<Impl> impl_;
 };
 
-enum class JobPriority : uint8_t {
-  Low = 0,
-  Normal = 1,
-  High = 2,
-  Count
-};
+enum class JobPriority : uint8_t { Low = 0, Normal = 1, High = 2, Count };
 
 struct JobDesc {
   std::function<void()> task;
@@ -78,8 +74,32 @@ public:
   [[nodiscard]] static int32_t currentWorkerIndex();
 
 private:
+  template <typename T> struct Pool {
+    std::mutex mutex;
+    std::vector<std::shared_ptr<T>> free;
+
+    std::shared_ptr<T> acquire() {
+      std::lock_guard<std::mutex> lock(mutex);
+      if (!free.empty()) {
+        auto obj = std::move(free.back());
+        free.pop_back();
+        obj->~T();
+        new (obj.get()) T();
+        return obj;
+      }
+      return std::make_shared<T>();
+    }
+    
+    void release(std::shared_ptr<T> obj) {
+      std::lock_guard<std::mutex> lock(mutex);
+      free.push_back(std::move(obj));
+    }
+  };
+
   struct InternalJob;
   struct WorkerThread;
+
+  Pool<InternalJob> jobPool_;
 
   static bool dependencyUnmet(const InternalJob &job);
   void workerMain(uint32_t workerIndex);
@@ -96,7 +116,9 @@ private:
   bool initialized_ = false;
 
   std::mutex globalMutex_;
-  std::vector<std::shared_ptr<InternalJob>> globalQueue_;
+  std::array<std::vector<std::shared_ptr<InternalJob>>,
+            static_cast<size_t>(JobPriority::Count)>
+      globalQueues_;
 
   std::mutex pendingMutex_;
   std::vector<std::shared_ptr<InternalJob>> pendingJobs_;

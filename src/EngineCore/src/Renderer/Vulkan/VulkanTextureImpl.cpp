@@ -180,6 +180,10 @@ VkDescriptorSet VulkanTextureImpl::getOrCreateDescriptorSet(
   if (descriptorSet_ != VK_NULL_HANDLE)
     return descriptorSet_;
 
+  std::lock_guard<std::mutex> lock(descMutex_);
+  if (descriptorSet_ != VK_NULL_HANDLE)
+    return descriptorSet_;
+
   VkDescriptorSetAllocateInfo allocInfo{
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
       .descriptorPool = pool,

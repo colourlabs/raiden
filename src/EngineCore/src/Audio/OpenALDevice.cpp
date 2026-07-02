@@ -17,8 +17,7 @@ OpenALDevice::OpenALDevice() = default;
 
 OpenALDevice::~OpenALDevice() { shutdown(); }
 
-bool OpenALDevice::init(const AudioConfig &config,
-                         IVirtualFileSystem &vfs) {
+bool OpenALDevice::init(const AudioConfig &config, IVirtualFileSystem &vfs) {
   vfs_ = &vfs;
   masterVolume_ = config.masterVolume;
   alcDevice_ = alcOpenDevice(nullptr);
@@ -51,6 +50,11 @@ void OpenALDevice::shutdown() {
   }
   sounds_.clear();
 
+  {
+    std::lock_guard<std::mutex> lock(pendingMutex_);
+    pendingLoads_.clear();
+  }
+
   if (alcContext_) {
     alcMakeContextCurrent(nullptr);
     alcDestroyContext(static_cast<ALCcontext *>(alcContext_));
@@ -68,6 +72,72 @@ OpenALDevice::SoundId OpenALDevice::load(std::string_view path) {
   if (!initialized_)
     return 0;
 
+  if (jobSystem_) {
+    // async path: read on main thread, decode on worker, upload later
+    auto fileData = vfs_->readBytes(path);
+    if (fileData.empty())
+      return 0;
+
+    auto pending = std::make_unique<PendingDecode>();
+
+    SoundId id = nextSoundId_++;
+
+    JobDesc desc;
+    desc.task = [pending = pending.get(),
+                 data = std::move(fileData)]() mutable {
+      // decode on worker thread
+      ma_decoder decoder;
+      ma_decoder_config config =
+          ma_decoder_config_init(ma_format_s16, 2, 48000);
+
+      if (ma_decoder_init_memory(data.data(), data.size(), &config, &decoder) ==
+          MA_SUCCESS) {
+        int channels = static_cast<int>(decoder.outputChannels);
+        int sampleRate = static_cast<int>(decoder.outputSampleRate);
+
+        ma_uint64 cap = 65536;
+        pending->samples.resize(cap * channels);
+
+        ma_uint64 total = 0;
+        for (;;) {
+          ma_uint64 framesRead = 0;
+          ma_result result = ma_decoder_read_pcm_frames(
+              &decoder, pending->samples.data() + total * channels, cap - total,
+              &framesRead);
+
+          total += framesRead;
+
+          if (framesRead == 0 || result != MA_SUCCESS)
+            break;
+
+          if (total == cap) {
+            cap *= 2;
+            pending->samples.resize(cap * channels);
+          }
+        }
+
+        pending->samples.resize(total * channels);
+        pending->channels = channels;
+        pending->sampleRate = sampleRate;
+        ma_decoder_uninit(&decoder);
+        pending->decodeFailed = (total == 0);
+      } else {
+        pending->decodeFailed = true;
+      }
+
+      pending->ready.store(true, std::memory_order_release);
+    };
+
+    {
+      std::lock_guard<std::mutex> lock(pendingMutex_);
+      pendingLoads_[id] = std::move(pending);
+    }
+
+    jobSystem_->submit(std::move(desc));
+    return id;
+  }
+
+  // synchronous fallback when no job system is set
   std::vector<int16_t> samples;
   int channels = 0, sampleRate = 0;
   if (!decodeFile(path, samples, channels, sampleRate))
@@ -98,18 +168,68 @@ OpenALDevice::SoundId OpenALDevice::load(std::string_view path) {
   return id;
 }
 
-void OpenALDevice::unload(SoundId sound) {
-  auto it = sounds_.find(sound);
-  if (it == sounds_.end())
-    return;
+void OpenALDevice::processPendingLoads() {
+  std::lock_guard<std::mutex> lock(pendingMutex_);
 
-  for (auto &[vid, voice] : voices_) {
-    if (voice.soundId == sound)
-      stop(vid);
+  auto it = pendingLoads_.begin();
+  while (it != pendingLoads_.end()) {
+    auto &pending = it->second;
+    if (!pending->ready.load(std::memory_order_acquire)) {
+      ++it;
+      continue;
+    }
+
+    SoundId id = it->first;
+
+    if (pending->decodeFailed || pending->samples.empty()) {
+      pendingLoads_.erase(it++);
+      continue;
+    }
+
+    ALenum format;
+    if (pending->channels == 1)
+      format = AL_FORMAT_MONO16;
+    else if (pending->channels == 2)
+      format = AL_FORMAT_STEREO16;
+    else {
+      pendingLoads_.erase(it++);
+      continue;
+    }
+
+    ALuint buffer = 0;
+    alGenBuffers(1, &buffer);
+    alBufferData(
+        buffer, format, pending->samples.data(),
+        static_cast<ALsizei>(pending->samples.size() * sizeof(int16_t)),
+        pending->sampleRate);
+
+    if (alGetError() == AL_NO_ERROR) {
+      sounds_[id] = {buffer, static_cast<float>(pending->samples.size()) /
+                                 static_cast<float>(pending->channels *
+                                                    pending->sampleRate)};
+    }
+
+    pendingLoads_.erase(it++);
+  }
+}
+
+void OpenALDevice::unload(SoundId sound) {
+  // check loaded sounds
+  auto it = sounds_.find(sound);
+  if (it != sounds_.end()) {
+    for (auto &[vid, voice] : voices_) {
+      if (voice.soundId == sound)
+        stop(vid);
+    }
+    alDeleteBuffers(1, &it->second.buffer);
+    sounds_.erase(it);
   }
 
-  alDeleteBuffers(1, &it->second.buffer);
-  sounds_.erase(it);
+  // check pending loads
+  std::lock_guard<std::mutex> lock(pendingMutex_);
+  auto pit = pendingLoads_.find(sound);
+  if (pit != pendingLoads_.end())
+    pendingLoads_.erase(pit);
 }
 
 OpenALDevice::VoiceId OpenALDevice::play(SoundId sound, float volume,
@@ -221,10 +341,12 @@ float OpenALDevice::masterVolume() const { return masterVolume_; }
 bool OpenALDevice::decodeFile(std::string_view path,
                               std::vector<int16_t> &samples, int &channels,
                               int &sampleRate) {
-  if (!vfs_) return false;
+  if (!vfs_)
+    return false;
 
   auto data = vfs_->readBytes(path);
-  if (data.empty()) return false;
+  if (data.empty())
+    return false;
 
   // Try miniaudio (WAV, FLAC, MP3, Vorbis)
   ma_decoder decoder;
@@ -263,9 +385,9 @@ bool OpenALDevice::decodeFile(std::string_view path,
 
 #ifdef RAIDEN_HAS_OPUS
   int err = 0;
-  OggOpusFile *of = op_open_memory(
-      reinterpret_cast<const unsigned char *>(data.data()),
-      static_cast<opus_int32>(data.size()), &err);
+  OggOpusFile *of =
+      op_open_memory(reinterpret_cast<const unsigned char *>(data.data()),
+                     static_cast<opus_int32>(data.size()), &err);
   if (of) {
     int opusChannels = op_channel_count(of, -1);
     if (opusChannels < 1 || opusChannels > 2) {

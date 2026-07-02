@@ -2,6 +2,7 @@
 
 #include <RaidenEngineCore/ECS/World.hpp>
 #include <RaidenEngineCore/EngineConfig.hpp>
+#include <RaidenEngineCore/Jobs/JobSystem.hpp>
 #include <RaidenEngineCore/Renderer/RenderTypes.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanAllocator.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanBuffer.hpp>
@@ -102,6 +103,8 @@ public:
                  std::shared_ptr<ITexture> emissive,
                  std::shared_ptr<ITexture> occlusion) override;
 
+  void setJobSystem(JobSystem &js) override { jobSystem_ = &js; }
+
   void waitIdle() override {
     if (device_ != VK_NULL_HANDLE)
       vkDeviceWaitIdle(device_);
@@ -188,6 +191,16 @@ private:
   std::chrono::steady_clock::time_point lastFrameTime_;
   bool timestampReady_[kMaxFrames] = {};
   World *world_ = nullptr;
+
+  // multi-threaded command buffer recording
+  JobSystem *jobSystem_ = nullptr;
+  std::vector<VkCommandPool> workerPools_;
+  struct FrameSecondaries {
+    std::vector<VkCommandBuffer> cbs;
+  };
+  std::vector<FrameSecondaries> frameSecondaries_;
+
+  static constexpr uint32_t kMinDrawCallsForMT = 64;
 
   // profiler
   VkQueryPool queryPool_ = VK_NULL_HANDLE;

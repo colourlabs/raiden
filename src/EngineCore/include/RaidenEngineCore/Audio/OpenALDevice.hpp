@@ -1,7 +1,11 @@
 #pragma once
 
 #include <RaidenEngineCore/Audio/IAudioDevice.hpp>
+#include <RaidenEngineCore/Jobs/JobSystem.hpp>
 
+#include <atomic>
+#include <memory>
+#include <mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -24,6 +28,8 @@ public:
   bool init(const AudioConfig &config, IVirtualFileSystem &vfs) override;
   void shutdown() override;
 
+  void setJobSystem(JobSystem &js) { jobSystem_ = &js; }
+
   SoundId load(std::string_view path) override;
   void unload(SoundId sound) override;
 
@@ -44,6 +50,8 @@ public:
   void setMasterVolume(float vol) override;
   float masterVolume() const override;
 
+  void processPendingLoads() override;
+
 private:
   struct LoadedSound {
     ALuint buffer = 0;
@@ -55,16 +63,28 @@ private:
     SoundId soundId = 0;
   };
 
+  struct PendingDecode {
+    std::vector<int16_t> samples;
+    int channels = 0;
+    int sampleRate = 0;
+    std::atomic<bool> ready{false};
+    bool decodeFailed = false;
+  };
+
   bool decodeFile(std::string_view path, std::vector<int16_t> &samples,
                   int &channels, int &sampleRate);
 
   IVirtualFileSystem *vfs_ = nullptr;
+  JobSystem *jobSystem_ = nullptr;
 
   void *alcDevice_ = nullptr;
   void *alcContext_ = nullptr;
 
   std::unordered_map<SoundId, LoadedSound> sounds_;
   std::unordered_map<VoiceId, ActiveVoice> voices_;
+
+  std::mutex pendingMutex_;
+  std::unordered_map<SoundId, std::unique_ptr<PendingDecode>> pendingLoads_;
 
   SoundId nextSoundId_ = 1;
   VoiceId nextVoiceId_ = 1;

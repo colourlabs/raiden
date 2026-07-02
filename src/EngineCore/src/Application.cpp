@@ -39,9 +39,13 @@ bool Application::init(const EngineConfig &config) {
     return false;
   }
 
+  device_->setJobSystem(jobSystem_);
+
   assetManager_ = std::make_unique<AssetManager>(*device_, *vfs_);
 
   audioDevice_ = std::make_unique<OpenALDevice>();
+  auto *audioDev = static_cast<OpenALDevice *>(audioDevice_.get());
+  audioDev->setJobSystem(jobSystem_);
   if (!audioDevice_->init(config_.audio, *vfs_)) {
     s_logger.warn("Failed to initialize audio device.");
     audioDevice_.reset();
@@ -119,6 +123,10 @@ void Application::run() {
       pluginLoader_.plugin().update(deltaTime, platform_->getInputState());
     }
 
+    if (audioDevice_) {
+      audioDevice_->processPendingLoads();
+    }
+
     if (overlay_) {
       int w, h;
       platform_->getWindowSize(w, h);
@@ -143,11 +151,17 @@ void Application::run() {
       overlay_->endFrame();
     }
 
-    device_->drawFrame([&](ICommandBuffer &cmd) {
-      if (pluginLoader_.isLoaded()) {
+    device_->drawFrame([&](ICommandBuffer &cmd, uint32_t wi, uint32_t n) {
+      // worker 0 handles game rendering
+      if (wi == 0 && pluginLoader_.isLoaded()) {
         pluginLoader_.plugin().render(cmd);
       }
-      if (overlay_) {
+      // worker n-1 handles overlay (if any workers remain)
+      if (n > 1 && wi == n - 1 && overlay_) {
+        overlay_->renderDrawData(cmd);
+      }
+      // single-threaded fallback: everything on worker 0
+      if (n == 1 && wi == 0 && overlay_) {
         overlay_->renderDrawData(cmd);
       }
     });

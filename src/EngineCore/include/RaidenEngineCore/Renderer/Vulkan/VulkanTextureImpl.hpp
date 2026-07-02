@@ -3,6 +3,7 @@
 #include <RaidenEngineCore/Renderer/ITexture.hpp>
 #include <RaidenEngineCore/Renderer/RenderTypes.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanImage.hpp>
+#include <mutex>
 #include <volk.h>
 
 namespace Raiden::Core {
@@ -49,6 +50,7 @@ private:
   VkSampler sampler_ = VK_NULL_HANDLE;
   uint32_t width_ = 0;
   uint32_t height_ = 0;
+  mutable std::mutex descMutex_;
   mutable VkDescriptorSet descriptorSet_ = VK_NULL_HANDLE;
 };
 
