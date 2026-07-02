@@ -383,26 +383,6 @@ void VulkanDevice::shutdown() {
         device_); // wait for in-flight work before destroying anything
   }
 
-  destroyFramebuffers();
-  pipelineOwnership_.clear();
-  for (auto &img : msaaColorImages_)
-    img.shutdown();
-  msaaColorImages_.clear();
-  depthImage_.shutdown();
-
-  for (auto &[uniformBuffer, uniformSet] : perFrame_) {
-    uniformBuffer.shutdown();
-  }
-
-  descriptorPool_.shutdown();
-
-  if (queryPool_ != VK_NULL_HANDLE) {
-    vkDestroyQueryPool(device_, queryPool_, nullptr);
-    queryPool_ = VK_NULL_HANDLE;
-  }
-
-  allocator_.shutdown();
-  renderPass_.shutdown();
   frameContext_.shutdown();
 
   for (auto &frame : frameSecondaries_) {
@@ -420,6 +400,27 @@ void VulkanDevice::shutdown() {
     vkDestroyCommandPool(device_, transferPool_, nullptr);
     transferPool_ = VK_NULL_HANDLE;
   }
+
+  descriptorPool_.shutdown();
+
+  destroyFramebuffers();
+  pipelineOwnership_.clear();
+  for (auto &img : msaaColorImages_)
+    img.shutdown();
+  msaaColorImages_.clear();
+  depthImage_.shutdown();
+
+  for (auto &[uniformBuffer, uniformSet] : perFrame_) {
+    uniformBuffer.shutdown();
+  }
+
+  if (queryPool_ != VK_NULL_HANDLE) {
+    vkDestroyQueryPool(device_, queryPool_, nullptr);
+    queryPool_ = VK_NULL_HANDLE;
+  }
+
+  allocator_.shutdown();
+  renderPass_.shutdown();
 
   swapchain_.shutdown();
 

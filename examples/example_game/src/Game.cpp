@@ -239,6 +239,7 @@ void ExampleGame::render(Raiden::Core::ICommandBuffer &cmd) {
 void ExampleGame::shutdown() {
   s_logger.info("Shutting down example game...");
 
+  pbrObjects_.clear();
   pipeline_.reset();
   texture_.reset();
   model_.reset();

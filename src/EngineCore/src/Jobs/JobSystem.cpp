@@ -105,10 +105,6 @@ void JobSystem::enqueue(std::shared_ptr<InternalJob> job) {
 }
 
 JobCounter JobSystem::submit(JobDesc desc) {
-  // NOTE: JobCounter::Impl is intentionally NOT pooled. The caller retains
-  // their own long-lived shared_ptr to this Impl via the returned
-  // JobCounter, so the job system can never safely reclaim/reset it -
-  // doing so would corrupt state the caller might still be reading.
   auto counter = std::make_shared<JobCounter::Impl>();
   counter->counter.store(1, std::memory_order_relaxed);
 
@@ -141,7 +137,6 @@ JobCounter JobSystem::submitBatch(std::span<JobDesc> descs) {
     return result;
   }
 
-  // Same rationale as submit(): counters are never pooled.
   auto counter = std::make_shared<JobCounter::Impl>();
   counter->counter.store(static_cast<int32_t>(descs.size()),
                          std::memory_order_relaxed);

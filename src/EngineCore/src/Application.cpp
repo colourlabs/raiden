@@ -89,17 +89,19 @@ bool Application::loadGamePlugin(std::string_view path) {
 }
 
 void Application::shutdown() {
-  if (running_) {
-    s_logger.info("Shutting down application...");
-    running_ = false;
-    overlay_.reset();
-    pluginLoader_.unload();
-    assetManager_.reset();
-    audioDevice_.reset();
-    jobSystem_.shutdown();
-    device_->shutdown();
-    platform_->shutdown();
-  }
+  if (!running_)
+    return;
+  running_ = false;
+
+  s_logger.info("Shutting down application...");
+
+  overlay_.reset();
+  pluginLoader_.unload();
+  assetManager_.reset();
+  audioDevice_.reset();
+  jobSystem_.shutdown();
+  device_->shutdown();
+  platform_->shutdown();
 }
 
 void Application::run() {
@@ -116,7 +118,7 @@ void Application::run() {
     lastFrameTime_ = now;
 
     if (!platform_->pollEvents()) {
-      running_ = false;
+      break;
     }
 
     if (pluginLoader_.isLoaded()) {
@@ -156,10 +158,12 @@ void Application::run() {
       if (wi == 0 && pluginLoader_.isLoaded()) {
         pluginLoader_.plugin().render(cmd);
       }
+
       // worker n-1 handles overlay (if any workers remain)
       if (n > 1 && wi == n - 1 && overlay_) {
         overlay_->renderDrawData(cmd);
       }
+
       // single-threaded fallback: everything on worker 0
       if (n == 1 && wi == 0 && overlay_) {
         overlay_->renderDrawData(cmd);
