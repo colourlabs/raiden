@@ -1,0 +1,25 @@
+#include <Renderer/Vulkan/VulkanPipelineImpl.hpp>
+
+namespace Raiden::Renderer {
+
+VulkanPipelineImpl::~VulkanPipelineImpl() { shutdown(); }
+
+bool VulkanPipelineImpl::init(VkDevice device, VkRenderPass renderPass,
+                              const VulkanShader &vertShader,
+                              const VulkanShader &fragShader,
+                              const VertexInputDescription &vertexDesc,
+                              bool depthTestEnable, bool depthWriteEnable,
+                              VkCompareOp depthCompareOp,
+                              VkCullModeFlags cullMode,
+                              VkSampleCountFlagBits sampleCount,
+                              VkDescriptorSetLayout *setLayouts,
+                              uint32_t setLayoutCount) {
+  return pipeline_.initDynamic(device, renderPass, vertShader, fragShader,
+                               vertexDesc, depthTestEnable, depthWriteEnable,
+                               depthCompareOp, cullMode, sampleCount,
+                               setLayouts, setLayoutCount);
+}
+
+void VulkanPipelineImpl::shutdown() { pipeline_.shutdown(); }
+
+} // namespace Raiden::Renderer

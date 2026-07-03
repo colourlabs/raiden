@@ -6,7 +6,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(cmake/CPM.cmake)
 
-add_subdirectory(src/EngineCore)
-add_subdirectory(src/EngineRuntime)
-add_subdirectory(shaders)
-add_subdirectory(examples/example_game)
+add_subdirectory(src/Engine)
+add_subdirectory(src/Runtime)
+add_subdirectory(src/Shaders)
+
+add_subdirectory(games/ExampleGame)

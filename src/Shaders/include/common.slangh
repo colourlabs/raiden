@@ -1,0 +1,106 @@
+static const float PI = 3.14159265;
+
+struct FrameUniforms
+{
+  float4x4 projection;
+  float4x4 view;
+  float4x4 model;
+  float4 extra; // x=time, y=deltaTime, z=resX, w=resY
+  float4 cameraPos;   // xyz=camera world position, w unused
+  float4 lightDir;    // xyz=direction toward light, w=intensity
+  float4 lightColor;  // rgb=color, w=unused
+  float4 ambientSky;   // rgb=hemispheric sky color, w=intensity
+  float4 ambientGround; // rgb=hemispheric ground color, w=unused
+};
+
+struct MaterialParams
+{
+  float4 baseColorFactor;
+  float4 emissiveFactor; // w unused
+  float metallicFactor;
+  float roughnessFactor;
+  float occlusionStrength;
+  float alphaCutoff;
+  int alphaMode; // 0=Opaque 1=Mask 2=Blend
+  int normalMapDirectX;
+  int hasNormalMap;
+  int hasEmissiveMap;
+  int hasOcclusionMap;
+  int hasMetallicRoughnessMap;
+  float2 uvOffset;
+  float2 uvScale;
+  float uvRotation;
+  int vertexColorMode; // 0=Ignore 1=Multiply 2=Add
+  float2 _pad;
+};
+
+[[vk::binding(0, 0)]]
+ConstantBuffer<FrameUniforms> frameUBO;
+
+// set 2, material textures
+[[vk::binding(0, 2)]]
+Texture2D<float4> albedoMap;
+[[vk::binding(1, 2)]]
+Texture2D<float4> normalMap;
+[[vk::binding(2, 2)]]
+Texture2D<float4> metallicRoughnessMap;
+[[vk::binding(3, 2)]]
+Texture2D<float4> emissiveMap;
+[[vk::binding(4, 2)]]
+Texture2D<float4> occlusionMap;
+
+// set 3, material params
+[[vk::binding(0, 3)]]
+ConstantBuffer<MaterialParams> material;
+
+float3 fresnelSchlick(float cosTheta, float3 F0)
+{
+  return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+}
+
+float distributionGGX(float3 N, float3 H, float roughness)
+{
+  float a = roughness * roughness;
+  float a2 = a * a;
+  float NdotH = max(dot(N, H), 0.0);
+  float NdotH2 = NdotH * NdotH;
+  float denom = NdotH2 * (a2 - 1.0) + 1.0;
+  return a2 / (PI * denom * denom);
+}
+
+float geometrySchlickGGX(float NdotV, float roughness)
+{
+  float r = roughness + 1.0;
+  float k = (r * r) / 8.0;
+  return NdotV / max(NdotV * (1.0 - k) + k, 0.001);
+}
+
+float geometrySmith(float3 N, float3 V, float3 L, float roughness)
+{
+  float NdotV = max(dot(N, V), 0.0);
+  float NdotL = max(dot(N, L), 0.0);
+  return geometrySchlickGGX(NdotV, roughness) * geometrySchlickGGX(NdotL, roughness);
+}
+
+float3 calcNormal(Texture2D<float4> tex, SamplerState s, float2 uv,
+                  float3 worldNormal, float3 worldPos)
+{
+  if (material.hasNormalMap == 0)
+    return normalize(worldNormal);
+
+  float3 tangentNormal = tex.Sample(s, uv).xyz * 2.0 - 1.0;
+  tangentNormal.y *= material.normalMapDirectX == 1 ? -1.0 : 1.0;
+
+  float3 N = normalize(worldNormal);
+  float3 dp1 = ddx(worldPos);
+  float3 dp2 = ddy(worldPos);
+  float2 duv1 = ddx(uv);
+  float2 duv2 = ddy(uv);
+
+  float3 T = normalize(dp1 * duv2.y - dp2 * duv1.y);
+  float3 B = normalize(cross(N, T));
+  T = cross(B, N);
+
+  float3x3 TBN = float3x3(T, B, N);
+  return normalize(mul(TBN, tangentNormal));
+}
