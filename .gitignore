@@ -2,3 +2,6 @@ build/
 .cache/
 .cpm-cache/
 personal_TODO.md
+
+# downloaded tool binaries
+tools/

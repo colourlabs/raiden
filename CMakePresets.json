@@ -17,30 +17,27 @@
       }
     },
     {
-      "name": "windows-base",
-      "hidden": true,
+      "name": "default",
+      "displayName": "Native (default generator)",
+      "description": "Uses the system default generator",
       "inherits": "base",
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Windows"
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
-      "name": "windows-vs2026",
-      "displayName": "Windows x64 (VS 2026)",
-      "description": "Visual Studio 2026 generator",
-      "inherits": "windows-base",
-      "generator": "Visual Studio 18 2026",
-      "architecture": {
-        "value": "x64",
-        "strategy": "set"
+      "name": "default-release",
+      "displayName": "Native (release)",
+      "description": "Release build with the system default generator",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
       }
     },
     {
-      "name": "linux-ninja",
-      "displayName": "Linux (ninja)",
-      "description": "ninja generator",
+      "name": "linux-debug",
+      "displayName": "Linux (ninja, debug)",
+      "description": "Ninja generator, Debug, GCC",
       "inherits": "base",
       "generator": "Ninja",
       "condition": {
@@ -53,9 +50,116 @@
         "CMAKE_C_COMPILER": "gcc",
         "CMAKE_CXX_COMPILER": "g++"
       }
+    },
+    {
+      "name": "linux-release",
+      "displayName": "Linux (ninja, release)",
+      "description": "Ninja generator, Release, GCC",
+      "inherits": "base",
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    },
+    {
+      "name": "windows-ninja",
+      "displayName": "Windows (ninja, debug)",
+      "description": "Ninja generator using MSVC from the environment",
+      "inherits": "base",
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "windows-ninja-release",
+      "displayName": "Windows (ninja, release)",
+      "description": "Ninja generator using MSVC from the environment",
+      "inherits": "base",
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "windows-vs2022",
+      "displayName": "Windows x64 (VS 2022)",
+      "description": "Visual Studio 2022 generator",
+      "inherits": "base",
+      "generator": "Visual Studio 17 2022",
+      "architecture": { "value": "x64", "strategy": "set" },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "windows-vs2026",
+      "displayName": "Windows x64 (VS 2026)",
+      "description": "Visual Studio 2026 generator",
+      "inherits": "base",
+      "generator": "Visual Studio 18 2026",
+      "architecture": { "value": "x64", "strategy": "set" },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
     }
   ],
   "buildPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default"
+    },
+    {
+      "name": "default-release",
+      "configurePreset": "default-release"
+    },
+    {
+      "name": "linux-debug",
+      "configurePreset": "linux-debug"
+    },
+    {
+      "name": "linux-release",
+      "configurePreset": "linux-release"
+    },
+    {
+      "name": "windows-ninja",
+      "configurePreset": "windows-ninja"
+    },
+    {
+      "name": "windows-ninja-release",
+      "configurePreset": "windows-ninja-release"
+    },
+    {
+      "name": "windows-vs2022-debug",
+      "configurePreset": "windows-vs2022",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-vs2022-release",
+      "configurePreset": "windows-vs2022",
+      "configuration": "Release"
+    },
     {
       "name": "windows-vs2026-debug",
       "configurePreset": "windows-vs2026",
@@ -65,10 +169,6 @@
       "name": "windows-vs2026-release",
       "configurePreset": "windows-vs2026",
       "configuration": "Release"
-    },
-    {
-      "name": "linux-ninja",
-      "configurePreset": "linux-ninja"
     }
   ]
 }

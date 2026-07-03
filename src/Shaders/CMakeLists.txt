@@ -1,4 +1,4 @@
-find_program(SLANGC slangc HINTS ENV PATH /home/rgb/.local/bin)
+find_program(SLANGC slangc HINTS ENV PATH /home/rgb/.local/bin ${CMAKE_SOURCE_DIR}/tools/bin)
 if(NOT SLANGC)
   message(FATAL_ERROR "slangc not found in PATH. Install Slang from https://github.com/shader-slang/slang")
 endif()

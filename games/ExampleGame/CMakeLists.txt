@@ -31,6 +31,7 @@ file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/meshes/
 
 find_program(TOKTX_EXECUTABLE
   NAMES toktx
+  HINTS ${CMAKE_SOURCE_DIR}/tools/bin
   REQUIRED
 )
 
