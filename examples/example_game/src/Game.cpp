@@ -9,6 +9,7 @@
 #include <RaidenEngineCore/Renderer/ICommandBuffer.hpp>
 #include <RaidenEngineCore/Renderer/IRenderDevice.hpp>
 #include <RaidenEngineCore/Renderer/RenderTypes.hpp>
+#include <RaidenEngineCore/Core/PluginABI.hpp>
 
 // simple demo with PBR lighting, KTX2 textures and a glTF cube model + example
 // first person camera + movement
@@ -134,9 +135,7 @@ bool ExampleGame::init(Raiden::Core::IRenderDevice &device,
   s_logger.info("Example game initialized ({} PBR objects).",
                 pbrObjects_.size());
 
-  // -----------------------------------------------------------------------
   // skybox
-  // -----------------------------------------------------------------------
 
   // unit cube vertices (just position, 36 vertices for indexed drawing)
   struct Pos { float x, y, z; };
@@ -326,9 +325,14 @@ void ExampleGame::shutdown() {
 
 extern "C" {
 
-Raiden::Core::IGamePlugin *raiden_create_plugin() { return new ExampleGame(); }
-
-void raiden_destroy_plugin(Raiden::Core::IGamePlugin *plugin) {
-  delete dynamic_cast<ExampleGame *>(plugin);
+RAIDEN_EXPORT Raiden::Core::IGamePlugin* raiden_create_plugin()
+{
+    return new ExampleGame();
 }
+
+RAIDEN_EXPORT void raiden_destroy_plugin(Raiden::Core::IGamePlugin* plugin)
+{
+    delete plugin;
+}
+
 }

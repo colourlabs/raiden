@@ -95,6 +95,8 @@ static void printUsage(const char *argv0) {
 }
 
 int main(int argc, char *argv[]) {
+  Raiden::Core::enableWindowsAnsi();
+
   std::string datapackPath;
 
   for (int i = 1; i < argc; ++i) {

@@ -5,6 +5,27 @@
 #include <string_view>
 #include <utility>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
+inline void enableWindowsAnsi() {
+#ifdef _WIN32
+  auto enable = [](DWORD handleId) {
+    HANDLE h = GetStdHandle(handleId);
+    if (h == INVALID_HANDLE_VALUE) return;
+
+    DWORD mode = 0;
+    if (!GetConsoleMode(h, &mode)) return;
+
+    SetConsoleMode(h, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+  };
+
+  enable(STD_OUTPUT_HANDLE);
+  enable(STD_ERROR_HANDLE);
+#endif
+}
+
 namespace Raiden::Core {
 
 enum class LogLevel { Debug, Info, Warning, Error, Critical };

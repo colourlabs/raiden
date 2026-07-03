@@ -1,6 +1,8 @@
 #include <RaidenEngineCore/Logger.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanDescriptorPool.hpp>
 
+#include <array>
+
 namespace Raiden::Core {
 
 static const Logger s_logger("Raiden::Core::VulkanDescriptorPool");

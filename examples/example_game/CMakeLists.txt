@@ -8,7 +8,6 @@ add_library(ExampleGame MODULE
 
 target_include_directories(ExampleGame PRIVATE
   ${PROJECT_SOURCE_DIR}/src/EngineCore/include
-  ${PROJECT_BINARY_DIR}/_deps/glm-src
 )
 
 target_compile_definitions(ExampleGame PRIVATE
@@ -31,7 +30,7 @@ find_program(TOKTX_EXECUTABLE
   REQUIRED
 )
 
-set(TEXTURE_SOURCES 
+set(TEXTURE_SOURCES
   textures/checkerboard.png
 )
 
@@ -88,4 +87,4 @@ if(TEXTURE_OUTPUTS)
   add_dependencies(ExampleGame ExampleGameTextures)
 endif()
 
-target_link_libraries(ExampleGame PRIVATE EngineCore)
+target_link_libraries(ExampleGame PRIVATE EngineCore glm::glm)

@@ -5,6 +5,8 @@
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanPipelineImpl.hpp>
 #include <RaidenEngineCore/Renderer/Vulkan/VulkanTextureImpl.hpp>
 
+#include <array>
+
 namespace Raiden::Core {
 
 static const Logger s_logger("Raiden::Core::VulkanMaterial");

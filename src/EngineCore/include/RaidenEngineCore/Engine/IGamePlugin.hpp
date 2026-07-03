@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include <RaidenEngineCore/Assets/IAssetManager.hpp>
 #include <RaidenEngineCore/ECS/World.hpp>
 
@@ -32,8 +31,3 @@ public:
 };
 
 } // namespace Raiden::Core
-
-extern "C" {
-Raiden::Core::IGamePlugin *raiden_create_plugin();
-void raiden_destroy_plugin(Raiden::Core::IGamePlugin *plugin);
-}
