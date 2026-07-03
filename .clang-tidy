@@ -1,0 +1,29 @@
+Checks: >
+  -*,
+  bugprone-*,
+  clang-diagnostic-*,
+  cppcoreguidelines-*,
+  modernize-*,
+  performance-*,
+  readability-*,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-bounds-*,
+  -cppcoreguidelines-pro-type-*,
+  -cppcoreguidelines-owning-memory,
+  -modernize-use-trailing-return-type,
+  -performance-no-int-to-ptr,
+  -readability-identifier-length,
+  -readability-magic-numbers,
+  -readability-function-cognitive-complexity,
+  -readability-isolate-declaration,
+  -readability-avoid-const-params-in-decls,
+
+WarningsAsErrors: >
+  clang-diagnostic-*,
+
+HeaderFilterRegex: ''
+
+FormatStyle: none
+
+CheckOptions:
+  bugprone-suspicious-string-compare.StringCompareLike: ''

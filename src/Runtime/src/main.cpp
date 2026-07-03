@@ -25,7 +25,7 @@ static bool loadConfig(Raiden::Core::IVirtualFileSystem &vfs,
 
     auto table = toml::parse(content);
 
-    if (auto win = table["window"].as_table()) {
+    if (auto *win = table["window"].as_table()) {
       outConfig.window.title =
           (*win)["title"].value_or(std::string("raiden engine"));
       outConfig.window.width = (*win)["width"].value_or(1280);
@@ -35,30 +35,28 @@ static bool loadConfig(Raiden::Core::IVirtualFileSystem &vfs,
       outConfig.window.vsync = (*win)["vsync"].value_or(true);
     }
 
-    if (auto rend = table["render"].as_table()) {
-      auto backend = (*rend)["backend"].value_or(std::string("vulkan"));
-      outConfig.renderBackend = (backend == "vulkan")
-                                    ? Raiden::Core::RenderBackend::Vulkan
-                                    : Raiden::Core::RenderBackend::Vulkan;
+    if (auto *rend = table["render"].as_table()) {
+      outConfig.renderBackend = Raiden::Core::RenderBackend::Vulkan; // default
       outConfig.enableValidation = (*rend)["validation"].value_or(false);
 
       auto aa = (*rend)["antialiasing"].value_or(std::string("none"));
-      if (aa == "msaa_x2")
+      
+      if (aa == "msaa_x2") {
         outConfig.antialiasing = Raiden::Core::Antialiasing::MSAAx2;
-      else if (aa == "msaa_x4")
+      } else if (aa == "msaa_x4") {
         outConfig.antialiasing = Raiden::Core::Antialiasing::MSAAx4;
-      else if (aa == "msaa_x8")
+      } else if (aa == "msaa_x8") {
         outConfig.antialiasing = Raiden::Core::Antialiasing::MSAAx8;
-      else
+      } else {
         outConfig.antialiasing = Raiden::Core::Antialiasing::None;
+      }
     }
 
-    if (auto game = table["game"].as_table()) {
+    if (auto *game = table["game"].as_table()) {
       outConfig.plugin.fallback = (*game)["plugin"].value_or(std::string(""));
 
-      if (auto plat = (*game)["platform"].as_table()) {
-        outConfig.plugin.windows =
-            (*plat)["windows"].value_or(std::string(""));
+      if (auto *plat = (*game)["platform"].as_table()) {
+        outConfig.plugin.windows = (*plat)["windows"].value_or(std::string(""));
         outConfig.plugin.macosArm =
             (*plat)["macos_arm"].value_or(std::string(""));
         outConfig.plugin.macosX86 =
@@ -78,11 +76,11 @@ static std::string resolvePluginPath(const Raiden::Core::PluginConfig &cfg) {
 #if defined(_WIN32)
   return cfg.windows.empty() ? cfg.fallback : cfg.windows;
 #elif defined(__APPLE__)
-  #if defined(__arm64__) || defined(__aarch64__)
-    return cfg.macosArm.empty() ? cfg.fallback : cfg.macosArm;
-  #else
-    return cfg.macosX86.empty() ? cfg.fallback : cfg.macosX86;
-  #endif
+#if defined(__arm64__) || defined(__aarch64__)
+  return cfg.macosArm.empty() ? cfg.fallback : cfg.macosArm;
+#else
+  return cfg.macosX86.empty() ? cfg.fallback : cfg.macosX86;
+#endif
 #elif defined(__linux__)
   return cfg.linux_.empty() ? cfg.fallback : cfg.linux_;
 #else
@@ -140,7 +138,7 @@ int main(int argc, char *argv[]) {
   }
 
   Raiden::Engine::Application app(std::move(platform), std::move(device),
-                                std::move(vfs));
+                                  std::move(vfs));
 
   if (!app.init(config)) {
     return 1;

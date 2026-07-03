@@ -35,7 +35,6 @@ fi
 
 echo "  [OK]   Steam Linux Runtime found: $STEAM_RUNTIME"
 
-# locate the EngineRuntime binary — prefer debug builds over others
 cd "$PROJECT_DIR"
 BINARY=""
 for dir in \

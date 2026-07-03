@@ -5,11 +5,11 @@ struct FrameUniforms
   float4x4 projection;
   float4x4 view;
   float4x4 model;
-  float4 extra; // x=time, y=deltaTime, z=resX, w=resY
-  float4 cameraPos;   // xyz=camera world position, w unused
-  float4 lightDir;    // xyz=direction toward light, w=intensity
-  float4 lightColor;  // rgb=color, w=unused
-  float4 ambientSky;   // rgb=hemispheric sky color, w=intensity
+  float4 extra;         // x=time, y=deltaTime, z=resX, w=resY
+  float4 cameraPos;     // xyz=camera world position, w unused
+  float4 lightDir;      // xyz=direction toward light, w=intensity
+  float4 lightColor;    // rgb=color, w=unused
+  float4 ambientSky;    // rgb=hemispheric sky color, w=intensity
   float4 ambientGround; // rgb=hemispheric ground color, w=unused
 };
 
