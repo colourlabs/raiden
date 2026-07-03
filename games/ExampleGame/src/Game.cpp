@@ -23,6 +23,7 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
                        Raiden::Audio::IAudioDevice *audio) {
   // unsed for now
   (void)audio;
+
   platform_ = platform;
   s_logger.info("Initializing example game...");
 
@@ -334,5 +335,4 @@ RAIDEN_EXPORT Raiden::Engine::IGamePlugin *raiden_create_plugin() {
 RAIDEN_EXPORT void raiden_destroy_plugin(Raiden::Engine::IGamePlugin *plugin) {
   delete plugin;
 }
-
 }

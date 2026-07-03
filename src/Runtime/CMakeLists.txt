@@ -17,6 +17,16 @@ target_include_directories(EngineRuntime PRIVATE
   ${CMAKE_SOURCE_DIR}/src/Engine/src
 )
 
+# copy runtime DLLs (SDL3, OpenAL, etc.) next to the executable
+if(WIN32)
+  add_custom_command(TARGET EngineRuntime POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      $<TARGET_RUNTIME_DLLS:EngineRuntime>
+      $<TARGET_FILE_DIR:EngineRuntime>
+    COMMAND_EXPAND_LISTS
+  )
+endif()
+
 if(MSVC)
   target_link_libraries(EngineRuntime PRIVATE EngineCore)
   # MSVC: /WHOLEARCHIVE includes all objects from the static lib
