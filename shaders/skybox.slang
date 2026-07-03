@@ -33,7 +33,8 @@ VertexOutput vertexMain(VertexInput input) {
   VertexOutput output;
   float4x4 viewNoTrans = frameUBO.view;
   viewNoTrans[3] = float4(0, 0, 0, 1);
-  output.position = mul(frameUBO.projection, mul(viewNoTrans, float4(input.pos, 1.0)));
+  float3 worldPos = input.pos + frameUBO.cameraPos.xyz;
+  output.position = mul(frameUBO.projection, mul(viewNoTrans, float4(worldPos, 1.0)));
   output.position.z = output.position.w;
   output.uv = input.pos;
   return output;

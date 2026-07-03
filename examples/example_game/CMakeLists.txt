@@ -18,6 +18,10 @@ set_target_properties(ExampleGame PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY "${GAME_DATAPACK_DIR}/lib"
 )
 
+if(WIN32)
+  target_sources(ExampleGame PRIVATE plugin_exports.def)
+endif()
+
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/engine.toml
      DESTINATION ${GAME_DATAPACK_DIR})
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/config/

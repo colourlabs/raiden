@@ -691,8 +691,8 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
       glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
   uniforms.projection[1][1] *= -1.0f;
   // convert from OpenGL [-1,1] to Vulkan [0,1] depth range
-  uniforms.projection[2][2] = 0.5f * uniforms.projection[2][2] + 0.5f * uniforms.projection[3][2];
-  uniforms.projection[2][3] = 0.5f * uniforms.projection[2][3];
+  uniforms.projection[2][2] = 0.5f * uniforms.projection[2][2] + 0.5f * uniforms.projection[2][3];
+  uniforms.projection[3][2] = 0.5f * uniforms.projection[3][2] + 0.5f * uniforms.projection[3][3];
   uniforms.extra = {totalTime_, dt,
                     static_cast<float>(swapchain_.extent().width),
                     static_cast<float>(swapchain_.extent().height)};
@@ -705,8 +705,8 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
         uniforms.projection = glm::perspective(glm::radians(cam.fov), aspect,
                                                 cam.zNear, cam.zFar);
         uniforms.projection[1][1] *= -1.0f;
-        uniforms.projection[2][2] = 0.5f * uniforms.projection[2][2] + 0.5f * uniforms.projection[3][2];
-        uniforms.projection[2][3] = 0.5f * uniforms.projection[2][3];
+        uniforms.projection[2][2] = 0.5f * uniforms.projection[2][2] + 0.5f * uniforms.projection[2][3];
+        uniforms.projection[3][2] = 0.5f * uniforms.projection[3][2] + 0.5f * uniforms.projection[3][3];
       }
     });
   }

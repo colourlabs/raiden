@@ -9,6 +9,8 @@
 #include <windows.h>
 #endif
 
+namespace Raiden::Core {
+
 inline void enableWindowsAnsi() {
 #ifdef _WIN32
   auto enable = [](DWORD handleId) {
@@ -25,8 +27,6 @@ inline void enableWindowsAnsi() {
   enable(STD_ERROR_HANDLE);
 #endif
 }
-
-namespace Raiden::Core {
 
 enum class LogLevel { Debug, Info, Warning, Error, Critical };
 

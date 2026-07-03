@@ -1,0 +1,3 @@
+EXPORTS
+  raiden_create_plugin
+  raiden_destroy_plugin

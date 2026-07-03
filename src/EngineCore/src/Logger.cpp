@@ -83,6 +83,7 @@ bool Logger::should_log(LogLevel level) {
 
 void Logger::log_internal(LogLevel level, std::string_view tag,
                           std::string_view message) {
+  static bool ansiInitialized = (enableWindowsAnsi(), true);
   std::lock_guard<std::mutex> lock(g_logMutex);
 
   std::string timeStr = get_current_time_string();
