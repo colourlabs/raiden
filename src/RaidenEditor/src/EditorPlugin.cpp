@@ -33,7 +33,7 @@ bool EditorPlugin::init(Raiden::Renderer::IRenderDevice &device,
 
   // load stylesheet
   try {
-    std::string css = vfs.readAll("game://editor/editor.css");
+    std::string css = vfs.readAll("game://editor/css/editor.css");
     stylesheet_ = RaidenUI::parseCss(css);
     s_logger.info("Loaded editor stylesheet ({} rules).",
                   stylesheet_.rules.size());
@@ -43,7 +43,7 @@ bool EditorPlugin::init(Raiden::Renderer::IRenderDevice &device,
 
   // load UI layout
   try {
-    std::string uiXml = vfs.readAll("game://editor/editor.rui.xml");
+    std::string uiXml = vfs.readAll("game://editor/layouts/editor.rui.xml");
     auto doc = RaidenUI::parseXml(uiXml);
     uiRoot_ = std::move(doc.root);
     s_logger.info("Loaded editor UI layout.");
@@ -57,6 +57,7 @@ bool EditorPlugin::init(Raiden::Renderer::IRenderDevice &device,
   pipelineDesc.vertexLayout = RaidenUI::getUIVertexLayout();
   pipelineDesc.depthTestEnable = false;
   pipelineDesc.depthWriteEnable = false;
+  pipelineDesc.blendEnable = true;
   pipelineDesc.cullMode = Raiden::Renderer::CullMode::None;
 
   pipeline_ = device.createPipeline(pipelineDesc);
@@ -66,6 +67,13 @@ bool EditorPlugin::init(Raiden::Renderer::IRenderDevice &device,
   }
 
   batcher_ = std::make_unique<RaidenUI::QuadBatcher>(device);
+
+  fontAtlas_ = std::make_unique<RaidenUI::FontAtlas>(
+      device, vfs, "game://editor/fonts/InterVariable.ttf", 14.0F);
+  if (!*fontAtlas_) {
+    s_logger.error("Failed to load editor font atlas.");
+    return false;
+  }
 
   return true;
 }
@@ -81,27 +89,30 @@ void EditorPlugin::update(float deltaTime,
 }
 
 void EditorPlugin::render(Raiden::Renderer::ICommandBuffer &cmd) {
-  if (!uiRoot_ || !pipeline_ || !batcher_) {
+  if (!uiRoot_ || !pipeline_ || !batcher_ || !fontAtlas_) {
     return;
   }
 
   int w = 0, h = 0;
   platform_->getWindowSize(w, h);
 
-  RaidenUI::computeLayout(uiRoot_.get(), stylesheet_, static_cast<float>(w),
-                          static_cast<float>(h));
+  RaidenUI::MeasureFn measure = [this](const RaidenUI::ElementNode *node, float /*avail*/) {
+    return fontAtlas_->measureText(node->content);
+  };
 
-  std::array<float, 2> screenSize = {static_cast<float>(w),
-                                     static_cast<float>(h)};
+  computeLayout(uiRoot_.get(), stylesheet_,
+               static_cast<float>(w), static_cast<float>(h), measure);
+
+  std::array<float, 2> screenSize = {static_cast<float>(w), static_cast<float>(h)};
 
   batcher_->begin();
-  batcher_->addElementTree(uiRoot_.get(), stylesheet_);
-  auto &c = uiRoot_->children;
+  batcher_->addElementTree(uiRoot_.get(), stylesheet_, *fontAtlas_);
   batcher_->flush(cmd, *pipeline_, screenSize.data(), sizeof(screenSize));
 }
 
 void EditorPlugin::shutdown() {
   s_logger.info("Shutting down Raiden Editor...");
+  fontAtlas_.reset();
   batcher_.reset();
   pipeline_.reset();
   uiRoot_.reset();

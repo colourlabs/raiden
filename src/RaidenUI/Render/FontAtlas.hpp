@@ -1,11 +1,17 @@
 #pragma once
 
+#include <RaidenUI/Layout/Flexbox.hpp>
+
 #include <Raiden/Renderer/IRenderDevice.hpp>
 #include <Raiden/Renderer/ITexture.hpp>
 
 #include <memory>
 #include <string_view>
 #include <unordered_map>
+
+namespace Raiden::Core {
+class IVirtualFileSystem;
+}
 
 namespace RaidenUI {
 
@@ -23,7 +29,9 @@ struct GlyphInfo {
 
 class FontAtlas {
 public:
-  FontAtlas(Raiden::Renderer::IRenderDevice &device, std::string_view fontPath,
+  FontAtlas(Raiden::Renderer::IRenderDevice &device,
+            Raiden::Core::IVirtualFileSystem &vfs,
+            std::string_view fontPath,
             float fontSize);
 
   explicit operator bool() const { return m_texture != nullptr; }
@@ -35,6 +43,16 @@ public:
   float descent() const { return m_descent; }
   float lineHeight() const { return m_lineHeight; }
 
+  LayoutSize measureText(std::string_view text) const {
+    float width = 0.0F;
+    for (char c : text) {
+      if (const GlyphInfo *g = glyph(static_cast<char32_t>(c))) {
+        width += g->advance;
+      }
+    }
+    return {.width = width, .height = m_lineHeight};
+  }
+  
 private:
   std::unique_ptr<Raiden::Renderer::ITexture> m_texture;
   std::unordered_map<char32_t, GlyphInfo> m_glyphs;

@@ -4,9 +4,6 @@
 
 namespace RaidenEditor {
 
-InspectorPanel::InspectorPanel() = default;
-InspectorPanel::~InspectorPanel() = default;
-
 std::unique_ptr<RaidenUI::ElementNode> InspectorPanel::build() {
   auto panel = std::make_unique<RaidenUI::ElementNode>("div");
   panel->style["display"] = "flex";

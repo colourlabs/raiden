@@ -72,6 +72,7 @@ struct PipelineDesc {
   VertexLayout vertexLayout;
   bool depthTestEnable = true;
   bool depthWriteEnable = true;
+  bool blendEnable = false;
   CullMode cullMode = CullMode::Back;
   CompareOp depthCompareOp = CompareOp::Less;
 };

@@ -2,8 +2,8 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstdio>
 #include <charconv>
+#include <cstdio>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -27,15 +27,15 @@ std::string_view trimmed(std::string_view s) {
 std::vector<std::string_view> split(std::string_view s, char delim) {
   std::vector<std::string_view> parts;
   size_t start = 0;
-  
+
   while (true) {
     size_t end = s.find(delim, start);
     parts.push_back(trimmed(s.substr(start, end - start)));
-  
+
     if (end == std::string_view::npos) {
       break;
     }
-  
+
     start = end + 1;
   }
 
@@ -56,7 +56,7 @@ Length parseLength(const std::string &str) {
 
   size_t i = 0;
   bool hasDot = false;
-  
+
   if (i < sv.size() && sv[i] == '-') {
     ++i;
   }
@@ -218,6 +218,16 @@ FlexStyle parseFlexStyle(const ComputedStyle &style) {
     fs.height = parseLength(it->second);
   }
 
+  it = style.find("min-width");
+  if (it != style.end()) {
+    fs.minWidth = parseLength(it->second).value;
+  }
+
+  it = style.find("min-height");
+  if (it != style.end()) {
+    fs.minHeight = parseLength(it->second).value;
+  }
+
   it = style.find("margin");
   if (it != style.end()) {
     fs.margin = parseBoxShorthand(it->second);
@@ -233,7 +243,8 @@ FlexStyle parseFlexStyle(const ComputedStyle &style) {
 
 LayoutSize layoutFlexContainer(ElementNode *container,
                                const FlexStyle &flexStyle,
-                               const CssStylesheet &stylesheet) {
+                               const CssStylesheet &stylesheet,
+                               const MeasureFn &measure) {
   struct Item {
     ElementNode *node;
     FlexStyle childStyle;
@@ -268,11 +279,23 @@ LayoutSize layoutFlexContainer(ElementNode *container,
     Length &mainLen = isRow ? item.childStyle.width : item.childStyle.height;
     Length &crossLen = isRow ? item.childStyle.height : item.childStyle.width;
 
+    bool needsMeasure =
+        measure && isMeasurableLeaf(item.node) &&
+        (mainLen.unit == Unit::Auto || crossLen.unit == Unit::Auto);
+
+    LayoutSize measured{};
+    if (needsMeasure) {
+      float avail = isRow ? innerW : innerH;
+      measured = measure(item.node, avail);
+    }
+
     if (mainLen.unit == Unit::Px) {
       item.baseMain = mainLen.value;
     } else if (mainLen.unit == Unit::Percent) {
       float ref = isRow ? container->computedWidth : container->computedHeight;
       item.baseMain = mainLen.value * 0.01F * ref;
+    } else if (needsMeasure) {
+      item.baseMain = isRow ? measured.width : measured.height;
     } else {
       item.baseMain = 0;
     }
@@ -282,8 +305,23 @@ LayoutSize layoutFlexContainer(ElementNode *container,
     } else if (crossLen.unit == Unit::Percent) {
       float ref = isRow ? container->computedHeight : container->computedWidth;
       item.baseCross = crossLen.value * 0.01F * ref;
+    } else if (needsMeasure) {
+      item.baseCross = isRow ? measured.height : measured.width;
     } else {
       item.baseCross = 0;
+    }
+
+    // clamp base main/cross to min-width / min-height
+    {
+      float minMain =
+          isRow ? item.childStyle.minWidth : item.childStyle.minHeight;
+      item.baseMain = std::max(minMain, item.baseMain);
+    }
+
+    {
+      float minCross =
+          isRow ? item.childStyle.minHeight : item.childStyle.minWidth;
+      item.baseCross = std::max(minCross, item.baseCross);
     }
 
     if (isRow) {
@@ -397,15 +435,15 @@ LayoutSize layoutFlexContainer(ElementNode *container,
     crossSize = std::max(0.0F, crossSize);
 
     if (isRow) {
-      item.node->computedX = padL + mainCursor + item.childStyle.margin.left;
-      item.node->computedY = padT + crossOffset + item.childStyle.margin.top;
+      item.node->computedX = container->computedX + padL + mainCursor + item.childStyle.margin.left;
+      item.node->computedY = container->computedY + padT + crossOffset + item.childStyle.margin.top;
       item.node->computedWidth =
           std::max(0.0F, ms - item.childStyle.margin.left -
                              item.childStyle.margin.right);
       item.node->computedHeight = std::max(0.0F, crossSize);
     } else {
-      item.node->computedX = padL + crossOffset + item.childStyle.margin.left;
-      item.node->computedY = padT + mainCursor + item.childStyle.margin.top;
+      item.node->computedX = container->computedX + padL + crossOffset + item.childStyle.margin.left;
+      item.node->computedY = container->computedY + padT + mainCursor + item.childStyle.margin.top;
       item.node->computedWidth = std::max(0.0F, crossSize);
       item.node->computedHeight =
           std::max(0.0F, ms - item.childStyle.margin.top -

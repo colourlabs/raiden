@@ -32,7 +32,27 @@ struct ElementNode {
   bool visible{true};
   bool hovered{false};
 
-  explicit ElementNode(std::string tag) : tag(std::move(tag)) {}
+  explicit ElementNode(std::string tag);
+
+  void appendChild(std::unique_ptr<ElementNode> child);
+  void removeChild(const ElementNode *child);
+
+  void setAttribute(const std::string &name, std::string value);
+  const std::string *getAttribute(const std::string &name) const;
+  bool hasAttribute(const std::string &name) const;
+  void removeAttribute(const std::string &name);
+
+  void setStyle(const std::string &prop, std::string value);
+
+  ElementNode *getElementById(const std::string &id);
+  std::vector<ElementNode *> getElementsByClassName(
+      const std::string &className) const;
+  std::string textContent() const;
+  std::unique_ptr<ElementNode> clone(bool deep = false) const;
+
+  ElementNode *firstChild() const;
+  ElementNode *lastChild() const;
+  size_t childCount() const;
 };
 
 } // namespace RaidenUI

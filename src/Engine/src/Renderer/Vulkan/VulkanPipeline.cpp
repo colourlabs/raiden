@@ -17,7 +17,8 @@ bool VulkanPipeline::initDynamic(VkDevice device, VkRenderPass renderPass,
                                  VkCullModeFlags cullMode,
                                  VkSampleCountFlagBits sampleCount,
                                  VkDescriptorSetLayout *setLayouts,
-                                 uint32_t setLayoutCount) {
+                                 uint32_t setLayoutCount,
+                                 bool blendEnable) {
   device_ = device;
 
   std::array<VkPipelineShaderStageCreateInfo, 2> stages = {vertexShader.stageCreateInfo(),
@@ -58,7 +59,13 @@ bool VulkanPipeline::initDynamic(VkDevice device, VkRenderPass renderPass,
   };
 
   VkPipelineColorBlendAttachmentState colorBlendAttachment{
-      .blendEnable = VK_FALSE,
+      .blendEnable = blendEnable ? VK_TRUE : VK_FALSE,
+      .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+      .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+      .colorBlendOp = VK_BLEND_OP_ADD,
+      .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+      .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+      .alphaBlendOp = VK_BLEND_OP_ADD,
       .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                         VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
   };

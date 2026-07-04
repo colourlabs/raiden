@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui>
-  <link rel="stylesheet" href="editor.css"/>
-
   <div id="main-area">
     <div id="sidebar">
       <div class="panel-header">Scene</div>

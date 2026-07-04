@@ -16,22 +16,26 @@ ui {
 }
 
 #sidebar {
+  display: flex;
+  flex-direction: column;
   background: #181825;
   min-width: 220px;
   border-right: 1px solid #313244;
   padding: 8px;
 }
 
-#viewport {
-  background: #11111b;
-  flex: 1;
-}
-
 #inspector {
+  display: flex;
+  flex-direction: column;
   background: #181825;
   min-width: 260px;
   border-left: 1px solid #313244;
   padding: 8px;
+}
+
+#viewport {
+  background: #11111b;
+  flex: 1;
 }
 
 #bottom-bar {

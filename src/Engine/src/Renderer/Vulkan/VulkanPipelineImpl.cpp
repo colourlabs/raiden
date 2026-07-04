@@ -13,11 +13,12 @@ bool VulkanPipelineImpl::init(VkDevice device, VkRenderPass renderPass,
                               VkCullModeFlags cullMode,
                               VkSampleCountFlagBits sampleCount,
                               VkDescriptorSetLayout *setLayouts,
-                              uint32_t setLayoutCount) {
+                              uint32_t setLayoutCount,
+                              bool blendEnable) {
   return pipeline_.initDynamic(device, renderPass, vertShader, fragShader,
                                vertexDesc, depthTestEnable, depthWriteEnable,
                                depthCompareOp, cullMode, sampleCount,
-                               setLayouts, setLayoutCount);
+                               setLayouts, setLayoutCount, blendEnable);
 }
 
 void VulkanPipelineImpl::shutdown() { pipeline_.shutdown(); }

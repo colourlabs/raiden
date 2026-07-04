@@ -1,3 +1,4 @@
+#include <RaidenUI/CSS/Properties.hpp>
 #include <RaidenUI/CSS/Selector.hpp>
 
 #include <RaidenUI/DOM/Element.hpp>
@@ -510,6 +511,7 @@ ComputedStyle resolveStyle(const ElementNode *element,
     }
   }
 
+  expandShorthands(result);
   return result;
 }
 

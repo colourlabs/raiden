@@ -4,6 +4,7 @@
 
 #include <RaidenUI/CSS/Parser.hpp>
 #include <RaidenUI/DOM/Events.hpp>
+#include <RaidenUI/Render/FontAtlas.hpp>
 #include <RaidenUI/Render/QuadBatcher.hpp>
 
 #include <memory>
@@ -45,6 +46,7 @@ private:
   std::unique_ptr<RaidenUI::ElementNode> uiRoot_;
   RaidenUI::CssStylesheet stylesheet_;
   RaidenUI::EventSystem events_;
+  std::unique_ptr<RaidenUI::FontAtlas> fontAtlas_;
   std::unique_ptr<RaidenUI::QuadBatcher> batcher_;
   std::unique_ptr<Raiden::Renderer::IPipeline> pipeline_;
 };

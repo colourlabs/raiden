@@ -1,3 +1,5 @@
+#include <RaidenUI/CSS/Properties.hpp>
+#include <RaidenUI/Render/FontAtlas.hpp>
 #include <RaidenUI/Render/QuadBatcher.hpp>
 
 #include <Raiden/Renderer/IBuffer.hpp>
@@ -7,170 +9,16 @@
 #include <algorithm>
 #include <cstring>
 #include <string>
-#include <string_view>
 
 namespace RaidenUI {
 
 using namespace Raiden::Renderer;
 
-// color parsing
-
-static uint32_t packRGBA(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255) {
-  return (static_cast<uint32_t>(a) << 24) | (static_cast<uint32_t>(b) << 16) |
-         (static_cast<uint32_t>(g) << 8) | static_cast<uint32_t>(r);
-}
-
-static uint32_t parseHexColor(std::string_view sv) {
-  if (!sv.empty() && sv[0] == '#') {
-    sv.remove_prefix(1);
-  }
-
-  auto hexVal = [](char c) -> uint8_t {
-    if (c >= '0' && c <= '9') {
-      return static_cast<uint8_t>(c - '0');
-    }
-
-    if (c >= 'a' && c <= 'f') {
-      return static_cast<uint8_t>(c - 'a' + 10);
-    }
-
-    if (c >= 'A' && c <= 'F') {
-      return static_cast<uint8_t>(c - 'A' + 10);
-    }
-
-    return 0;
-  };
-
-  if (sv.size() == 3) {
-    auto r = static_cast<uint8_t>(hexVal(sv[0]) * 17);
-    auto g = static_cast<uint8_t>(hexVal(sv[1]) * 17);
-    auto b = static_cast<uint8_t>(hexVal(sv[2]) * 17);
-
-    return packRGBA(r, g, b);
-  }
-
-  if (sv.size() >= 6) {
-    auto r = static_cast<uint8_t>((hexVal(sv[0]) * 16) + hexVal(sv[1]));
-    auto g = static_cast<uint8_t>((hexVal(sv[2]) * 16) + hexVal(sv[3]));
-    auto b = static_cast<uint8_t>((hexVal(sv[4]) * 16) + hexVal(sv[5]));
-
-    return packRGBA(r, g, b);
-  }
-
-  return 0xFFFFFFFF;
-}
-
-uint32_t parseCssColor(const std::string &str) {
-  std::string_view sv(str);
-
-  while (!sv.empty() && sv.front() == ' ') {
-    sv.remove_prefix(1);
-  }
-
-  while (!sv.empty() && sv.back() == ' ') {
-    sv.remove_suffix(1);
-  }
-
-  if (sv.empty()) {
-    return 0;
-  }
-
-  if (sv[0] == '#') {
-    return parseHexColor(sv);
-  }
-
-  if (sv == "transparent") {
-    return 0;
-  }
-
-  if (sv == "red") {
-    return packRGBA(255, 0, 0);
-  }
-
-  if (sv == "green") {
-    return packRGBA(0, 128, 0);
-  }
-
-  if (sv == "blue") {
-    return packRGBA(0, 0, 255);
-  }
-
-  if (sv == "white") {
-    return packRGBA(255, 255, 255);
-  }
-
-  if (sv == "black") {
-    return packRGBA(0, 0, 0);
-  }
-
-  if (sv == "gray" || sv == "grey") {
-    return packRGBA(128, 128, 128);
-  }
-
-  if (sv == "yellow") {
-    return packRGBA(255, 255, 0);
-  }
-
-  if (sv == "orange") {
-    return packRGBA(255, 165, 0);
-  }
-
-  if (sv == "purple") {
-    return packRGBA(128, 0, 128);
-  }
-
-  if (sv == "pink") {
-    return packRGBA(255, 192, 203);
-  }
-
-  if (sv == "cyan") {
-    return packRGBA(0, 255, 255);
-  }
-
-  if (sv == "magenta") {
-    return packRGBA(255, 0, 255);
-  }
-
-  if (sv == "silver") {
-    return packRGBA(192, 192, 192);
-  }
-
-  if (sv == "maroon") {
-    return packRGBA(128, 0, 0);
-  }
-
-  if (sv == "olive") {
-    return packRGBA(128, 128, 0);
-  }
-
-  if (sv == "navy") {
-    return packRGBA(0, 0, 128);
-  }
-
-  if (sv == "teal") {
-    return packRGBA(0, 128, 128);
-  }
-
-  if (sv == "aqua") {
-    return packRGBA(0, 255, 255);
-  }
-
-  if (sv == "fuchsia") {
-    return packRGBA(255, 0, 255);
-  }
-
-  if (sv == "lime") {
-    return packRGBA(0, 255, 0);
-  }
-
-  return 0;
-}
-
 // vertex layout
 
 VertexLayout getUIVertexLayout() {
   VertexLayout layout;
-  
+
   layout.stride = sizeof(UIVertex);
   layout.attributes = {
       {.location = 0,
@@ -191,6 +39,17 @@ VertexLayout getUIVertexLayout() {
 
 QuadBatcher::QuadBatcher(IRenderDevice &device) : m_device(&device) {
   growBuffers(4096);
+
+  TextureDesc desc;
+  desc.width = 1;
+  desc.height = 1;
+  desc.format = Format::R8G8B8A8_UNORM;
+  desc.type = TextureType::Texture2D;
+  m_whiteTexture = m_device->createTexture(desc);
+  if (m_whiteTexture) {
+    uint32_t whitePixel = 0xFFFFFFFF;
+    m_whiteTexture->upload(&whitePixel, sizeof(whitePixel));
+  }
 }
 
 QuadBatcher::~QuadBatcher() = default;
@@ -204,8 +63,20 @@ void QuadBatcher::addQuad(float x, float y, float w, float h, uint32_t color,
   quad.verts[1] = {.x = x + w, .y = y, .u = 1, .v = 0, .color = color};
   quad.verts[2] = {.x = x + w, .y = y + h, .u = 1, .v = 1, .color = color};
   quad.verts[3] = {.x = x, .y = y + h, .u = 0, .v = 1, .color = color};
-  quad.texture = texture;
+  quad.texture = (texture != nullptr) ? texture : m_whiteTexture.get();
 
+  m_quads.push_back(quad);
+}
+
+void QuadBatcher::addGlyphQuad(float x, float y, float w, float h,
+                               uint32_t color, float u0, float v0, float u1,
+                               float v1, const ITexture *texture) {
+  UIQuad quad;
+  quad.verts[0] = {.x = x, .y = y, .u = u0, .v = v1, .color = color};
+  quad.verts[1] = {.x = x + w, .y = y, .u = u1, .v = v1, .color = color};
+  quad.verts[2] = {.x = x + w, .y = y + h, .u = u1, .v = v0, .color = color};
+  quad.verts[3] = {.x = x, .y = y + h, .u = u0, .v = v0, .color = color};
+  quad.texture = (texture != nullptr) ? texture : m_whiteTexture.get();
   m_quads.push_back(quad);
 }
 
@@ -241,11 +112,6 @@ void QuadBatcher::flush(ICommandBuffer &cmd, const IPipeline &pipeline,
   if (vertCount > m_bufferCapacity) {
     growBuffers(vertCount);
   }
-
-  // sort quads by texture for batching (null first, then by pointer)
-  std::ranges::sort(m_quads, [](const UIQuad &a, const UIQuad &b) {
-    return a.texture < b.texture;
-  });
 
   // build vertex and index data
   std::vector<UIVertex> verts;
@@ -332,7 +198,7 @@ void QuadBatcher::flush(ICommandBuffer &cmd, const IPipeline &pipeline,
 }
 
 static void collectQuads(ElementNode *node, const CssStylesheet &stylesheet,
-                         QuadBatcher &batcher) {
+                         const FontAtlas &fontAtlas, QuadBatcher &batcher) {
   if (!node->visible) {
     return;
   }
@@ -357,14 +223,37 @@ static void collectQuads(ElementNode *node, const CssStylesheet &stylesheet,
     }
   }
 
+  // Draw node text content if any
+  if (!node->content.empty()) {
+    auto textColorProp = style.find("color");
+    uint32_t textColor = 0xFFFFFFFF; // default to white
+    if (textColorProp != style.end() && !textColorProp->second.empty()) {
+      textColor = parseCssColor(textColorProp->second);
+    }
+
+    float x = node->computedX;
+    float y = node->computedY + fontAtlas.ascent();
+
+    for (char c : node->content) {
+      if (const GlyphInfo *g = fontAtlas.glyph(static_cast<char32_t>(c))) {
+        float gx = x + g->bearingX;
+        float gy = y + g->bearingY;
+        batcher.addGlyphQuad(gx, gy, g->width, g->height, textColor, g->u0,
+                             g->v0, g->u1, g->v1, fontAtlas.texture());
+        x += g->advance;
+      }
+    }
+  }
+
   for (auto &child : node->children) {
-    collectQuads(child.get(), stylesheet, batcher);
+    collectQuads(child.get(), stylesheet, fontAtlas, batcher);
   }
 }
 
 void QuadBatcher::addElementTree(ElementNode *root,
-                                 const CssStylesheet &stylesheet) {
-  collectQuads(root, stylesheet, *this);
+                                 const CssStylesheet &stylesheet,
+                                 const FontAtlas &fontAtlas) {
+  collectQuads(root, stylesheet, fontAtlas, *this);
 }
 
 } // namespace RaidenUI

@@ -29,7 +29,8 @@ public:
                    bool depthTestEnable, bool depthWriteEnable,
                    VkCompareOp depthCompareOp, VkCullModeFlags cullMode,
                    VkSampleCountFlagBits sampleCount,
-                   VkDescriptorSetLayout *setLayouts, uint32_t setLayoutCount);
+                   VkDescriptorSetLayout *setLayouts, uint32_t setLayoutCount,
+                   bool blendEnable = false);
 
   void shutdown();
 

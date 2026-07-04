@@ -32,10 +32,12 @@ void EventSystem::update(ElementNode *root, float mouseX, float mouseY) {
       m_prevHover->hovered = false;
       if (m_prevHover->onMouseLeave) { m_prevHover->onMouseLeave(); }
     }
+    
     if (target != nullptr) {
       target->hovered = true;
       if (target->onMouseEnter) { target->onMouseEnter(); }
     }
+
     m_prevHover = target;
   }
 }

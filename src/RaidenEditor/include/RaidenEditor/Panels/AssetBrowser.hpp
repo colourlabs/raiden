@@ -18,6 +18,9 @@ public:
   AssetBrowser(const AssetBrowser &) = delete;
   AssetBrowser &operator=(const AssetBrowser &) = delete;
 
+  AssetBrowser(AssetBrowser &&) noexcept = default;
+  AssetBrowser &operator=(AssetBrowser &&) noexcept = default;
+
   std::unique_ptr<RaidenUI::ElementNode> build();
   void navigateTo(const std::string &path);
 

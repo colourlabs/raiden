@@ -383,7 +383,7 @@ VulkanDevice::createPipeline(const PipelineDesc &desc) {
   if (!impl->init(device_, renderPass_.renderPass(), vertShader, fragShader,
                   vertexDesc, desc.depthTestEnable, desc.depthWriteEnable,
                   depthOp, toVkCullMode(desc.cullMode), sampleCount_,
-                  setLayouts.data(), 3)) {
+                  setLayouts.data(), 3, desc.blendEnable)) {
     s_logger.error("Failed to create pipeline");
     vertShader.shutdown();
     fragShader.shutdown();

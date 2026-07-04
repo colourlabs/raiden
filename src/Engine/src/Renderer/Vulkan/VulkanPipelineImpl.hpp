@@ -23,7 +23,8 @@ public:
             VkCullModeFlags cullMode = VK_CULL_MODE_BACK_BIT,
             VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT,
             VkDescriptorSetLayout *setLayouts = nullptr,
-            uint32_t setLayoutCount = 0);
+            uint32_t setLayoutCount = 0,
+            bool blendEnable = false);
   void shutdown();
 
   [[nodiscard]] VkPipeline handle() const { return pipeline_.pipeline(); }

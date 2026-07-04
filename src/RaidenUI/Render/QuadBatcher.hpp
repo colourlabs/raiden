@@ -27,9 +27,9 @@ struct UIQuad {
   const Raiden::Renderer::ITexture *texture{nullptr};
 };
 
-uint32_t parseCssColor(const std::string &str);
-
 Raiden::Renderer::VertexLayout getUIVertexLayout();
+
+class FontAtlas;
 
 class QuadBatcher {
 public:
@@ -47,11 +47,15 @@ public:
                const Raiden::Renderer::ITexture *texture = nullptr);
   void flush(Raiden::Renderer::ICommandBuffer &cmd,
              const Raiden::Renderer::IPipeline &pipeline,
-             const void *pushData = nullptr,
-             uint32_t pushSize = 0);
+             const void *pushData = nullptr, uint32_t pushSize = 0);
 
-  size_t quadCount() const { return m_quads.size(); }
-  void addElementTree(ElementNode *root, const CssStylesheet &stylesheet);
+  void addGlyphQuad(float x, float y, float w, float h, uint32_t color,
+                    float u0, float v0, float u1, float v1,
+                    const Raiden::Renderer::ITexture *texture);
+
+  [[nodiscard]] size_t quadCount() const { return m_quads.size(); }
+  void addElementTree(ElementNode *root, const CssStylesheet &stylesheet,
+                      const FontAtlas &fontAtlas);
 
 private:
   void growBuffers(size_t minVerts);
@@ -59,6 +63,7 @@ private:
   Raiden::Renderer::IRenderDevice *m_device;
   std::unique_ptr<Raiden::Renderer::IBuffer> m_vertexBuffer;
   std::unique_ptr<Raiden::Renderer::IBuffer> m_indexBuffer;
+  std::unique_ptr<Raiden::Renderer::ITexture> m_whiteTexture;
   std::vector<UIQuad> m_quads;
   size_t m_bufferCapacity{0};
 };

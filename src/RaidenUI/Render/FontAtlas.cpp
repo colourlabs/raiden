@@ -1,10 +1,10 @@
 #include <RaidenUI/Render/FontAtlas.hpp>
 
+#include <Raiden/Core/IVirtualFileSystem.hpp>
 #include <Raiden/Renderer/RenderTypes.hpp>
 
 #include <algorithm>
 #include <cstdint>
-#include <cstdio>
 #include <vector>
 
 #define STB_TRUETYPE_IMPLEMENTATION
@@ -30,32 +30,24 @@ struct PackedGlyph {
 } // namespace
 
 FontAtlas::FontAtlas(Raiden::Renderer::IRenderDevice &device,
+                     Raiden::Core::IVirtualFileSystem &vfs,
                      std::string_view fontPath, float fontSize)
     : m_fontSize(fontSize) {
-  FILE *fp = std::fopen(fontPath.data(), "rb");
-  if (fp == nullptr) { return; }
-
-  std::fseek(fp, 0, SEEK_END);
-  auto fileSize = static_cast<size_t>(std::ftell(fp));
-  if (fileSize == 0) {
-    std::fclose(fp);
+  auto fontData = vfs.readBytes(fontPath);
+  if (fontData.empty()) {
     return;
   }
 
-  std::vector<uint8_t> fontData(fileSize);
-  std::rewind(fp);
-  size_t read = std::fread(fontData.data(), 1, fileSize, fp);
-  std::fclose(fp);
-
-  if (read != fileSize) { return; }
-
   stbtt_fontinfo info;
-  if (stbtt_InitFont(&info, fontData.data(), 0) == 0) { return; }
+  if (stbtt_InitFont(&info, reinterpret_cast<const uint8_t*>(fontData.data()), 0) == 0) {
+    return;
+  }
 
   float scale = stbtt_ScaleForPixelHeight(&info, fontSize);
 
   int ascent = 0, descent = 0, lineGap = 0;
   stbtt_GetFontVMetrics(&info, &ascent, &descent, &lineGap);
+
   m_ascent = static_cast<float>(ascent) * scale;
   m_descent = static_cast<float>(descent) * scale;
   m_lineHeight = m_ascent - m_descent + (static_cast<float>(lineGap) * scale);
@@ -67,13 +59,16 @@ FontAtlas::FontAtlas(Raiden::Renderer::IRenderDevice &device,
 
   for (char32_t cp = 32; cp <= 126; ++cp) {
     int glyphIndex = stbtt_FindGlyphIndex(&info, static_cast<int>(cp));
-    if (glyphIndex == 0) { continue; }
+    if (glyphIndex == 0) {
+      continue;
+    }
 
     int advance = 0, bearingX = 0;
     stbtt_GetGlyphHMetrics(&info, glyphIndex, &advance, &bearingX);
 
     int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
-    stbtt_GetGlyphBitmapBox(&info, glyphIndex, scale, scale, &x0, &y0, &x1, &y1);
+    stbtt_GetGlyphBitmapBox(&info, glyphIndex, scale, scale, &x0, &y0, &x1,
+                            &y1);
 
     int gw = x1 - x0;
     int gh = y1 - y0;
@@ -83,7 +78,7 @@ FontAtlas::FontAtlas(Raiden::Renderer::IRenderDevice &device,
       pg.codepoint = cp;
       pg.advance = static_cast<float>(advance) * scale;
       pg.bearingX = static_cast<float>(bearingX) * scale;
-      pg.bearingY = static_cast<float>(y1) * scale;
+      pg.bearingY = static_cast<float>(y0);
       packed.push_back(pg);
       continue;
     }
@@ -94,10 +89,12 @@ FontAtlas::FontAtlas(Raiden::Renderer::IRenderDevice &device,
       rowHeight = 0;
     }
 
-    if (cursorY + gh + kPadding > kAtlasHeight) { break; }
+    if (cursorY + gh + kPadding > kAtlasHeight) {
+      break;
+    }
 
-    std::vector<uint8_t> bitmap(
-        static_cast<size_t>(gw) * static_cast<size_t>(gh));
+    std::vector<uint8_t> bitmap(static_cast<size_t>(gw) *
+                                static_cast<size_t>(gh));
     stbtt_MakeGlyphBitmap(&info, bitmap.data(), gw, gh, gw, scale, scale,
                           glyphIndex);
 
@@ -109,7 +106,7 @@ FontAtlas::FontAtlas(Raiden::Renderer::IRenderDevice &device,
     pg.h = gh;
     pg.advance = static_cast<float>(advance) * scale;
     pg.bearingX = static_cast<float>(bearingX) * scale;
-    pg.bearingY = static_cast<float>(y1) * scale;
+    pg.bearingY = static_cast<float>(y0);
     pg.bitmap = std::move(bitmap);
     packed.push_back(pg);
 
@@ -117,22 +114,24 @@ FontAtlas::FontAtlas(Raiden::Renderer::IRenderDevice &device,
     rowHeight = std::max(rowHeight, gh);
   }
 
-  std::vector<uint8_t> atlas(
-      static_cast<size_t>(kAtlasWidth) *
-          static_cast<size_t>(kAtlasHeight) * 4,
-      0);
+  std::vector<uint8_t> atlas(static_cast<size_t>(kAtlasWidth) *
+                                 static_cast<size_t>(kAtlasHeight) * 4,
+                             0);
 
   for (const auto &pg : packed) {
-    if (pg.w <= 0 || pg.h <= 0 || pg.bitmap.empty()) { continue; }
+    if (pg.w <= 0 || pg.h <= 0 || pg.bitmap.empty()) {
+      continue;
+    }
 
     for (int y = 0; y < pg.h; ++y) {
       for (int x = 0; x < pg.w; ++x) {
-        uint8_t alpha = pg.bitmap[(static_cast<size_t>(y) *
-                                    static_cast<size_t>(pg.w)) +
-                                   static_cast<size_t>(x)];
-        size_t dstIdx =
-            ((static_cast<size_t>(pg.y + y) * static_cast<size_t>(kAtlasWidth)) +
-             static_cast<size_t>(pg.x + x)) * 4;
+        uint8_t alpha =
+            pg.bitmap[(static_cast<size_t>(y) * static_cast<size_t>(pg.w)) +
+                      static_cast<size_t>(x)];
+        size_t dstIdx = ((static_cast<size_t>(pg.y + y) *
+                          static_cast<size_t>(kAtlasWidth)) +
+                         static_cast<size_t>(pg.x + x)) *
+                        4;
         atlas[dstIdx + 0] = 255;
         atlas[dstIdx + 1] = 255;
         atlas[dstIdx + 2] = 255;
@@ -167,7 +166,9 @@ FontAtlas::FontAtlas(Raiden::Renderer::IRenderDevice &device,
 
 const GlyphInfo *FontAtlas::glyph(char32_t codepoint) const {
   auto it = m_glyphs.find(codepoint);
-  if (it != m_glyphs.end()) { return &it->second; }
+  if (it != m_glyphs.end()) {
+    return &it->second;
+  }
   return nullptr;
 }
 

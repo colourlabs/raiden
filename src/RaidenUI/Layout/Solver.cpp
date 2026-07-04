@@ -8,8 +8,6 @@ namespace RaidenUI {
 
 namespace {
 
-// Pre-order pass: propagate explicit sizes (px/percent) top-down so that
-// children know their container's size before post-order layout begins.
 void layoutElement_preorder(ElementNode *node,
                             const CssStylesheet &stylesheet) {
   ComputedStyle style = resolveStyle(node, stylesheet);
@@ -40,19 +38,17 @@ void layoutElement_preorder(ElementNode *node,
   }
 }
 
-// Post-order layout pass.
-// parentSized: true when this node's size was already set by its parent's flex
-//   layout, so auto-size overwrite should be skipped.
 void layoutElement(ElementNode *node, const CssStylesheet &stylesheet,
-                   bool parentSized = false) {
+                   bool parentSized = false,
+                   const MeasureFn &measure = nullptr) {
   ComputedStyle style = resolveStyle(node, stylesheet);
   FlexStyle fs = parseFlexStyle(style);
 
   if (fs.display == 1) {
-    LayoutSize content = layoutFlexContainer(node, fs, stylesheet);
+    LayoutSize content = layoutFlexContainer(node, fs, stylesheet, measure);
     for (auto &child : node->children) {
       if (child->visible) {
-        layoutElement(child.get(), stylesheet, true);
+        layoutElement(child.get(), stylesheet, true, measure);
       }
     }
     if (!parentSized) {
@@ -70,20 +66,34 @@ void layoutElement(ElementNode *node, const CssStylesheet &stylesheet,
   } else {
     for (auto &child : node->children) {
       if (child->visible) {
-        layoutElement(child.get(), stylesheet, false);
+        layoutElement(child.get(), stylesheet, false, measure);
       }
     }
+
+    if (isMeasurableLeaf(node) && measure) {
+      LayoutSize sz = measure(
+          node, (node->parent != nullptr) ? node->parent->computedWidth : 0);
+      if (fs.width.unit == Unit::Auto) {
+        node->computedWidth = sz.width;
+      }
+      if (fs.height.unit == Unit::Auto) {
+        node->computedHeight = sz.height;
+      }
+    }
+
     float y = fs.padding.top;
     float maxW = 0;
     for (auto &child : node->children) {
       if (!child->visible) {
         continue;
       }
-      child->computedX = fs.padding.left;
-      child->computedY = y;
+      
+      child->computedX = node->computedX + fs.padding.left;
+      child->computedY = node->computedY + y;
       y += child->computedHeight;
       maxW = std::max(maxW, child->computedX + child->computedWidth);
     }
+
     if (!parentSized) {
       if (fs.width.unit == Unit::Auto) {
         node->computedWidth = maxW + fs.padding.right;
@@ -98,11 +108,12 @@ void layoutElement(ElementNode *node, const CssStylesheet &stylesheet,
 } // namespace
 
 void computeLayout(ElementNode *root, const CssStylesheet &stylesheet,
-                   float viewportWidth, float viewportHeight) {
+                   float viewportWidth, float viewportHeight,
+                   const MeasureFn &measure) {
   root->computedWidth = viewportWidth;
   root->computedHeight = viewportHeight;
   layoutElement_preorder(root, stylesheet);
-  layoutElement(root, stylesheet);
+  layoutElement(root, stylesheet, false, measure);
 }
 
 } // namespace RaidenUI
