@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <mutex>
 
 namespace Raiden::Core {
 
@@ -99,7 +100,7 @@ void OSFile::close() {
 
 void OSFileSystem::registerData(std::string_view path,
                                 std::vector<std::byte> data) {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   memData_[std::string(path)] = std::move(data);
 }
 
@@ -145,8 +146,8 @@ std::string OSFileSystem::readAll(std::string_view path) {
     auto it = memData_.find(std::string(path));
     if (it != memData_.end()) {
       auto data = it->second;
-      return std::string(reinterpret_cast<const char *>(data.data()),
-                         data.size());
+      return {reinterpret_cast<const char *>(data.data()),
+              data.size()};
     }
   }
 
@@ -207,7 +208,7 @@ bool OSFileSystem::mount(std::string_view virtualPath,
   }
 
   {
-    std::lock_guard lock(mutex_);
+    std::scoped_lock lock(mutex_);
     mounts_.push_back({std::move(vp), std::move(rp)});
   }
   s_logger.info("Mounted '{}' -> '{}'", virtualPath, realPath);
@@ -221,7 +222,7 @@ std::string OSFileSystem::resolveToRealPath(std::string_view path) const {
   size_t bestLen = 0;
 
   for (const auto &mp : mounts_) {
-    if (path.substr(0, mp.virtualPrefix.size()) == mp.virtualPrefix &&
+    if (path.starts_with(mp.virtualPrefix) &&
         mp.virtualPrefix.size() > bestLen) {
       best = &mp;
       bestLen = mp.virtualPrefix.size();

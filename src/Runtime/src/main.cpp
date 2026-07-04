@@ -73,7 +73,7 @@ static bool loadConfig(Raiden::Core::IVirtualFileSystem &vfs,
 }
 
 static std::string resolvePluginPath(const Raiden::Core::PluginConfig &cfg) {
-#if defined(_WIN32)
+#ifdef _WIN32
   return cfg.windows.empty() ? cfg.fallback : cfg.windows;
 #elif defined(__APPLE__)
 #if defined(__arm64__) || defined(__aarch64__)

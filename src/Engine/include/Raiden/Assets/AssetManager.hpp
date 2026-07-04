@@ -39,8 +39,8 @@ private:
   struct PendingTexture {
     std::string key;
     std::vector<std::byte> pixels;
-    int width = 0;
-    int height = 0;
+    uint32_t width = 0;
+    uint32_t height = 0;
     ::Raiden::Renderer::Format format = ::Raiden::Renderer::Format::R8G8B8A8_SRGB;
     ::Raiden::Renderer::TextureType type = ::Raiden::Renderer::TextureType::Texture2D;
     bool failed = false;

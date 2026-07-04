@@ -15,7 +15,7 @@ using namespace ::Raiden::Renderer;
 
 static const ::Raiden::Core::Logger s_logger("Raiden::Assets::KtxLoader");
 
-static Format vkFormatToFormat(int vkFmt) {
+static Format vkFormatToFormat(ktx_uint32_t vkFmt) {
   switch (vkFmt) {
   case VK_FORMAT_R8G8B8A8_UNORM:
     return Format::R8G8B8A8_UNORM;
@@ -53,8 +53,8 @@ std::optional<DecodedTextureData> decodeKtx2(const std::byte *data,
   }
 
   DecodedTextureData decoded;
-  decoded.width = static_cast<int>(ktxTex->baseWidth);
-  decoded.height = static_cast<int>(ktxTex->baseHeight);
+  decoded.width = ktxTex->baseWidth;
+  decoded.height = ktxTex->baseHeight;
   decoded.format = vkFormatToFormat(ktxTex->vkFormat);
 
   uint32_t faceCount = ktxTex->numFaces;
@@ -62,7 +62,8 @@ std::optional<DecodedTextureData> decodeKtx2(const std::byte *data,
                                   : TextureType::Texture2D;
 
   ktx_size_t faceSize = static_cast<ktx_size_t>(decoded.width) *
-                        static_cast<ktx_size_t>(decoded.height) * 4;
+                        static_cast<ktx_size_t>(decoded.height) *
+                        4;
   decoded.pixels.resize(faceSize * faceCount);
 
   for (uint32_t face = 0; face < faceCount; face++) {
@@ -70,7 +71,7 @@ std::optional<DecodedTextureData> decodeKtx2(const std::byte *data,
     ktxTexture_GetImageOffset(ktxTexture(ktxTex), 0, 0, face, &offset);
     const ktx_uint8_t *src =
         ktxTexture_GetData(ktxTexture(ktxTex)) + offset;
-    std::memcpy(decoded.pixels.data() + faceSize * face, src, faceSize);
+    std::memcpy(decoded.pixels.data() + (faceSize * face), src, faceSize);
   }
 
   ktxTexture_Destroy(ktxTexture(ktxTex));

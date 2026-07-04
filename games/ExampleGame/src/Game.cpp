@@ -34,9 +34,11 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
   // camera
   camEntity_ = world_.create();
   world_.assign<Raiden::ECS::Camera>(camEntity_);
+
   auto &cam = world_.get<Raiden::ECS::Camera>(camEntity_);
-  cam.setLookAt({0.0f, 0.0f, 3.0f}, {0.0f, 0.0f, 0.0f});
-  cam.setPerspective(45.0f, 1.0f, 0.1f, 100.0f);
+
+  cam.setLookAt({0.0F, 0.0F, 3.0F}, {0.0F, 0.0F, 0.0F});
+  cam.setPerspective(45.0F, 1.0F, 0.1F, 100.0F);
 
   // pipeline
   Raiden::Renderer::PipelineDesc pipelineDesc{
@@ -46,14 +48,18 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
               .stride = sizeof(Raiden::Renderer::Vertex),
               .attributes =
                   {
-                      {0, Raiden::Renderer::Format::R32G32B32_Float,
-                       offsetof(Raiden::Renderer::Vertex, pos)},
-                      {1, Raiden::Renderer::Format::R32G32B32_Float,
-                       offsetof(Raiden::Renderer::Vertex, normal)},
-                      {2, Raiden::Renderer::Format::R32G32B32_Float,
-                       offsetof(Raiden::Renderer::Vertex, color)},
-                      {3, Raiden::Renderer::Format::R32G32_Float,
-                       offsetof(Raiden::Renderer::Vertex, uv)},
+                      {.location = 0,
+                       .format = Raiden::Renderer::Format::R32G32B32_Float,
+                       .offset = offsetof(Raiden::Renderer::Vertex, pos)},
+                      {.location = 1,
+                       .format = Raiden::Renderer::Format::R32G32B32_Float,
+                       .offset = offsetof(Raiden::Renderer::Vertex, normal)},
+                      {.location = 2,
+                       .format = Raiden::Renderer::Format::R32G32B32_Float,
+                       .offset = offsetof(Raiden::Renderer::Vertex, color)},
+                      {.location = 3,
+                       .format = Raiden::Renderer::Format::R32G32_Float,
+                       .offset = offsetof(Raiden::Renderer::Vertex, uv)},
                   },
           },
       .depthTestEnable = true,
@@ -92,28 +98,28 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
     const char *label;
   };
 
-  PbrPreset presets[] = {
-      {{1.0f, 0.0f, 0.0f},
-       {1.0f, 0.2f, 0.2f, 1.0f},
-       0.0f,
-       0.8f,
-       "rough dielectric"},
-      {{-1.0f, 0.0f, 0.0f},
-       {0.2f, 0.4f, 1.0f, 1.0f},
-       0.0f,
-       0.2f,
-       "smooth dielectric"},
-      {{0.0f, 0.8f, 0.0f},
-       {0.8f, 0.8f, 0.8f, 1.0f},
-       0.9f,
-       0.4f,
-       "brushed metal"},
-      {{0.0f, -0.8f, 0.0f},
-       {1.0f, 0.8f, 0.2f, 1.0f},
-       0.9f,
-       0.1f,
-       "polished metal"},
-  };
+  std::array<PbrPreset, 4> presets = {{
+      {.position = {1.0F, 0.0F, 0.0F},
+       .color = {1.0F, 0.2F, 0.2F, 1.0F},
+       .metallic = 0.0F,
+       .roughness = 0.8F,
+       .label = "rough dielectric"},
+      {.position = {-1.0F, 0.0F, 0.0F},
+       .color = {0.2F, 0.4F, 1.0F, 1.0F},
+       .metallic = 0.0F,
+       .roughness = 0.2F,
+       .label = "smooth dielectric"},
+      {.position = {0.0F, 0.8F, 0.0F},
+       .color = {0.8F, 0.8F, 0.8F, 1.0F},
+       .metallic = 0.9F,
+       .roughness = 0.4F,
+       .label = "brushed metal"},
+      {.position = {0.0F, -0.8F, 0.0F},
+       .color = {1.0F, 0.8F, 0.2F, 1.0F},
+       .metallic = 0.9F,
+       .roughness = 0.1F,
+       .label = "polished metal"},
+  }};
 
   for (auto &p : presets) {
     Raiden::Renderer::MaterialDesc matDesc;
@@ -127,7 +133,7 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
     auto mat = device.createMaterial(matDesc, nullptr, nullptr, nullptr,
                                      nullptr, nullptr);
     if (mat) {
-      pbrObjects_.push_back({p.position, 0.0f, std::move(mat)});
+      pbrObjects_.push_back({p.position, 0.0F, std::move(mat)});
     } else {
       s_logger.error("Failed to create PBR material for '{}'", p.label);
     }
@@ -143,19 +149,25 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
     float x, y, z;
   };
 
-  Pos cubeVerts[8] = {
-      {-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1},
-      {-1, -1, 1},  {1, -1, 1},  {1, 1, 1},  {-1, 1, 1},
-  };
+  std::array<Pos, 8> cubeVerts = {{
+      {.x = -1, .y = -1, .z = -1},
+      {.x = 1, .y = -1, .z = -1},
+      {.x = 1, .y = 1, .z = -1},
+      {.x = -1, .y = 1, .z = -1},
+      {.x = -1, .y = -1, .z = 1},
+      {.x = 1, .y = -1, .z = 1},
+      {.x = 1, .y = 1, .z = 1},
+      {.x = -1, .y = 1, .z = 1},
+  }};
 
-  uint32_t cubeIndices[36] = {
-      0, 1, 2, 0, 2, 3, // back
-      4, 6, 5, 4, 7, 6, // front
+  std::array<uint32_t, 36> cubeIndices = {{
+      0, 1, 2, 0, 2, 3,       // back
+      4, 6, 5, 4, 7, 6,     // front
       3, 7, 4, 3, 4, 0, // left
       1, 5, 6, 1, 6, 2, // right
       3, 2, 6, 3, 6, 7, // top
       0, 4, 5, 0, 5, 1, // bottom
-  };
+  }};
 
   skyboxIndexCount_ = 36;
 
@@ -164,8 +176,10 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
       .usage = Raiden::Renderer::BufferUsage::Vertex,
       .access = Raiden::Renderer::MemoryAccess::CpuToGpu,
   });
-  if (skyboxVertexBuffer_)
-    skyboxVertexBuffer_->upload(cubeVerts, sizeof(cubeVerts));
+
+  if (skyboxVertexBuffer_) {
+    skyboxVertexBuffer_->upload(cubeVerts.data(), sizeof(cubeVerts));
+  }
 
   skyboxIndexBuffer_ = device.createBuffer({
       .size = sizeof(cubeIndices),
@@ -173,8 +187,10 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
       .access = Raiden::Renderer::MemoryAccess::CpuToGpu,
       .indexType = Raiden::Renderer::IndexType::Uint32,
   });
-  if (skyboxIndexBuffer_)
-    skyboxIndexBuffer_->upload(cubeIndices, sizeof(cubeIndices));
+
+  if (skyboxIndexBuffer_) {
+    skyboxIndexBuffer_->upload(cubeIndices.data(), sizeof(cubeIndices));
+  }
 
   // load real skybox texture
   skyboxTexture_ = assets.loadTextureSync("game://textures/skybox.ktx2");
@@ -191,8 +207,9 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
               .stride = sizeof(Pos),
               .attributes =
                   {
-                      {0, Raiden::Renderer::Format::R32G32B32_Float,
-                       offsetof(Pos, x)},
+                      {.location = 0,
+                       .format = Raiden::Renderer::Format::R32G32B32_Float,
+                       .offset = offsetof(Pos, x)},
                   },
           },
       .depthTestEnable = true,
@@ -208,7 +225,8 @@ void ExampleGame::update(float deltaTime,
                          const Raiden::Platform::InputState &input) {
   actions_.evaluate(input);
 
-  if (auto *quit = actions_.find("quit"); quit && quit->justPressed) {
+  if (const auto *quit = actions_.find("quit");
+      (quit != nullptr) && quit->justPressed) {
     quitRequested_ = true;
   }
 
@@ -222,45 +240,64 @@ void ExampleGame::update(float deltaTime,
   prevRmb = input.mouseButtons[2];
 
   if (mouseCaptured_) {
-    float const sensitivity = 0.002f;
+    float const sensitivity = 0.002F;
     yaw_ += static_cast<float>(input.mouseDeltaX) * sensitivity;
     pitch_ -= static_cast<float>(input.mouseDeltaY) * sensitivity;
-    pitch_ = glm::clamp(pitch_, glm::radians(-89.0f), glm::radians(89.0f));
+    pitch_ = glm::clamp(pitch_, glm::radians(-89.0F), glm::radians(89.0F));
   }
 
   // movement
-  float speed = 3.0f * deltaTime;
-  if (auto *fw = actions_.find("move_forward"); fw && fw->pressed) {
-    speed *= 2.0f; // sprint
+  float speed = 3.0F * deltaTime;
+  if (const auto *fw = actions_.find("move_forward");
+      (fw != nullptr) && fw->pressed) {
+    speed *= 2.0F; // sprint
   }
 
   glm::vec3 forward(std::cos(yaw_) * std::cos(pitch_), std::sin(pitch_),
                     std::sin(yaw_) * std::cos(pitch_));
   forward = glm::normalize(forward);
 
-  glm::vec3 right = glm::normalize(glm::cross(forward, {0.0f, 1.0f, 0.0f}));
+  glm::vec3 right = glm::normalize(glm::cross(forward, {0.0F, 1.0F, 0.0F}));
   glm::vec3 up = glm::cross(right, forward);
 
-  if (auto *mv = actions_.find("move_forward"); mv && mv->pressed)
+  if (const auto *mv = actions_.find("move_forward");
+      (mv != nullptr) && mv->pressed) {
     position_ += forward * speed;
-  if (auto *mv = actions_.find("move_back"); mv && mv->pressed)
+  }
+
+  if (const auto *mv = actions_.find("move_back");
+      (mv != nullptr) && mv->pressed) {
     position_ -= forward * speed;
-  if (auto *mv = actions_.find("move_left"); mv && mv->pressed)
+  }
+
+  if (const auto *mv = actions_.find("move_left");
+      (mv != nullptr) && mv->pressed) {
     position_ -= right * speed;
-  if (auto *mv = actions_.find("move_right"); mv && mv->pressed)
+  }
+
+  if (const auto *mv = actions_.find("move_right");
+      (mv != nullptr) && mv->pressed) {
     position_ += right * speed;
-  if (auto *mv = actions_.find("move_up"); mv && mv->pressed)
+  }
+
+  if (const auto *mv = actions_.find("move_up");
+      (mv != nullptr) && mv->pressed) {
     position_ += up * speed;
-  if (auto *mv = actions_.find("move_down"); mv && mv->pressed)
+  }
+
+  if (const auto *mv = actions_.find("move_down");
+      (mv != nullptr) && mv->pressed) {
     position_ -= up * speed;
+  }
 
   auto &cam = world_.get<Raiden::ECS::Camera>(camEntity_);
-  cam.view = glm::lookAt(position_, position_ + forward, {0.0f, 1.0f, 0.0f});
+  cam.view = glm::lookAt(position_, position_ + forward, {0.0F, 1.0F, 0.0F});
 
-  rotation_ += deltaTime * 45.0f;
+  rotation_ += deltaTime * 45.0F;
 
-  for (auto &obj : pbrObjects_)
-    obj.rotation += deltaTime * 45.0f;
+  for (auto &obj : pbrObjects_) {
+    obj.rotation += deltaTime * 45.0F;
+  }
 }
 
 void ExampleGame::render(Raiden::Renderer::ICommandBuffer &cmd) {
@@ -277,16 +314,19 @@ void ExampleGame::render(Raiden::Renderer::ICommandBuffer &cmd) {
   // simple pipeline cube (rotating, checkerboard)
   cmd.bindPipeline(*pipeline_);
 
-  float const s = 0.5f;
-  glm::mat4 simpleModel = glm::scale(glm::mat4(1.0f), glm::vec3(s)) *
-                          glm::rotate(glm::mat4(1.0f), glm::radians(rotation_),
-                                      glm::vec3(0.0f, 1.0f, 0.0f));
+  float const s = 0.5F;
+  glm::mat4 simpleModel = glm::scale(glm::mat4(1.0F), glm::vec3(s)) *
+                          glm::rotate(glm::mat4(1.0F), glm::radians(rotation_),
+                                      glm::vec3(0.0F, 1.0F, 0.0F));
+
   cmd.pushConstants(0, sizeof(glm::mat4), &simpleModel);
   cmd.bindTexture(0, *texture_);
 
   for (auto &mesh : model_->meshes) {
-    if (!mesh.isValid())
+    if (!mesh.isValid()) {
       continue;
+    }
+
     cmd.bindVertexBuffer(*mesh.vertexBuffer);
     cmd.bindIndexBuffer(*mesh.indexBuffer);
     cmd.drawIndexed(mesh.indexCount);
@@ -296,16 +336,18 @@ void ExampleGame::render(Raiden::Renderer::ICommandBuffer &cmd) {
   for (auto &obj : pbrObjects_) {
     obj.material->bind(cmd);
 
-    glm::mat4 m = glm::translate(glm::mat4(1.0f), obj.position) *
-                  glm::scale(glm::mat4(1.0f), glm::vec3(0.5f)) *
-                  glm::rotate(glm::mat4(1.0f), glm::radians(obj.rotation),
-                              glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 m = glm::translate(glm::mat4(1.0F), obj.position) *
+                  glm::scale(glm::mat4(1.0F), glm::vec3(0.5F)) *
+                  glm::rotate(glm::mat4(1.0F), glm::radians(obj.rotation),
+                              glm::vec3(0.0F, 1.0F, 0.0F));
 
     cmd.pushConstants(0, sizeof(glm::mat4), &m);
 
     for (auto &mesh : model_->meshes) {
-      if (!mesh.isValid())
+      if (!mesh.isValid()) {
         continue;
+      }
+
       cmd.bindVertexBuffer(*mesh.vertexBuffer);
       cmd.bindIndexBuffer(*mesh.indexBuffer);
       cmd.drawIndexed(mesh.indexCount);

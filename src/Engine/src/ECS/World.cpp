@@ -14,8 +14,8 @@ World::~World() {
         continue;
       }
 
-      for (int32_t r = 0; r < static_cast<int32_t>(arch.entities.size()); ++r) {
-        info.destruct(arch.data(i, r));
+      for (size_t r = 0; r < arch.entities.size(); ++r) {
+        info.destruct(arch.data(i, static_cast<int32_t>(r)));
       }
     }
   }
@@ -23,7 +23,7 @@ World::~World() {
 
 Entity World::create() {
   uint32_t idx = 0;
-  if (freeHead_ != uint32_t(-1)) {
+  if (freeHead_ != UINT32_MAX) {
     idx = freeHead_;
     freeHead_ = slots_[idx].nextFree;
   } else {
@@ -52,7 +52,7 @@ void World::destroy(Entity e) {
     auto cid = arch->signature[i];
     auto &info = componentInfo_[cid];
     if (info.destruct != nullptr) {
-      info.destruct(arch->data(static_cast<int32_t>(i), slot.row));
+        info.destruct(arch->data(static_cast<int32_t>(i), slot.row));
     }
   }
 
@@ -67,7 +67,7 @@ void World::destroy(Entity e) {
       }
     }
   });
-  if (moved.index != uint32_t(-1)) {
+  if (moved.index != UINT32_MAX) {
     slots_[moved.index].row = oldRow;
   }
 

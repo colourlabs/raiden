@@ -212,7 +212,7 @@ VkDescriptorSet VulkanTextureImpl::getOrCreateDescriptorSet(
     return descriptorSet_;
   }
 
-  std::lock_guard<std::mutex> lock(descMutex_);
+  std::scoped_lock lock(descMutex_);
   if (descriptorSet_ != VK_NULL_HANDLE) {
     return descriptorSet_;
   }

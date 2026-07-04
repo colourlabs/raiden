@@ -10,7 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
-typedef unsigned int ALuint;
+using ALuint = unsigned int;
 
 namespace Raiden::Audio {
 
@@ -32,7 +32,7 @@ public:
   SoundId load(std::string_view path) override;
   void unload(SoundId sound) override;
 
-  VoiceId play(SoundId sound, float volume = 1.0f, float pitch = 1.0f,
+  VoiceId play(SoundId sound, float volume = 1.0F, float pitch = 1.0F,
                bool loop = false) override;
   void stop(VoiceId voice) override;
   void setVolume(VoiceId voice, float volume) override;
@@ -54,7 +54,7 @@ public:
 private:
   struct LoadedSound {
     ALuint buffer = 0;
-    float duration = 0.0f;
+    float duration = 0.0F;
   };
 
   struct ActiveVoice {
@@ -87,7 +87,7 @@ private:
 
   SoundId nextSoundId_ = 1;
   VoiceId nextVoiceId_ = 1;
-  float masterVolume_ = 1.0f;
+  float masterVolume_ = 1.0F;
   bool initialized_ = false;
 };
 

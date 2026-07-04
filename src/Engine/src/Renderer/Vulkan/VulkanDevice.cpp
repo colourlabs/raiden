@@ -3,6 +3,7 @@
 #include <Raiden/Platform/IPlatform.hpp>
 #include <Renderer/Vulkan/VulkanBufferImpl.hpp>
 #include <Renderer/Vulkan/VulkanDevice.hpp>
+#include <Renderer/Vulkan/VulkanSampler.hpp>
 #include <Renderer/Vulkan/VulkanMaterial.hpp>
 
 #include <array>
@@ -406,6 +407,15 @@ std::unique_ptr<ITexture> VulkanDevice::createTexture(const TextureDesc &desc) {
   return impl;
 }
 
+std::unique_ptr<ISampler> VulkanDevice::createSampler(const SamplerDesc &desc) {
+  auto sampler = std::make_unique<VulkanSampler>();
+  if (!sampler->init(device_, desc)) {
+    s_logger.error("Failed to create sampler");
+    return nullptr;
+  }
+  return sampler;
+}
+
 void VulkanDevice::shutdown() {
   if (device_ != VK_NULL_HANDLE) {
     vkDeviceWaitIdle(
@@ -723,9 +733,9 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
   uniforms.projection[1][1] *= -1.0F;
   // convert from OpenGL [-1,1] to Vulkan [0,1] depth range
   uniforms.projection[2][2] =
-      0.5F * uniforms.projection[2][2] + 0.5F * uniforms.projection[2][3];
+      (0.5F * uniforms.projection[2][2]) + (0.5F * uniforms.projection[2][3]);
   uniforms.projection[3][2] =
-      0.5F * uniforms.projection[3][2] + 0.5F * uniforms.projection[3][3];
+      (0.5F * uniforms.projection[3][2]) + (0.5F * uniforms.projection[3][3]);
   uniforms.extra = {totalTime_, dt,
                     static_cast<float>(swapchain_.extent().width),
                     static_cast<float>(swapchain_.extent().height)};
@@ -740,10 +750,10 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
         uniforms.projection[1][1] *= -1.0F;
 
         uniforms.projection[2][2] =
-            0.5F * uniforms.projection[2][2] + 0.5F * uniforms.projection[2][3];
+            (0.5F * uniforms.projection[2][2]) + (0.5F * uniforms.projection[2][3]);
 
         uniforms.projection[3][2] =
-            0.5F * uniforms.projection[3][2] + 0.5F * uniforms.projection[3][3];
+            (0.5F * uniforms.projection[3][2]) + (0.5F * uniforms.projection[3][3]);
       }
     });
   }

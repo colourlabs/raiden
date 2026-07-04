@@ -128,6 +128,7 @@ add_library(EngineCore STATIC
   src/Renderer/Vulkan/VulkanPipelineImpl.cpp
   src/Renderer/Vulkan/VulkanBuffer.cpp
   src/Renderer/Vulkan/VulkanImage.cpp
+  src/Renderer/Vulkan/VulkanSampler.cpp
   src/Renderer/Vulkan/VulkanTextureImpl.cpp
   src/Renderer/Vulkan/VulkanCommandBuffer.cpp
   src/Renderer/Vulkan/VulkanDescriptorPool.cpp

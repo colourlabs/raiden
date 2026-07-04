@@ -103,6 +103,7 @@ public:
   std::unique_ptr<IBuffer> createBuffer(const BufferDesc &desc) override;
   std::unique_ptr<IPipeline> createPipeline(const PipelineDesc &desc) override;
   std::unique_ptr<ITexture> createTexture(const TextureDesc &desc) override;
+  std::unique_ptr<ISampler> createSampler(const SamplerDesc &desc) override;
 
   std::shared_ptr<IMaterial>
   createMaterial(const MaterialDesc &desc, std::shared_ptr<ITexture> albedo,

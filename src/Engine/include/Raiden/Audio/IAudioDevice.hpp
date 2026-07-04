@@ -10,6 +10,11 @@ namespace Raiden::Audio {
 
 class IAudioDevice {
 public:
+  IAudioDevice() = default;
+  IAudioDevice(const IAudioDevice&) = delete;
+  IAudioDevice& operator=(const IAudioDevice&) = delete;
+  IAudioDevice(IAudioDevice&&) = delete;
+  IAudioDevice& operator=(IAudioDevice&&) = delete;
   virtual ~IAudioDevice() = default;
 
   virtual bool init(const ::Raiden::Core::AudioConfig &config, ::Raiden::Core::IVirtualFileSystem &vfs) = 0;
@@ -23,7 +28,7 @@ public:
   virtual void unload(SoundId sound) = 0;
 
   // play a loaded sound
-  virtual VoiceId play(SoundId sound, float volume = 1.0f, float pitch = 1.0f,
+  virtual VoiceId play(SoundId sound, float volume = 1.0F, float pitch = 1.0F,
                        bool loop = false) = 0;
   virtual void stop(VoiceId voice) = 0;
   virtual void setVolume(VoiceId voice, float volume) = 0;

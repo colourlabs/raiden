@@ -5,7 +5,7 @@ namespace Raiden::Engine {
 
 static const ::Raiden::Core::Logger s_logger("Raiden::Engine::GamePluginLoader");
 
-#if defined(_WIN32)
+#ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -17,7 +17,7 @@ static const ::Raiden::Core::Logger s_logger("Raiden::Engine::GamePluginLoader")
 GamePluginLoader::~GamePluginLoader() { unload(); }
 
 bool GamePluginLoader::load(std::string_view path) {
-#if defined(_WIN32)
+#ifdef _WIN32
   handle_ = reinterpret_cast<void *>(
       LoadLibraryA(path.data()));
   if (!handle_) {
@@ -71,7 +71,7 @@ void GamePluginLoader::unload() {
   }
   
   if (handle_ != nullptr) {
-#if defined(_WIN32)
+#ifdef _WIN32
     FreeLibrary(reinterpret_cast<HMODULE>(handle_));
 #else
     dlclose(handle_);

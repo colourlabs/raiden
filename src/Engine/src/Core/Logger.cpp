@@ -52,7 +52,7 @@ std::string get_current_time_string() {
             1000;
 
   std::tm local_tm;
-#if defined(_MSC_VER)
+#ifdef _MSC_VER
   localtime_s(&local_tm, &time_t_now);
 #else
   localtime_r(&time_t_now, &local_tm);
@@ -67,24 +67,24 @@ std::string get_current_time_string() {
 } // namespace
 
 void Logger::setMinLogLevel(LogLevel level) {
-  std::lock_guard<std::mutex> lock(g_logMutex);
+  std::scoped_lock lock(g_logMutex);
   g_minLogLevel = level;
 }
 
 LogLevel Logger::getMinLogLevel() {
-  std::lock_guard<std::mutex> lock(g_logMutex);
+  std::scoped_lock lock(g_logMutex);
   return g_minLogLevel;
 }
 
 bool Logger::should_log(LogLevel level) {
-  std::lock_guard<std::mutex> lock(g_logMutex);
+  std::scoped_lock lock(g_logMutex);
   return level >= g_minLogLevel;
 }
 
 void Logger::log_internal(LogLevel level, std::string_view tag,
                           std::string_view message) {
   static bool ansiInitialized = (enableWindowsAnsi(), true);
-  std::lock_guard<std::mutex> lock(g_logMutex);
+  std::scoped_lock lock(g_logMutex);
 
   std::string timeStr = get_current_time_string();
 

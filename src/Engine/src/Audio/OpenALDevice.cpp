@@ -2,7 +2,7 @@
 #include <Raiden/Core/IVirtualFileSystem.hpp>
 
 #define MINIAUDIO_IMPLEMENTATION
-#include <math.h>
+#include <cmath>
 #include <miniaudio.h>
 
 #include <AL/al.h>
@@ -58,7 +58,7 @@ void OpenALDevice::shutdown() {
   sounds_.clear();
 
   {
-    std::lock_guard<std::mutex> lock(pendingMutex_);
+    std::scoped_lock lock(pendingMutex_);
     pendingLoads_.clear();
   }
 
@@ -140,7 +140,7 @@ OpenALDevice::SoundId OpenALDevice::load(std::string_view path) {
     };
 
     {
-      std::lock_guard<std::mutex> lock(pendingMutex_);
+      std::scoped_lock lock(pendingMutex_);
       pendingLoads_[id] = std::move(pending);
     }
 
@@ -184,7 +184,7 @@ OpenALDevice::SoundId OpenALDevice::load(std::string_view path) {
 }
 
 void OpenALDevice::processPendingLoads() {
-  std::lock_guard<std::mutex> lock(pendingMutex_);
+  std::scoped_lock lock(pendingMutex_);
 
   auto it = pendingLoads_.begin();
   while (it != pendingLoads_.end()) {
@@ -243,7 +243,7 @@ void OpenALDevice::unload(SoundId sound) {
   }
 
   // check pending loads
-  std::lock_guard<std::mutex> lock(pendingMutex_);
+  std::scoped_lock lock(pendingMutex_);
   auto pit = pendingLoads_.find(sound);
   if (pit != pendingLoads_.end()) {
     pendingLoads_.erase(pit);

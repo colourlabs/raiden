@@ -22,14 +22,15 @@ void AssetManager::registerData(std::string_view path,
   vfs_.registerData(path, std::move(data));
 }
 
-std::shared_ptr<ITexture> AssetManager::loadTextureSync(
-    std::string_view vfsPath) {
+std::shared_ptr<ITexture>
+AssetManager::loadTextureSync(std::string_view vfsPath) {
   std::string key(vfsPath);
 
   auto it = textureCache_.find(key);
   if (it != textureCache_.end()) {
-    if (auto live = it->second.lock())
+    if (auto live = it->second.lock()) {
       return live;
+    }
   }
 
   auto bytes = vfs_.readBytes(vfsPath);
@@ -57,8 +58,8 @@ std::shared_ptr<ITexture> AssetManager::loadTextureSync(
   }
 
   TextureDesc desc{
-      .width = static_cast<uint32_t>(decoded->width),
-      .height = static_cast<uint32_t>(decoded->height),
+      .width = decoded->width,
+      .height = decoded->height,
       .format = decoded->format,
       .type = decoded->type,
   };
@@ -75,8 +76,8 @@ std::shared_ptr<ITexture> AssetManager::loadTextureSync(
   return texShared;
 }
 
-std::shared_ptr<ITexture> AssetManager::_loadTextureSync(
-    std::string_view vfsPath) {
+std::shared_ptr<ITexture>
+AssetManager::_loadTextureSync(std::string_view vfsPath) {
   return loadTextureSync(vfsPath);
 }
 
@@ -87,17 +88,19 @@ std::shared_ptr<ITexture> AssetManager::loadTexture(std::string_view vfsPath) {
   // check cache
   auto it = textureCache_.find(key);
   if (it != textureCache_.end()) {
-    if (auto live = it->second.lock())
+    if (auto live = it->second.lock()) {
       return live;
+    }
   }
 
   // check if already pending
   for (auto &p : pendingTextures_) {
-    if (p->key == key)
+    if (p->key == key) {
       return nullptr;
+    }
   }
 
-  if (!js_) {
+  if (js_ == nullptr) {
     s_logger.warn("No JobSystem set, falling back to synchronous load: {}",
                   vfsPath);
     return _loadTextureSync(vfsPath);
@@ -108,8 +111,8 @@ std::shared_ptr<ITexture> AssetManager::loadTexture(std::string_view vfsPath) {
 
   auto *rawPtr = pending.get();
 
-  auto ctr = js_->submit(
-      {.task = [this, rawPtr, path = std::string(vfsPath)]() {
+  auto ctr =
+      js_->submit({.task = [this, rawPtr, path = std::string(vfsPath)]() {
         auto bytes = vfs_.readBytes(path);
         if (bytes.empty()) {
           rawPtr->failed = true;
@@ -118,9 +121,8 @@ std::shared_ptr<ITexture> AssetManager::loadTexture(std::string_view vfsPath) {
 
         bool isKtx2 =
             path.size() > 5 && path.substr(path.size() - 5) == ".ktx2";
-        auto decoded = isKtx2
-                           ? decodeKtx2(bytes.data(), bytes.size())
-                           : decodeStbImage(bytes.data(), bytes.size());
+        auto decoded = isKtx2 ? decodeKtx2(bytes.data(), bytes.size())
+                              : decodeStbImage(bytes.data(), bytes.size());
 
         if (decoded) {
           rawPtr->width = decoded->width;
@@ -155,8 +157,8 @@ void AssetManager::processLoadQueue() {
 
     // decode finished, create GPU texture and upload on main thread
     TextureDesc desc{
-        .width = static_cast<uint32_t>(p->width),
-        .height = static_cast<uint32_t>(p->height),
+        .width = p->width,
+        .height = p->height,
         .format = p->format,
         .type = p->type,
     };
@@ -168,8 +170,7 @@ void AssetManager::processLoadQueue() {
       s_logger.info("Async texture loaded: {} ({}x{})", p->key, p->width,
                     p->height);
     } else {
-      s_logger.error("Failed to create GPU texture for async load: {}",
-                     p->key);
+      s_logger.error("Failed to create GPU texture for async load: {}", p->key);
     }
 
     it = pendingTextures_.erase(it);
@@ -196,8 +197,9 @@ AssetManager::loadMaterial(const MaterialDesc &desc) {
 
   auto it = materialCache_.find(key);
   if (it != materialCache_.end()) {
-    if (auto live = it->second.lock())
+    if (auto live = it->second.lock()) {
       return live;
+    }
   }
 
   std::shared_ptr<ITexture> albedo;
@@ -206,16 +208,21 @@ AssetManager::loadMaterial(const MaterialDesc &desc) {
   std::shared_ptr<ITexture> emissive;
   std::shared_ptr<ITexture> occlusion;
 
-  if (!desc.baseColorTexture.empty())
+  if (!desc.baseColorTexture.empty()) {
     albedo = _loadTextureSync(desc.baseColorTexture);
-  if (!desc.normalTexture.empty())
+  }
+  if (!desc.normalTexture.empty()) {
     normal = _loadTextureSync(desc.normalTexture);
-  if (!desc.metallicRoughnessTexture.empty())
+  }
+  if (!desc.metallicRoughnessTexture.empty()) {
     metallicRoughness = _loadTextureSync(desc.metallicRoughnessTexture);
-  if (!desc.emissiveTexture.empty())
+  }
+  if (!desc.emissiveTexture.empty()) {
     emissive = _loadTextureSync(desc.emissiveTexture);
-  if (!desc.occlusionTexture.empty())
+  }
+  if (!desc.occlusionTexture.empty()) {
     occlusion = _loadTextureSync(desc.occlusionTexture);
+  }
 
   auto mat = device_.createMaterial(desc, albedo, normal, metallicRoughness,
                                     emissive, occlusion);
@@ -235,8 +242,9 @@ std::shared_ptr<Model> AssetManager::loadMesh(std::string_view vfsPath) {
 
   auto it = meshCache_.find(key);
   if (it != meshCache_.end()) {
-    if (auto live = it->second.lock())
+    if (auto live = it->second.lock()) {
       return live;
+    }
   }
 
   auto bytes = vfs_.readBytes(vfsPath);

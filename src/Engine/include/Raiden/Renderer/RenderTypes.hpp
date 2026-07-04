@@ -88,6 +88,38 @@ struct TextureDesc {
   TextureType type = TextureType::Texture2D;
 };
 
+enum class SamplerFilter : uint8_t {
+  Nearest,
+  Linear,
+};
+
+enum class SamplerMipmapMode : uint8_t {
+  Nearest,
+  Linear,
+};
+
+enum class SamplerAddressMode : uint8_t {
+  Repeat,
+  MirroredRepeat,
+  ClampToEdge,
+  ClampToBorder,
+};
+
+struct SamplerDesc {
+  SamplerFilter magFilter = SamplerFilter::Linear;
+  SamplerFilter minFilter = SamplerFilter::Linear;
+  SamplerMipmapMode mipmapMode = SamplerMipmapMode::Linear;
+  SamplerAddressMode addressModeU = SamplerAddressMode::Repeat;
+  SamplerAddressMode addressModeV = SamplerAddressMode::Repeat;
+  SamplerAddressMode addressModeW = SamplerAddressMode::Repeat;
+  bool anisotropyEnable = true;
+  float maxAnisotropy = 16.0F;
+  CompareOp compareOp = CompareOp::Less;
+  float minLod = 0.0F;
+  float maxLod = 1000.0F;
+  float mipLodBias = 0.0F;
+};
+
 struct alignas(16) FrameUniforms {
   glm::mat4 projection;
   glm::mat4 view;

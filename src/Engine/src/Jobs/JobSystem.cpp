@@ -79,14 +79,14 @@ void JobSystem::shutdown() {
   workers_.clear();
 
   {
-    std::lock_guard<std::mutex> lock(globalMutex_);
+    std::scoped_lock lock(globalMutex_);
     for (auto &q : globalQueues_) {
       q.clear();
 }
   }
 
   {
-    std::lock_guard<std::mutex> lock(pendingMutex_);
+    std::scoped_lock lock(pendingMutex_);
     pendingJobs_.clear();
   }
 
@@ -105,7 +105,7 @@ void JobSystem::enqueue(std::shared_ptr<InternalJob> job) {
   if (!job) {
     return;
 }
-  std::lock_guard<std::mutex> lock(globalMutex_);
+  std::scoped_lock lock(globalMutex_);
   globalQueues_[static_cast<size_t>(job->priority)].push_back(std::move(job));
 }
 
@@ -121,7 +121,7 @@ JobCounter JobSystem::submit(JobDesc desc) {
   job->dependency = std::move(desc.dependency);
 
   if (dependencyUnmet(*job)) {
-    std::lock_guard<std::mutex> lock(pendingMutex_);
+  std::scoped_lock lock(pendingMutex_);
     pendingJobs_.push_back(std::move(job));
   } else {
     enqueue(std::move(job));
@@ -159,14 +159,14 @@ JobCounter JobSystem::submitBatch(std::span<JobDesc> descs) {
     job->dependency = desc.dependency;
 
     if (dependencyUnmet(*job)) {
-      std::lock_guard<std::mutex> lock(pendingMutex_);
+      std::scoped_lock lock(pendingMutex_);
       pendingJobs_.push_back(std::move(job));
       continue;
     }
 
     if (numWorkers > 0) {
       auto &worker = workers_[w % numWorkers];
-      std::lock_guard<std::mutex> lock(worker->mutex);
+      std::scoped_lock lock(worker->mutex);
       worker->queue.push_back(std::move(job));
       ++w;
     } else {
@@ -242,7 +242,7 @@ JobSystem::tryGetJob(uint32_t workerIndex) {
   // own queue (LIFO from back for cache locality)
   if (workerIndex < workers_.size()) {
     auto &worker = workers_[workerIndex];
-    std::lock_guard<std::mutex> lock(worker->mutex);
+    std::scoped_lock lock(worker->mutex);
     if (!worker->queue.empty()) {
       auto job = std::move(worker->queue.back());
       worker->queue.pop_back();
@@ -263,7 +263,7 @@ JobSystem::tryGetJob(uint32_t workerIndex) {
       }
 
       auto &victim = workers_[victimIndex];
-      std::lock_guard<std::mutex> lock(victim->mutex);
+      std::scoped_lock lock(victim->mutex);
       
       if (!victim->queue.empty()) {
         auto job = std::move(victim->queue.front());
@@ -275,7 +275,7 @@ JobSystem::tryGetJob(uint32_t workerIndex) {
 
   // global queue (pick highest priority)
   {
-    std::lock_guard<std::mutex> lock(globalMutex_);
+    std::scoped_lock lock(globalMutex_);
     for (int p = static_cast<int>(JobPriority::Count) - 1; p >= 0; --p) {
       auto &q = globalQueues_[p];
       if (!q.empty()) {
@@ -295,7 +295,7 @@ void JobSystem::executeJob(std::shared_ptr<InternalJob> job) {
 }
 
   if (dependencyUnmet(*job)) {
-    std::lock_guard<std::mutex> lock(pendingMutex_);
+    std::scoped_lock lock(pendingMutex_);
     pendingJobs_.push_back(std::move(job));
     return;
   }
@@ -325,7 +325,7 @@ void JobSystem::counterReachedZero() {
 }
 
 void JobSystem::promotePendingJobs() {
-  std::lock_guard<std::mutex> lock(pendingMutex_);
+  std::scoped_lock lock(pendingMutex_);
 
   auto it = pendingJobs_.begin();
   while (it != pendingJobs_.end()) {

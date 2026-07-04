@@ -5,6 +5,7 @@
 #include <Raiden/Renderer/ICommandBuffer.hpp>
 #include <Raiden/Renderer/IMaterial.hpp>
 #include <Raiden/Renderer/IPipeline.hpp>
+#include <Raiden/Renderer/ISampler.hpp>
 #include <Raiden/Renderer/ITexture.hpp>
 #include <Raiden/Renderer/RenderTypes.hpp>
 
@@ -26,6 +27,7 @@ public:
   virtual std::unique_ptr<IPipeline>
   createPipeline(const PipelineDesc &desc) = 0;
   virtual std::unique_ptr<ITexture> createTexture(const TextureDesc &desc) = 0;
+  virtual std::unique_ptr<ISampler> createSampler(const SamplerDesc &desc) = 0;
   virtual std::shared_ptr<IMaterial>
   createMaterial(const MaterialDesc &desc,
                  std::shared_ptr<ITexture> albedo = nullptr,
