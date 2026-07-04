@@ -115,21 +115,21 @@ bool VulkanFrameContext::beginFrame(VulkanSwapchain &swapchain,
 bool VulkanFrameContext::endFrame(VulkanSwapchain &swapchain,
                                   VkQueue graphicsQueue, VkQueue presentQueue,
                                   uint32_t imageIndex) {
-  VkSemaphore waitSemaphores[] = {imageAvailableSemaphores_[currentFrame_]};
-  VkPipelineStageFlags waitStages[] = {
+  std::array<VkSemaphore, 1> waitSemaphores = {imageAvailableSemaphores_[currentFrame_]};
+  std::array<VkPipelineStageFlags, 1> waitStages = {
       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-  VkSemaphore signalSemaphores[] = {
+  std::array<VkSemaphore, 1> signalSemaphores = {
       renderFinishedSemaphores_[imageIndex]};
 
   VkSubmitInfo submitInfo{
       .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
       .waitSemaphoreCount = 1,
-      .pWaitSemaphores = waitSemaphores,
-      .pWaitDstStageMask = waitStages,
+      .pWaitSemaphores = waitSemaphores.data(),
+      .pWaitDstStageMask = waitStages.data(),
       .commandBufferCount = 1,
       .pCommandBuffers = &commandBuffers_[currentFrame_],
       .signalSemaphoreCount = 1,
-      .pSignalSemaphores = signalSemaphores,
+      .pSignalSemaphores = signalSemaphores.data(),
   };
 
   if (vkQueueSubmit(graphicsQueue, 1, &submitInfo,
@@ -138,15 +138,15 @@ bool VulkanFrameContext::endFrame(VulkanSwapchain &swapchain,
     return false;
   }
 
-  VkSwapchainKHR swapchains[] = {swapchain.swapchain()};
+  std::array<VkSwapchainKHR, 1> swapchains = {swapchain.swapchain()};
 
   VkPresentInfoKHR presentInfo{
       .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
       .waitSemaphoreCount = 1,
       .pWaitSemaphores =
-          signalSemaphores,
+          signalSemaphores.data(),
       .swapchainCount = 1,
-      .pSwapchains = swapchains,
+      .pSwapchains = swapchains.data(),
       .pImageIndices = &imageIndex,
   };
 

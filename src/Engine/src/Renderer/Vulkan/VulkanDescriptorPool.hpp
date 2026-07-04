@@ -19,43 +19,43 @@ public:
             VkCommandPool transferPool, VkQueue graphicsQueue);
   void shutdown();
 
-  VkDescriptorPool handle() const { return pool_; }
+  [[nodiscard]] VkDescriptorPool handle() const { return pool_; }
 
   // set 0, frame UBO
-  VkDescriptorSetLayout uboSetLayout() const { return uboSetLayout_; }
-  const VkDescriptorSetLayout *uboSetLayoutAddr() const {
+  [[nodiscard]] VkDescriptorSetLayout uboSetLayout() const { return uboSetLayout_; }
+  [[nodiscard]] const VkDescriptorSetLayout *uboSetLayoutAddr() const {
     return &uboSetLayout_;
   }
 
   // set 1, sampler (shared, used by both simple and material paths)
-  VkDescriptorSetLayout samplerSetLayout() const { return samplerSetLayout_; }
-  VkDescriptorSet samplerSet() const { return samplerSet_; }
+  [[nodiscard]] VkDescriptorSetLayout samplerSetLayout() const { return samplerSetLayout_; }
+  [[nodiscard]] VkDescriptorSet samplerSet() const { return samplerSet_; }
 
   // set 2, simple single texture (VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, binding 0)
-  VkDescriptorSetLayout textureSetLayout() const { return textureSetLayout_; }
+  [[nodiscard]] VkDescriptorSetLayout textureSetLayout() const { return textureSetLayout_; }
 
   // set 2, material textures (albedo, normal, metallicRoughness, emissive,
   // occlusion)
-  VkDescriptorSetLayout materialSetLayout() const { return materialSetLayout_; }
-  const VkDescriptorSetLayout *materialSetLayoutAddr() const {
+  [[nodiscard]] VkDescriptorSetLayout materialSetLayout() const { return materialSetLayout_; }
+  [[nodiscard]] const VkDescriptorSetLayout *materialSetLayoutAddr() const {
     return &materialSetLayout_;
   }
 
   // set 3, material params UBO
-  VkDescriptorSetLayout materialParamsSetLayout() const {
+  [[nodiscard]] VkDescriptorSetLayout materialParamsSetLayout() const {
     return materialParamsSetLayout_;
   }
-  const VkDescriptorSetLayout *materialParamsSetLayoutAddr() const {
+  [[nodiscard]] const VkDescriptorSetLayout *materialParamsSetLayoutAddr() const {
     return &materialParamsSetLayout_;
   }
 
-  VkSampler sampler() const { return sampler_; }
-  VkSampler clampSampler() const { return clampSampler_; }
-  VkDescriptorSet clampSamplerSet() const { return clampSamplerSet_; }
-  VkDevice device() const { return device_; }
+  [[nodiscard]] VkSampler sampler() const { return sampler_; }
+  [[nodiscard]] VkSampler clampSampler() const { return clampSampler_; }
+  [[nodiscard]] VkDescriptorSet clampSamplerSet() const { return clampSamplerSet_; }
+  [[nodiscard]] VkDevice device() const { return device_; }
 
   VkDescriptorSet allocSamplerSet();
-  VkDescriptorImageInfo fallbackImageInfo() const;
+  [[nodiscard]] VkDescriptorImageInfo fallbackImageInfo() const;
 
 private:
   bool createFallbackTexture();

@@ -16,12 +16,11 @@
 #include <Renderer/Vulkan/VulkanShader.hpp>
 #include <Renderer/Vulkan/VulkanSwapchain.hpp>
 #include <Renderer/Vulkan/VulkanTextureImpl.hpp>
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <Raiden/Renderer/Vulkan/IVulkanRenderDevice.hpp>
-
-#include <glm/glm.hpp>
 
 #include <chrono>
 #include <optional>
@@ -54,43 +53,52 @@ public:
   VulkanDevice(VulkanDevice &&) = delete;
   VulkanDevice &operator=(VulkanDevice &&) = delete;
 
-  bool init(const ::Raiden::Core::EngineConfig &config, ::Raiden::Platform::IPlatform *platform) override;
+  bool init(const ::Raiden::Core::EngineConfig &config,
+            ::Raiden::Platform::IPlatform *platform) override;
   void shutdown() override;
 
-  VkInstance getInstance() const override { return instance_; }
-  VkPhysicalDevice getPhysicalDevice() const override {
+  [[nodiscard]] VkInstance getInstance() const override { return instance_; }
+  [[nodiscard]] VkPhysicalDevice getPhysicalDevice() const override {
     return physicalDevice_;
   }
 
-  VkDevice getDevice() const override { return device_; }
-  VkQueue getGraphicsQueue() const override { return graphicsQueue_; }
-  VkQueue getPresentQueue() const override { return presentQueue_; }
+  [[nodiscard]] VkDevice getDevice() const override { return device_; }
+  [[nodiscard]] VkQueue getGraphicsQueue() const override {
+    return graphicsQueue_;
+  }
+  [[nodiscard]] VkQueue getPresentQueue() const override {
+    return presentQueue_;
+  }
 
-  uint32_t getGraphicsQueueIndex() const override {
+  [[nodiscard]] uint32_t getGraphicsQueueIndex() const override {
     return graphicsQueueIndex_;
   }
 
-  uint32_t getPresentQueueIndex() const override { return presentQueueIndex_; }
+  [[nodiscard]] uint32_t getPresentQueueIndex() const override {
+    return presentQueueIndex_;
+  }
 
-  bool hasValidation() const override { return enableValidation_; }
+  [[nodiscard]] bool hasValidation() const override {
+    return enableValidation_;
+  }
 
-  VkRenderPass getRenderPass() const override {
+  [[nodiscard]] VkRenderPass getRenderPass() const override {
     return renderPass_.renderPass();
   }
 
-  uint32_t getSwapchainImageCount() const override {
+  [[nodiscard]] uint32_t getSwapchainImageCount() const override {
     return static_cast<uint32_t>(swapchain_.imageViews().size());
   }
 
-  VkSampleCountFlagBits getSampleCount() const override {
+  [[nodiscard]] VkSampleCountFlagBits getSampleCount() const override {
     return sampleCount_;
   }
 
   void setWorld(::Raiden::ECS::World *world) override { world_ = world; }
 
-  float gpuTimeMs() const { return gpuTimeMs_; }
-  uint32_t lastDrawCalls() const { return lastDrawCalls_; }
-  uint32_t lastTriangles() const { return lastTriangles_; }
+  [[nodiscard]] float gpuTimeMs() const { return gpuTimeMs_; }
+  [[nodiscard]] uint32_t lastDrawCalls() const { return lastDrawCalls_; }
+  [[nodiscard]] uint32_t lastTriangles() const { return lastTriangles_; }
 
   std::unique_ptr<IBuffer> createBuffer(const BufferDesc &desc) override;
   std::unique_ptr<IPipeline> createPipeline(const PipelineDesc &desc) override;
@@ -103,11 +111,14 @@ public:
                  std::shared_ptr<ITexture> emissive,
                  std::shared_ptr<ITexture> occlusion) override;
 
-  void setJobSystem(::Raiden::Jobs::JobSystem &js) override { jobSystem_ = &js; }
+  void setJobSystem(::Raiden::Jobs::JobSystem &js) override {
+    jobSystem_ = &js;
+  }
 
   void waitIdle() override {
-    if (device_ != VK_NULL_HANDLE)
+    if (device_ != VK_NULL_HANDLE) {
       vkDeviceWaitIdle(device_);
+    }
   }
 
   bool drawFrame(const RenderCallback &callback) override;
@@ -176,7 +187,7 @@ private:
     VulkanBuffer uniformBuffer;
     VkDescriptorSet uniformSet = VK_NULL_HANDLE;
   };
-  PerFrame perFrame_[kMaxFrames];
+  std::array<PerFrame, kMaxFrames> perFrame_;
 
   VkCommandPool transferPool_ = VK_NULL_HANDLE;
 
@@ -185,11 +196,11 @@ private:
   VkSampleCountFlagBits sampleCount_ = VK_SAMPLE_COUNT_1_BIT;
   std::vector<VulkanImage> msaaColorImages_;
 
-  float totalTime_ = 0.0f;
+  float totalTime_ = 0.0F;
 
   uint32_t frameIndex_ = 0;
   std::chrono::steady_clock::time_point lastFrameTime_;
-  bool timestampReady_[kMaxFrames] = {};
+  std::array<bool, kMaxFrames> timestampReady_ = {};
   ::Raiden::ECS::World *world_ = nullptr;
 
   // multi-threaded command buffer recording
@@ -204,8 +215,8 @@ private:
 
   // profiler
   VkQueryPool queryPool_ = VK_NULL_HANDLE;
-  float timestampPeriod_ = 1.0f;
-  float gpuTimeMs_ = 0.0f;
+  float timestampPeriod_ = 1.0F;
+  float gpuTimeMs_ = 0.0F;
   uint32_t lastDrawCalls_ = 0;
   uint32_t lastTriangles_ = 0;
 };

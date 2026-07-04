@@ -17,22 +17,26 @@ void VulkanCommandBuffer::bindPipeline(const IPipeline &pipeline) {
 }
 
 void VulkanCommandBuffer::bindVertexBuffer(const IBuffer &buffer) {
-  auto &vkBuffer = static_cast<const VulkanBufferImpl &>(buffer);
+  const auto &vkBuffer = static_cast<const VulkanBufferImpl &>(buffer);
+
   VkBuffer vkbuf = vkBuffer.handle();
   VkDeviceSize offset = 0;
+
   vkCmdBindVertexBuffers(cmd_, 0, 1, &vkbuf, &offset);
 }
 
 void VulkanCommandBuffer::bindIndexBuffer(const IBuffer &buffer) {
-  auto &vkBuffer = static_cast<const VulkanBufferImpl &>(buffer);
+  const auto &vkBuffer = static_cast<const VulkanBufferImpl &>(buffer);
+
   vkCmdBindIndexBuffer(cmd_, vkBuffer.handle(), 0, vkBuffer.getVkIndexType());
 }
 
 void VulkanCommandBuffer::bindTexture(uint32_t slot, const ITexture &texture) {
-  if (currentLayout_ == VK_NULL_HANDLE)
+  if (currentLayout_ == VK_NULL_HANDLE) {
     return;
+  }
 
-  auto &vkTex = static_cast<const VulkanTextureImpl &>(texture);
+  const auto &vkTex = static_cast<const VulkanTextureImpl &>(texture);
 
   // bind sampler at set 1 (clamp-to-edge for cubemaps, repeat otherwise)
   bool isCube = (vkTex.getType() == TextureType::TextureCube);
@@ -46,8 +50,9 @@ void VulkanCommandBuffer::bindTexture(uint32_t slot, const ITexture &texture) {
       pool_->device(), pool_->handle(), pool_->textureSetLayout(),
       pool_->sampler());
 
-  if (texSet == VK_NULL_HANDLE)
+  if (texSet == VK_NULL_HANDLE) {
     return;
+  }
 
   vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, currentLayout_,
                           2, 1, &texSet, 0, nullptr);
@@ -63,10 +68,12 @@ void VulkanCommandBuffer::setViewport(int x, int y, int w, int h) {
   VkViewport vp{};
   vp.x = static_cast<float>(x);
   vp.y = static_cast<float>(y);
+  
   vp.width = static_cast<float>(w);
   vp.height = static_cast<float>(h);
-  vp.minDepth = 0.0f;
-  vp.maxDepth = 1.0f;
+
+  vp.minDepth = 0.0F;
+  vp.maxDepth = 1.0F;
   vkCmdSetViewport(cmd_, 0, 1, &vp);
 }
 
@@ -98,8 +105,10 @@ void VulkanCommandBuffer::drawIndexedInstanced(uint32_t indexCount,
 
 void VulkanCommandBuffer::pushConstants(uint32_t offset, uint32_t size,
                                         const void *data) {
-  if (currentLayout_ == VK_NULL_HANDLE)
+  if (currentLayout_ == VK_NULL_HANDLE) {
     return;
+  }
+
   vkCmdPushConstants(cmd_, currentLayout_, VK_SHADER_STAGE_VERTEX_BIT, offset,
                      size, data);
 }

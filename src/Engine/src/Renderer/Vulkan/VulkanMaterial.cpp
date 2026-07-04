@@ -29,7 +29,7 @@ struct MaterialParams {
   glm::vec2 uvScale;
   float uvRotation;
   int vertexColorMode; // 0=Ignore, 1=Multiply, 2=Add
-  float _pad[2];       // keep 16-byte alignment
+  std::array<float, 2> _pad; // keep 16-byte alignment
 };
 
 bool VulkanMaterial::init(VkDevice device, VmaAllocator allocator,
@@ -101,7 +101,7 @@ bool VulkanMaterial::init(VkDevice device, VmaAllocator allocator,
 void VulkanMaterial::uploadParams(const MaterialDesc &desc) {
   MaterialParams params{
       .baseColorFactor = desc.baseColorFactor,
-      .emissiveFactor = glm::vec4(desc.emissiveFactor, 0.0f),
+      .emissiveFactor = glm::vec4(desc.emissiveFactor, 0.0F),
       .metallicFactor = desc.metallicFactor,
       .roughnessFactor = desc.roughnessFactor,
       .occlusionStrength = desc.occlusionStrength,
@@ -218,13 +218,13 @@ void VulkanMaterial::bind(ICommandBuffer &cmd) {
 
   VulkanPipelineImpl *vkPipeline = nullptr;
 
-  if (pipeline_) {
+  if (pipeline_ != nullptr) {
     vkPipeline = static_cast<VulkanPipelineImpl *>(pipeline_);
     vkCmdBindPipeline(raw, VK_PIPELINE_BIND_POINT_GRAPHICS,
                       vkPipeline->handle());
   }
 
-  if (vkPipeline) {
+  if (vkPipeline != nullptr) {
     vkCmd->setPipelineLayout(vkPipeline->layout());
 
     VkDescriptorSet samplerSet = pool_->samplerSet();

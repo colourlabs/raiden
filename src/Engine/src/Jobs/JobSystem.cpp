@@ -6,7 +6,7 @@
 namespace Raiden::Jobs {
 
 namespace {
-thread_local int32_t tls_workerIndex = -1;
+thread_local int32_t tls_workerIndex = -1; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 }
 
 struct JobCounter::Impl {
@@ -41,8 +41,9 @@ JobSystem::JobSystem() = default;
 JobSystem::~JobSystem() { shutdown(); }
 
 void JobSystem::init(const JobSystemConfig &config) {
-  if (initialized_)
+  if (initialized_) {
     return;
+  }
 
   uint32_t numWorkers = config.numWorkers;
   if (numWorkers == 0) {
@@ -62,23 +63,26 @@ void JobSystem::init(const JobSystemConfig &config) {
 }
 
 void JobSystem::shutdown() {
-  if (!initialized_)
+  if (!initialized_) {
     return;
+}
 
   shutdownRequested_.store(true, std::memory_order_release);
   wakeAll();
 
   for (auto &worker : workers_) {
-    if (worker->thread.joinable())
+    if (worker->thread.joinable()) {
       worker->thread.join();
+}
   }
 
   workers_.clear();
 
   {
     std::lock_guard<std::mutex> lock(globalMutex_);
-    for (auto &q : globalQueues_)
+    for (auto &q : globalQueues_) {
       q.clear();
+}
   }
 
   {
@@ -98,8 +102,9 @@ void JobSystem::wakeOne() { wakeCV_.notify_one(); }
 void JobSystem::wakeAll() { wakeCV_.notify_all(); }
 
 void JobSystem::enqueue(std::shared_ptr<InternalJob> job) {
-  if (!job)
+  if (!job) {
     return;
+}
   std::lock_guard<std::mutex> lock(globalMutex_);
   globalQueues_[static_cast<size_t>(job->priority)].push_back(std::move(job));
 }
@@ -142,7 +147,7 @@ JobCounter JobSystem::submitBatch(std::span<JobDesc> descs) {
                          std::memory_order_relaxed);
 
   bool enqueuedAny = false;
-  uint32_t numWorkers = static_cast<uint32_t>(workers_.size());
+  auto numWorkers = static_cast<uint32_t>(workers_.size());
   uint32_t w = 0;
 
   for (auto &desc : descs) {
@@ -170,8 +175,9 @@ JobCounter JobSystem::submitBatch(std::span<JobDesc> descs) {
     enqueuedAny = true;
   }
 
-  if (enqueuedAny)
+  if (enqueuedAny) {
     wakeAll();
+}
 
   JobCounter result;
   result.impl_ = std::move(counter);
@@ -179,18 +185,24 @@ JobCounter JobSystem::submitBatch(std::span<JobDesc> descs) {
 }
 
 void JobSystem::parallelFor(uint32_t begin, uint32_t end, uint32_t grainSize,
-                            std::function<void(uint32_t, uint32_t)> fn) {
-  if (begin >= end)
+                            const std::function<void(uint32_t, uint32_t)> &fn) {
+  if (begin >= end) {
     return;
-  if (grainSize == 0)
+  }
+
+  if (grainSize == 0) {
     grainSize = 1;
+  }
 
   std::vector<JobDesc> descs;
   uint32_t chunkStart = begin;
+
   while (chunkStart < end) {
     uint32_t chunkEnd = std::min(chunkStart + grainSize, end);
+
     descs.push_back(
         {.task = [fn, chunkStart, chunkEnd]() { fn(chunkStart, chunkEnd); }});
+
     chunkStart = chunkEnd;
   }
 
@@ -213,8 +225,11 @@ void JobSystem::waitAndAssist(const JobCounter &counter) {
 
 bool JobSystem::assistOnce() {
   int32_t idx = tls_workerIndex;
-  if (idx >= 0)
+
+  if (idx >= 0) {
     return tryExecuteOne(static_cast<uint32_t>(idx));
+  }
+
   return tryExecuteOne(UINT32_MAX);
 }
 
@@ -236,16 +251,20 @@ JobSystem::tryGetJob(uint32_t workerIndex) {
   }
 
   // steal from a random victim (FIFO from front to minimise contention)
-  uint32_t numWorkers = static_cast<uint32_t>(workers_.size());
+  auto numWorkers = static_cast<uint32_t>(workers_.size());
+
   if (numWorkers > 0) {
     uint32_t start = static_cast<uint32_t>(std::rand()) % numWorkers;
     for (uint32_t i = 0; i < numWorkers; ++i) {
       uint32_t victimIndex = (start + i) % numWorkers;
-      if (victimIndex == workerIndex)
+      
+      if (victimIndex == workerIndex) {
         continue;
+      }
 
       auto &victim = workers_[victimIndex];
       std::lock_guard<std::mutex> lock(victim->mutex);
+      
       if (!victim->queue.empty()) {
         auto job = std::move(victim->queue.front());
         victim->queue.erase(victim->queue.begin());
@@ -271,8 +290,9 @@ JobSystem::tryGetJob(uint32_t workerIndex) {
 }
 
 void JobSystem::executeJob(std::shared_ptr<InternalJob> job) {
-  if (!job)
+  if (!job) {
     return;
+}
 
   if (dependencyUnmet(*job)) {
     std::lock_guard<std::mutex> lock(pendingMutex_);
@@ -280,8 +300,9 @@ void JobSystem::executeJob(std::shared_ptr<InternalJob> job) {
     return;
   }
 
-  if (job->task)
+  if (job->task) {
     job->task();
+}
 
   auto counter = job->counterToDecrement;
   job->counterToDecrement.reset();
@@ -319,9 +340,12 @@ void JobSystem::promotePendingJobs() {
 
 bool JobSystem::tryExecuteOne(uint32_t workerIndex) {
   auto job = tryGetJob(workerIndex);
-  if (!job)
+  if (!job) {
     return false;
+}
+
   executeJob(std::move(job));
+
   return true;
 }
 
@@ -331,8 +355,9 @@ void JobSystem::workerMain(uint32_t workerIndex) {
   tls_workerIndex = static_cast<int32_t>(workerIndex);
 
   while (true) {
-    if (tryExecuteOne(workerIndex))
+    if (tryExecuteOne(workerIndex)) {
       continue;
+}
 
     promotePendingJobs();
 

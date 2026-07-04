@@ -2,6 +2,7 @@
 #include <Renderer/Vulkan/VulkanBuffer.hpp>
 #include <Renderer/Vulkan/VulkanTextureImpl.hpp>
 
+#include <cstddef>
 #include <cstring>
 
 namespace Raiden::Renderer {
@@ -99,15 +100,13 @@ void VulkanTextureImpl::shutdown() {
 }
 
 void VulkanTextureImpl::upload(const void *data, size_t size) {
-  if (!data || size == 0) {
+  if ((data == nullptr) || size == 0) {
     return;
   }
 
   uint32_t layerCount = image_.arrayLayers();
-  // For a cubemap, data should contain all 6 faces consecutively,
-  // each face = width * height * bytesPerPixel.
   uint32_t faceSize = width_ * height_ * 4;
-  size_t expectedSize = faceSize * layerCount;
+  auto expectedSize = static_cast<size_t>(faceSize) * static_cast<size_t>(layerCount);
 
   // staging buffer
   VulkanBuffer staging;
@@ -134,7 +133,7 @@ void VulkanTextureImpl::upload(const void *data, size_t size) {
       .commandBufferCount = 1,
   };
 
-  VkCommandBuffer cmd;
+  VkCommandBuffer cmd = nullptr;
   if (vkAllocateCommandBuffers(device_, &allocInfo, &cmd) != VK_SUCCESS) {
     s_logger.error("Failed to allocate transfer command buffer");
     staging.shutdown();
@@ -177,7 +176,8 @@ void VulkanTextureImpl::upload(const void *data, size_t size) {
   VkFenceCreateInfo fenceInfo{
       .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
   };
-  VkFence fence;
+  
+  VkFence fence = nullptr;
   if (vkCreateFence(device_, &fenceInfo, nullptr, &fence) != VK_SUCCESS) {
     s_logger.error("Failed to create transfer fence");
     vkFreeCommandBuffers(device_, cmdPool_, 1, &cmd);

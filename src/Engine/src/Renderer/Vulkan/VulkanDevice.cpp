@@ -34,6 +34,19 @@ static VkSampleCountFlagBits toVkSampleCount(Antialiasing aa) {
   }
 }
 
+static VkCullModeFlags toVkCullMode(CullMode mode) {
+  switch (mode) {
+  case CullMode::None:
+    return VK_CULL_MODE_NONE;
+  case CullMode::Front:
+    return VK_CULL_MODE_FRONT_BIT;
+  case CullMode::Back:
+    return VK_CULL_MODE_BACK_BIT;
+  }
+
+  return VK_CULL_MODE_BACK_BIT;
+}
+
 VulkanDevice::~VulkanDevice() { shutdown(); }
 
 bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
@@ -137,7 +150,9 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
                                             indices.presentFamily.value()};
 
   std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-  float queuePriority = 1.0f;
+  float queuePriority = 1.0F;
+  queueCreateInfos.reserve(uniqueQueueFamilies.size());
+
   for (uint32_t family : uniqueQueueFamilies) {
     queueCreateInfos.push_back({
         .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -184,10 +199,12 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
 
   // resolve MSAA sample count
   sampleCount_ = toVkSampleCount(config_.antialiasing);
+  
   if (sampleCount_ > VK_SAMPLE_COUNT_1_BIT) {
     VkSampleCountFlags colorCounts = props.limits.framebufferColorSampleCounts;
     VkSampleCountFlags depthCounts = props.limits.framebufferDepthSampleCounts;
-    if (!(colorCounts & sampleCount_) || !(depthCounts & sampleCount_)) {
+    
+    if (((colorCounts & sampleCount_) == 0U) || ((depthCounts & sampleCount_) == 0U)) {
       s_logger.warn("MSAAx{} not supported, falling back to no MSAA",
                     static_cast<int>(sampleCount_));
       sampleCount_ = VK_SAMPLE_COUNT_1_BIT;
@@ -298,9 +315,11 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
   // initialise frame timing
   lastFrameTime_ = std::chrono::steady_clock::now();
   frameIndex_ = 0;
-  totalTime_ = 0.0f;
-  for (auto &b : timestampReady_)
+  totalTime_ = 0.0F;
+
+  for (auto &b : timestampReady_) {
     b = false;
+  }
 
   s_logger.info("Vulkan device initialized.");
   return true;
@@ -349,7 +368,7 @@ VulkanDevice::createPipeline(const PipelineDesc &desc) {
     vertexDesc.attributes.push_back(vkAttr);
   }
 
-  VkDescriptorSetLayout setLayouts[] = {
+  std::array<VkDescriptorSetLayout, 3> setLayouts{
       descriptorPool_.uboSetLayout(),     // set 0
       descriptorPool_.samplerSetLayout(), // set 1
       descriptorPool_.textureSetLayout(), // set 2
@@ -362,11 +381,8 @@ VulkanDevice::createPipeline(const PipelineDesc &desc) {
 
   if (!impl->init(device_, renderPass_.renderPass(), vertShader, fragShader,
                   vertexDesc, desc.depthTestEnable, desc.depthWriteEnable,
-                  depthOp,
-                  desc.cullMode == CullMode::None  ? VK_CULL_MODE_NONE
-                  : desc.cullMode == CullMode::Front ? VK_CULL_MODE_FRONT_BIT
-                                                     : VK_CULL_MODE_BACK_BIT,
-                  sampleCount_, setLayouts, 3)) {
+                  depthOp, toVkCullMode(desc.cullMode), sampleCount_,
+                  setLayouts.data(), 3)) {
     s_logger.error("Failed to create pipeline");
     vertShader.shutdown();
     fragShader.shutdown();
@@ -402,7 +418,7 @@ void VulkanDevice::shutdown() {
     frame.cbs.clear();
   }
 
-  for (auto pool : workerPools_) {
+  for (auto *pool : workerPools_) {
     if (pool != VK_NULL_HANDLE) {
       vkDestroyCommandPool(device_, pool, nullptr);
     }
@@ -418,8 +434,11 @@ void VulkanDevice::shutdown() {
 
   destroyFramebuffers();
   pipelineOwnership_.clear();
-  for (auto &img : msaaColorImages_)
+
+  for (auto &img : msaaColorImages_) {
     img.shutdown();
+  }
+
   msaaColorImages_.clear();
   depthImage_.shutdown();
 
@@ -471,7 +490,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDevice::debugCallback(
 }
 
 bool VulkanDevice::checkValidationSupport() {
-  uint32_t layerCount;
+  uint32_t layerCount = 0;
   vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
   std::vector<VkLayerProperties> availableLayers(layerCount);
   vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
@@ -504,7 +523,8 @@ void VulkanDevice::destroyDebugUtilsMessengerEXT(
     const VkAllocationCallbacks *allocator) {
   auto func = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
       vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT"));
-  if (func) {
+
+  if (func != nullptr) {
     func(instance, messenger, allocator);
   }
 }
@@ -520,13 +540,14 @@ QueueFamilyIndices VulkanDevice::findQueueFamilies(VkPhysicalDevice device,
                                            queueFamilies.data());
 
   for (uint32_t i = 0; i < queueFamilyCount; i++) {
-    if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+    if ((queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0U) {
       indices.graphicsFamily = i;
     }
 
-    VkBool32 presentSupport = false;
+    VkBool32 presentSupport = 0U;
+
     vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
-    if (presentSupport) {
+    if (presentSupport != 0U) {
       indices.presentFamily = i;
     }
 
@@ -557,11 +578,12 @@ bool VulkanDevice::isDeviceSuitable(VkPhysicalDevice device,
   }
 
   return indices.isComplete() && extensionsSupported && swapChainAdequate &&
-         deviceFeatures.samplerAnisotropy;
+         (deviceFeatures.samplerAnisotropy != 0U);
 }
 
 bool VulkanDevice::checkDeviceExtensionSupport(VkPhysicalDevice device) {
-  uint32_t extensionCount;
+  uint32_t extensionCount = 0;
+
   vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount,
                                        nullptr);
   std::vector<VkExtensionProperties> availableExtensions(extensionCount);
@@ -583,7 +605,7 @@ SwapChainSupport VulkanDevice::querySwapChainSupport(VkPhysicalDevice device,
   vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface,
                                             &support.capabilities);
 
-  uint32_t formatCount;
+  uint32_t formatCount = 0;
   vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
   if (formatCount > 0) {
     support.formats.resize(formatCount);
@@ -591,7 +613,7 @@ SwapChainSupport VulkanDevice::querySwapChainSupport(VkPhysicalDevice device,
                                          support.formats.data());
   }
 
-  uint32_t presentModeCount;
+  uint32_t presentModeCount = 0;
   vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount,
                                             nullptr);
   if (presentModeCount > 0) {
@@ -615,11 +637,12 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
 
   // read previous frame's GPU timestamps
   if (timestampReady_[idx]) {
-    uint64_t ts[2];
-    if (vkGetQueryPoolResults(device_, queryPool_, idx * 2, 2, sizeof(ts), ts,
-                              sizeof(uint64_t),
+    std::array<uint64_t, 2> ts;
+
+    if (vkGetQueryPoolResults(device_, queryPool_, idx * 2, 2, sizeof(ts),
+                              ts.data(), sizeof(uint64_t),
                               VK_QUERY_RESULT_64_BIT) == VK_SUCCESS) {
-      gpuTimeMs_ = static_cast<float>(ts[1] - ts[0]) * timestampPeriod_ * 1e-6f;
+      gpuTimeMs_ = static_cast<float>(ts[1] - ts[0]) * timestampPeriod_ * 1e-6F;
     }
   }
 
@@ -636,12 +659,13 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
   vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, queryPool_,
                       idx * 2);
 
-  VkClearValue clearValues[2]{};
-  clearValues[0].color.float32[0] = 0.05f;
-  clearValues[0].color.float32[1] = 0.05f;
-  clearValues[0].color.float32[2] = 0.2f;
-  clearValues[0].color.float32[3] = 1.0f;
-  clearValues[1].depthStencil.depth = 1.0f;
+  std::array<VkClearValue, 2> clearValues{};
+
+  clearValues[0].color.float32[0] = 0.05F;
+  clearValues[0].color.float32[1] = 0.05F;
+  clearValues[0].color.float32[2] = 0.2F;
+  clearValues[0].color.float32[3] = 1.0F;
+  clearValues[1].depthStencil.depth = 1.0F;
 
   VkRenderPassBeginInfo renderPassInfo{
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -649,17 +673,18 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
       .framebuffer = framebuffers_[imageIndex],
       .renderArea = {{0, 0}, swapchain_.extent()},
       .clearValueCount = 2,
-      .pClearValues = clearValues,
+      .pClearValues = clearValues.data(),
   };
 
   VkViewport viewport{
-      .x = 0.0f,
-      .y = 0.0f,
+      .x = 0.0F,
+      .y = 0.0F,
       .width = static_cast<float>(swapchain_.extent().width),
       .height = static_cast<float>(swapchain_.extent().height),
-      .minDepth = 0.0f,
-      .maxDepth = 1.0f,
+      .minDepth = 0.0F,
+      .maxDepth = 1.0F,
   };
+
   VkRect2D scissor{
       .offset = {0, 0},
       .extent = swapchain_.extent(),
@@ -667,6 +692,7 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
 
   bool useMT = (jobSystem_ != nullptr) && (jobSystem_->workerCount() > 1) &&
                (lastDrawCalls_ >= kMinDrawCallsForMT);
+
   if (!useMT) {
     vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdSetViewport(cmd, 0, 1, &viewport);
@@ -689,43 +715,49 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
 
   // default camera, overridden by Camera component if world is set
   FrameUniforms uniforms{};
-  uniforms.model = glm::mat4(1.0f);
-  uniforms.view = glm::lookAt(glm::vec3(0.0f, 0.0f, 3.0f), glm::vec3(0.0f),
-                              glm::vec3(0.0f, 1.0f, 0.0f));
+  uniforms.model = glm::mat4(1.0F);
+  uniforms.view = glm::lookAt(glm::vec3(0.0F, 0.0F, 3.0F), glm::vec3(0.0F),
+                              glm::vec3(0.0F, 1.0F, 0.0F));
   uniforms.projection =
-      glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
-  uniforms.projection[1][1] *= -1.0f;
+      glm::perspective(glm::radians(45.0F), aspect, 0.1F, 100.0F);
+  uniforms.projection[1][1] *= -1.0F;
   // convert from OpenGL [-1,1] to Vulkan [0,1] depth range
-  uniforms.projection[2][2] = 0.5f * uniforms.projection[2][2] + 0.5f * uniforms.projection[2][3];
-  uniforms.projection[3][2] = 0.5f * uniforms.projection[3][2] + 0.5f * uniforms.projection[3][3];
+  uniforms.projection[2][2] =
+      0.5F * uniforms.projection[2][2] + 0.5F * uniforms.projection[2][3];
+  uniforms.projection[3][2] =
+      0.5F * uniforms.projection[3][2] + 0.5F * uniforms.projection[3][3];
   uniforms.extra = {totalTime_, dt,
                     static_cast<float>(swapchain_.extent().width),
                     static_cast<float>(swapchain_.extent().height)};
 
   // read camera from ECS world if available
-  if (world_) {
+  if (world_ != nullptr) {
     world_->view<Camera>().each([&](Entity, Camera &cam) {
       if (cam.active) {
         uniforms.view = cam.view;
         uniforms.projection = glm::perspective(glm::radians(cam.fov), aspect,
-                                                cam.zNear, cam.zFar);
-        uniforms.projection[1][1] *= -1.0f;
-        uniforms.projection[2][2] = 0.5f * uniforms.projection[2][2] + 0.5f * uniforms.projection[2][3];
-        uniforms.projection[3][2] = 0.5f * uniforms.projection[3][2] + 0.5f * uniforms.projection[3][3];
+                                               cam.zNear, cam.zFar);
+        uniforms.projection[1][1] *= -1.0F;
+
+        uniforms.projection[2][2] =
+            0.5F * uniforms.projection[2][2] + 0.5F * uniforms.projection[2][3];
+
+        uniforms.projection[3][2] =
+            0.5F * uniforms.projection[3][2] + 0.5F * uniforms.projection[3][3];
       }
     });
   }
 
   // extract camera position from the view matrix
   glm::mat4 invView = glm::inverse(uniforms.view);
-  glm::vec3 camPos = glm::vec3(invView[3]);
+  auto camPos = glm::vec3(invView[3]);
 
-  uniforms.cameraPos = glm::vec4(camPos, 0.0f);
+  uniforms.cameraPos = glm::vec4(camPos, 0.0F);
   uniforms.lightDir =
-      glm::vec4(glm::normalize(glm::vec3(1.0f, 2.0f, 1.0f)), 2.0f);
-  uniforms.lightColor = glm::vec4(1.0f, 1.0f, 1.0f, 0.0f);
-  uniforms.ambientSky = glm::vec4(0.1f, 0.15f, 0.3f, 1.0f);
-  uniforms.ambientGround = glm::vec4(0.02f, 0.01f, 0.01f, 0.0f);
+      glm::vec4(glm::normalize(glm::vec3(1.0F, 2.0F, 1.0F)), 2.0F);
+  uniforms.lightColor = glm::vec4(1.0F, 1.0F, 1.0F, 0.0F);
+  uniforms.ambientSky = glm::vec4(0.1F, 0.15F, 0.3F, 1.0F);
+  uniforms.ambientGround = glm::vec4(0.02F, 0.01F, 0.01F, 0.0F);
 
   perFrame.uniformBuffer.upload(&uniforms, sizeof(uniforms));
 
@@ -737,6 +769,7 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
     if (workerPools_.size() < numWorkers) {
       workerPools_.resize(numWorkers, VK_NULL_HANDLE);
     }
+
     for (uint32_t i = 0; i < numWorkers; ++i) {
       if (workerPools_[i] == VK_NULL_HANDLE) {
         VkCommandPoolCreateInfo poolInfo{
@@ -744,6 +777,7 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
             .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
             .queueFamilyIndex = graphicsQueueIndex_,
         };
+
         vkCreateCommandPool(device_, &poolInfo, nullptr, &workerPools_[i]);
       }
     }
@@ -777,8 +811,9 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
     };
 
     std::atomic<uint32_t> readyCount{0};
-    uint32_t workerStats[32][2]{}; // [worker][0]=drawCalls, [1]=triangles
-    uint32_t cappedWorkers = std::min(numWorkers, 32u);
+    std::array<std::array<uint32_t, 2>, 32>
+        workerStats{}; // [worker][0]=drawCalls, [1]=triangles
+    uint32_t cappedWorkers = std::min(numWorkers, 32U);
 
     // phase 1: begin all secondary CBs on the main thread
     for (uint32_t i = 0; i < cappedWorkers; ++i) {
@@ -802,12 +837,16 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
                    &stats = workerStats[i], i, cappedWorkers, viewport,
                    scissor]() {
         VulkanCommandBuffer vkCmdBuf(secCmd, pool, uboSet);
+
         vkCmdBuf.setViewport(static_cast<int>(viewport.x),
                              static_cast<int>(viewport.y),
                              static_cast<int>(viewport.width),
                              static_cast<int>(viewport.height));
+
         vkCmdBuf.setScissor(scissor.offset.x, scissor.offset.y,
-                            scissor.extent.width, scissor.extent.height);
+                            static_cast<int>(scissor.extent.width),
+                            static_cast<int>(scissor.extent.height));
+
         callback(vkCmdBuf, i, cappedWorkers);
         vkEndCommandBuffer(secCmd);
         stats[0] = vkCmdBuf.drawCalls();
@@ -818,8 +857,9 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
     }
 
     // wait for all workers, assisting other jobs
-    while (readyCount.load(std::memory_order_acquire) < cappedWorkers)
+    while (readyCount.load(std::memory_order_acquire) < cappedWorkers) {
       jobSystem_->assistOnce();
+    }
 
     // execute secondaries from primary
     vkCmdExecuteCommands(cmd, cappedWorkers, secondaries.cbs.data());
@@ -841,7 +881,7 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
   vkCmdEndRenderPass(cmd);
 
   vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queryPool_,
-                      idx * 2 + 1);
+                      (idx * 2) + 1);
 
   timestampReady_[idx] = true;
 
@@ -919,7 +959,7 @@ std::shared_ptr<IMaterial> VulkanDevice::createMaterial(
        .offset = offsetof(Vertex, uv)},
   };
 
-  VkDescriptorSetLayout setLayouts[] = {
+  std::array<VkDescriptorSetLayout, 4> setLayouts{
       descriptorPool_.uboSetLayout(),            // set 0
       descriptorPool_.samplerSetLayout(),        // set 1
       descriptorPool_.materialSetLayout(),       // set 2
@@ -929,10 +969,13 @@ std::shared_ptr<IMaterial> VulkanDevice::createMaterial(
   auto pipeline = std::make_unique<VulkanPipelineImpl>();
   if (!pipeline->init(device_, renderPass_.renderPass(), vertShader, fragShader,
                       vertexDesc, desc.depthTest, true, VK_COMPARE_OP_LESS,
-                      VK_CULL_MODE_BACK_BIT, sampleCount_, setLayouts, 4)) {
+                      VK_CULL_MODE_BACK_BIT, sampleCount_, setLayouts.data(),
+                      4)) {
     s_logger.error("createMaterial: failed to create pipeline");
+
     vertShader.shutdown();
     fragShader.shutdown();
+
     return nullptr;
   }
 
@@ -962,8 +1005,9 @@ bool VulkanDevice::createFramebuffers() {
   // create MSAA color images
   if (msaa) {
     msaaColorImages_.resize(swapchain_.imageViews().size());
-    for (size_t i = 0; i < msaaColorImages_.size(); ++i) {
-      if (!msaaColorImages_[i].init(
+
+    for (auto &msaaColorImage : msaaColorImages_) {
+      if (!msaaColorImage.init(
               device_, allocator_.handle(), swapchain_.extent().width,
               swapchain_.extent().height, swapchain_.imageFormat(),
               VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
@@ -986,11 +1030,11 @@ bool VulkanDevice::createFramebuffers() {
       attachments[0] = msaaColorImages_[i].view(); // MSAA color
       attachments[1] = depthImage_.view();         // MSAA depth
       attachments[2] = swapchain_.imageViews()[i]; // resolve target
-      attachmentCount = depthFormat_ != VK_FORMAT_UNDEFINED ? 3u : 2u;
+      attachmentCount = depthFormat_ != VK_FORMAT_UNDEFINED ? 3U : 2U;
     } else {
       attachments[0] = swapchain_.imageViews()[i]; // color
       attachments[1] = depthImage_.view();         // depth
-      attachmentCount = depthFormat_ != VK_FORMAT_UNDEFINED ? 2u : 1u;
+      attachmentCount = depthFormat_ != VK_FORMAT_UNDEFINED ? 2U : 1U;
     }
 
     VkFramebufferCreateInfo fbInfo{
@@ -1015,12 +1059,16 @@ bool VulkanDevice::createFramebuffers() {
 }
 
 void VulkanDevice::destroyFramebuffers() {
-  for (auto fb : framebuffers_) {
+  for (auto *fb : framebuffers_) {
     vkDestroyFramebuffer(device_, fb, nullptr);
   }
+
   framebuffers_.clear();
-  for (auto &img : msaaColorImages_)
+
+  for (auto &img : msaaColorImages_) {
     img.shutdown();
+  }
+
   msaaColorImages_.clear();
 }
 

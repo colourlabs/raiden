@@ -5,7 +5,7 @@
 
 namespace Raiden::Renderer {
 
-enum class ShaderStage {
+enum class ShaderStage : uint8_t {
   Vertex,
   Fragment,
   Compute
@@ -25,8 +25,8 @@ public:
             std::string_view entryPoint = "main");
   void shutdown();
 
-  VkShaderModule module() const { return module_; }
-  VkPipelineShaderStageCreateInfo stageCreateInfo() const { return stageInfo_; }
+  [[nodiscard]] VkShaderModule module() const { return module_; }
+  [[nodiscard]] VkPipelineShaderStageCreateInfo stageCreateInfo() const { return stageInfo_; }
 
 private:
   VkDevice device_ = VK_NULL_HANDLE;

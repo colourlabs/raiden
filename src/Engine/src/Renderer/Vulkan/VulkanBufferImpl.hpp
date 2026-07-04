@@ -42,7 +42,7 @@ public:
     }
   }
 
-  size_t size() const override { return size_; }
+  [[nodiscard]] size_t size() const override { return size_; }
 
   void *map() override {
     buffer_.map();
@@ -51,8 +51,8 @@ public:
 
   void unmap() override { buffer_.unmap(); }
 
-  VkBuffer handle() const { return buffer_.buffer(); }
-  VkIndexType getVkIndexType() const {
+  [[nodiscard]] VkBuffer handle() const { return buffer_.buffer(); }
+  [[nodiscard]] VkIndexType getVkIndexType() const {
     return indexType_ == IndexType::Uint32 ? VK_INDEX_TYPE_UINT32
                                            : VK_INDEX_TYPE_UINT16;
   }

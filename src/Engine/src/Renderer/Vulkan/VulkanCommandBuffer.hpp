@@ -12,9 +12,9 @@ public:
                       VkDescriptorSet uboSet = VK_NULL_HANDLE)
       : cmd_(cmd), pool_(&pool), uboSet_(uboSet) {}
 
-  VkCommandBuffer handle() const { return cmd_; }
-  uint32_t drawCalls() const { return drawCalls_; }
-  uint32_t triangles() const { return triangles_; }
+  [[nodiscard]] VkCommandBuffer handle() const { return cmd_; }
+  [[nodiscard]] uint32_t drawCalls() const { return drawCalls_; }
+  [[nodiscard]] uint32_t triangles() const { return triangles_; }
   void resetCounters() {
     drawCalls_ = 0;
     triangles_ = 0;

@@ -38,7 +38,7 @@ bool VulkanBuffer::init(VmaAllocator allocator, VkDeviceSize size,
 }
 
 void VulkanBuffer::shutdown() {
-  if (mapped_) {
+  if (mapped_ != nullptr) {
     vmaUnmapMemory(allocator_, allocation_);
     mapped_ = nullptr;
   }
@@ -54,7 +54,7 @@ void VulkanBuffer::shutdown() {
 }
 
 bool VulkanBuffer::map() {
-  if (mapped_) {
+  if (mapped_ != nullptr) {
     return true;
   }
 
@@ -67,7 +67,7 @@ bool VulkanBuffer::map() {
 }
 
 void VulkanBuffer::unmap() {
-  if (!mapped_) {
+  if (mapped_ == nullptr) {
     return;
   }
 

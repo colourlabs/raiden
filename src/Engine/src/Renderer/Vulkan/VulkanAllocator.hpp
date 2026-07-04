@@ -16,7 +16,7 @@ public:
   bool init(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device);
   void shutdown();
 
-  VmaAllocator handle() const noexcept { return allocator_; }
+  [[nodiscard]] VmaAllocator handle() const noexcept { return allocator_; }
 
 private:
   VmaAllocator allocator_{};

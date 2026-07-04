@@ -29,12 +29,12 @@ private:
   std::shared_ptr<Impl> impl_;
 };
 
-enum class JobPriority : uint8_t { Low = 0, Normal = 1, High = 2, Count };
+enum class JobPriority : uint8_t { Low = 0, Normal = 1, High = 2, Count = 3 };
 
 struct JobDesc {
   std::function<void()> task;
   JobCounter dependency;
-  std::string_view label = "";
+  std::string_view label;
   JobPriority priority = JobPriority::Normal;
 };
 
@@ -62,7 +62,7 @@ public:
   JobCounter submitBatch(std::span<JobDesc> descs);
 
   void parallelFor(uint32_t begin, uint32_t end, uint32_t grainSize,
-                   std::function<void(uint32_t, uint32_t)> fn);
+                   const std::function<void(uint32_t, uint32_t)> &fn);
 
   void waitAndAssist(const JobCounter &counter);
   bool assistOnce();

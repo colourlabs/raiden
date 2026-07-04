@@ -10,9 +10,9 @@ public:
             VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT);
   void shutdown();
 
-  VkRenderPass renderPass() const { return renderPass_; }
-  bool hasDepth() const { return depthFormat_ != VK_FORMAT_UNDEFINED; }
-  VkSampleCountFlagBits sampleCount() const { return sampleCount_; }
+  [[nodiscard]] VkRenderPass renderPass() const { return renderPass_; }
+  [[nodiscard]] bool hasDepth() const { return depthFormat_ != VK_FORMAT_UNDEFINED; }
+  [[nodiscard]] VkSampleCountFlagBits sampleCount() const { return sampleCount_; }
 
 private:
   VkDevice device_ = VK_NULL_HANDLE;

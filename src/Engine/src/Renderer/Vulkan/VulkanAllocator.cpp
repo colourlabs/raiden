@@ -32,7 +32,7 @@ bool VulkanAllocator::init(VkInstance instance, VkPhysicalDevice physicalDevice,
 };
 
 void VulkanAllocator::shutdown() {
-  if (allocator_) {
+  if (allocator_ != nullptr) {
     vmaDestroyAllocator(allocator_);
     allocator_ = nullptr;
   }

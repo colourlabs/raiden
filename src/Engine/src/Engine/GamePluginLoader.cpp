@@ -32,8 +32,9 @@ bool GamePluginLoader::load(std::string_view path) {
       GetProcAddress(reinterpret_cast<HMODULE>(handle_), "raiden_destroy_plugin"));
 #else
 
-  handle_ = dlopen(path.data(), RTLD_NOW | RTLD_LOCAL);
-  if (!handle_) {
+  std::string path_str(path);
+  handle_ = dlopen(path_str.c_str(), RTLD_NOW | RTLD_LOCAL);
+  if (handle_ == nullptr) {
     s_logger.error("Failed to load plugin '{}': {}", path, dlerror());
     return false;
   }
@@ -44,14 +45,14 @@ bool GamePluginLoader::load(std::string_view path) {
       dlsym(handle_, "raiden_destroy_plugin"));
 #endif
 
-  if (!create || !destroy_) {
+  if ((create == nullptr) || (destroy_ == nullptr)) {
     s_logger.error("Plugin '{}' missing create/destroy symbols", path);
     unload();
     return false;
   }
 
   plugin_ = create();
-  if (!plugin_) {
+  if (plugin_ == nullptr) {
     s_logger.error("Plugin '{}' returned null from create", path);
     unload();
     return false;
@@ -62,13 +63,14 @@ bool GamePluginLoader::load(std::string_view path) {
 }
 
 void GamePluginLoader::unload() {
-  if (plugin_) {
+  if (plugin_ != nullptr) {
     plugin_->shutdown();
     destroy_(plugin_);
     plugin_ = nullptr;
     destroy_ = nullptr;
   }
-  if (handle_) {
+  
+  if (handle_ != nullptr) {
 #if defined(_WIN32)
     FreeLibrary(reinterpret_cast<HMODULE>(handle_));
 #else

@@ -8,7 +8,8 @@ namespace Raiden::Engine {
 
 using namespace ::Raiden::Renderer;
 
-static const ::Raiden::Core::Logger s_logger("Raiden::Engine::VulkanImGuiBackend");
+static const ::Raiden::Core::Logger
+    s_logger("Raiden::Engine::VulkanImGuiBackend");
 
 VulkanImGuiBackend::VulkanImGuiBackend(IVulkanRenderDevice &device,
                                        VkRenderPass renderPass,
@@ -32,7 +33,7 @@ bool VulkanImGuiBackend::init() {
   initInfo.MinImageCount = imageCount_;
   initInfo.ImageCount = imageCount_;
   initInfo.MSAASamples = device_.getSampleCount();
-  initInfo.MinAllocationSize = 1024ull * 1024;
+  initInfo.MinAllocationSize = 1024ULL * 1024;
 
   if (!ImGui_ImplVulkan_Init(&initInfo)) {
     s_logger.error("Failed to init ImGui Vulkan backend");
@@ -56,8 +57,10 @@ void VulkanImGuiBackend::renderDrawData(ICommandBuffer &cmd) {
 }
 
 void VulkanImGuiBackend::shutdown() {
-  if (shutdown_)
+  if (shutdown_) {
     return;
+  }
+
   shutdown_ = true;
   ImGui_ImplVulkan_Shutdown();
 }

@@ -35,16 +35,15 @@ bool ImGuiOverlay::init(std::unique_ptr<IImGuiBackend> backend) {
   return true;
 }
 
-void ImGuiOverlay::newFrame(const InputState &input, int displayW,
-                            int displayH, float dt,
-                            const ProfilerFrameData &profiler,
+void ImGuiOverlay::newFrame(const InputState &input, int displayW, int displayH,
+                            float dt, const ProfilerFrameData &profiler,
                             const std::function<void()> &pluginDebugUI) {
   backend_->newFrame();
 
   ImGuiIO &io = ImGui::GetIO();
-  io.DisplaySize = ImVec2(static_cast<float>(displayW),
-                          static_cast<float>(displayH));
-  io.DeltaTime = dt > 0.0f ? dt : 1.0f / 60.0f;
+  io.DisplaySize =
+      ImVec2(static_cast<float>(displayW), static_cast<float>(displayH));
+  io.DeltaTime = dt > 0.0F ? dt : 1.0F / 60.0F;
 
   io.MousePos = ImVec2(static_cast<float>(input.mouseX),
                        static_cast<float>(input.mouseY));
@@ -92,7 +91,7 @@ void ImGuiOverlay::newFrame(const InputState &input, int displayW,
 
   ImGui::Text("CPU: %.2f ms  |  GPU: %.2f ms  |  FPS: %.0f",
               profiler.cpuFrameTimeMs, profiler.gpuFrameTimeMs,
-              dt > 0.0f ? 1.0f / dt : 0.0f);
+              dt > 0.0F ? 1.0F / dt : 0.0F);
   ImGui::Text("Draw calls: %u  |  Triangles: %u", profiler.drawCalls,
               profiler.triangles);
 
@@ -148,9 +147,7 @@ void ImGuiOverlay::newFrame(const InputState &input, int displayW,
   }
 }
 
-void ImGuiOverlay::endFrame() {
-  ImGui::Render();
-}
+void ImGuiOverlay::endFrame() { ImGui::Render(); }
 
 void ImGuiOverlay::renderDrawData(ICommandBuffer &cmd) {
   backend_->renderDrawData(cmd);
@@ -158,13 +155,18 @@ void ImGuiOverlay::renderDrawData(ICommandBuffer &cmd) {
 
 void ImGuiOverlay::pushPerfData(const ProfilerFrameData &profiler, float dt) {
   int idx = historyCount_ % kHistorySize;
+ 
   cpuTimes_[idx] = profiler.cpuFrameTimeMs;
   gpuTimes_[idx] = profiler.gpuFrameTimeMs;
-  fps_[idx] = dt > 0.0f ? 1.0f / dt : 0.0f;
+ 
+  fps_[idx] = dt > 0.0F ? 1.0F / dt : 0.0F;
+ 
   drawCalls_[idx] = profiler.drawCalls;
   triangles_[idx] = profiler.triangles;
-  if (historyCount_ < kHistorySize)
+ 
+  if (historyCount_ < kHistorySize) {
     historyCount_++;
+  }
 }
 
 void ImGuiOverlay::shutdown() {
@@ -173,6 +175,7 @@ void ImGuiOverlay::shutdown() {
     backend_->shutdown();
     backend_.reset();
   }
+ 
   ImPlot::DestroyContext();
   ImGui::DestroyContext();
 }

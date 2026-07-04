@@ -140,7 +140,7 @@ bool VulkanDescriptorPool::init(VkDevice device, VkPhysicalDevice physDev,
       .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
       .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
       .anisotropyEnable = VK_TRUE,
-      .maxAnisotropy = 16.0f,
+      .maxAnisotropy = 16.0F,
   };
 
   if (vkCreateSampler(device_, &samplerInfo, nullptr, &sampler_) !=
@@ -159,7 +159,7 @@ bool VulkanDescriptorPool::init(VkDevice device, VkPhysicalDevice physDev,
       .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
       .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
       .anisotropyEnable = VK_TRUE,
-      .maxAnisotropy = 16.0f,
+      .maxAnisotropy = 16.0F,
   };
 
   if (vkCreateSampler(device_, &clampSamplerInfo, nullptr, &clampSampler_) !=
@@ -172,9 +172,9 @@ bool VulkanDescriptorPool::init(VkDevice device, VkPhysicalDevice physDev,
   //               + 64 simple textures + 64 material texture sets + 64 material
   //               params UBOs
   std::array<VkDescriptorPoolSize, 3> poolSizes{{
-      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3 + 64},
-      {VK_DESCRIPTOR_TYPE_SAMPLER, 2},
-      {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 64 + 64 * 5},
+      {.type=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount=3 + 64},
+      {.type=VK_DESCRIPTOR_TYPE_SAMPLER, .descriptorCount=2},
+      {.type=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, .descriptorCount=64 + (64 * 5)},
   }};
 
   VkDescriptorPoolCreateInfo poolInfo{
@@ -246,6 +246,7 @@ bool VulkanDescriptorPool::init(VkDevice device, VkPhysicalDevice physDev,
       .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
       .pImageInfo = &clampImageInfo,
   };
+  
   vkUpdateDescriptorSets(device_, 1, &clampWrite, 0, nullptr);
 
   if (!createFallbackTexture()) {
@@ -387,7 +388,7 @@ bool VulkanDescriptorPool::createFallbackTexture() {
       .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
       .commandBufferCount = 1,
   };
-  VkCommandBuffer cmd;
+  VkCommandBuffer cmd = nullptr;
   vkAllocateCommandBuffers(device_, &allocCmd, &cmd);
 
   VkCommandBufferBeginInfo beginInfo{

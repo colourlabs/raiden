@@ -39,7 +39,7 @@ bool SDL3Platform::init(const WindowConfig &config, RenderBackend backend) {
 }
 
 void SDL3Platform::shutdown() {
-  if (gamepad_) {
+  if (gamepad_ != nullptr) {
     SDL_CloseGamepad(gamepad_);
     gamepad_ = nullptr;
   }
@@ -56,6 +56,9 @@ bool SDL3Platform::pollEvents() {
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
     switch (event.type) {
+    default:
+      break;
+
     case SDL_EVENT_QUIT:
       return false;
 
@@ -68,10 +71,10 @@ bool SDL3Platform::pollEvents() {
       break;
 
     case SDL_EVENT_MOUSE_MOTION:
-      inputState_.mouseX = event.motion.x;
-      inputState_.mouseY = event.motion.y;
-      inputState_.mouseDeltaX += event.motion.xrel;
-      inputState_.mouseDeltaY += event.motion.yrel;
+      inputState_.mouseX = static_cast<int>(event.motion.x);
+      inputState_.mouseY = static_cast<int>(event.motion.y);
+      inputState_.mouseDeltaX += static_cast<int>(event.motion.xrel);
+      inputState_.mouseDeltaY += static_cast<int>(event.motion.yrel);
       break;
 
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -89,14 +92,15 @@ bool SDL3Platform::pollEvents() {
       break;
 
     case SDL_EVENT_GAMEPAD_ADDED:
-      if (!gamepad_) {
+      if (gamepad_ == nullptr) {
         gamepad_ = SDL_OpenGamepad(event.gdevice.which);
         inputState_.gamepadConnected = (gamepad_ != nullptr);
       }
       break;
 
     case SDL_EVENT_GAMEPAD_REMOVED:
-      if (gamepad_ && event.gdevice.which == SDL_GetGamepadID(gamepad_)) {
+      if ((gamepad_ != nullptr) &&
+          event.gdevice.which == SDL_GetGamepadID(gamepad_)) {
         SDL_CloseGamepad(gamepad_);
         gamepad_ = nullptr;
         inputState_.gamepadConnected = false;
@@ -105,25 +109,34 @@ bool SDL3Platform::pollEvents() {
 
     case SDL_EVENT_GAMEPAD_AXIS_MOTION:
       switch (event.gaxis.axis) {
+      default:
+        break;
       case SDL_GAMEPAD_AXIS_LEFTX:
-        inputState_.leftStickX = event.gaxis.value / 32767.0f;
+        inputState_.leftStickX =
+            static_cast<float>(event.gaxis.value) / 32767.0F;
         break;
       case SDL_GAMEPAD_AXIS_LEFTY:
-        inputState_.leftStickY = event.gaxis.value / 32767.0f;
+        inputState_.leftStickY =
+            static_cast<float>(event.gaxis.value) / 32767.0F;
         break;
       case SDL_GAMEPAD_AXIS_RIGHTX:
-        inputState_.rightStickX = event.gaxis.value / 32767.0f;
+        inputState_.rightStickX =
+            static_cast<float>(event.gaxis.value) / 32767.0F;
         break;
       case SDL_GAMEPAD_AXIS_RIGHTY:
-        inputState_.rightStickY = event.gaxis.value / 32767.0f;
+        inputState_.rightStickY =
+            static_cast<float>(event.gaxis.value) / 32767.0F;
         break;
       case SDL_GAMEPAD_AXIS_LEFT_TRIGGER:
-        inputState_.leftTrigger = event.gaxis.value / 32767.0f;
+        inputState_.leftTrigger =
+            static_cast<float>(event.gaxis.value) / 32767.0F;
         break;
       case SDL_GAMEPAD_AXIS_RIGHT_TRIGGER:
-        inputState_.rightTrigger = event.gaxis.value / 32767.0f;
+        inputState_.rightTrigger =
+            static_cast<float>(event.gaxis.value) / 32767.0F;
         break;
       }
+
       break;
 
     case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
@@ -143,13 +156,15 @@ void *SDL3Platform::getNativeWindowHandle() { return window_; }
 
 std::vector<const char *> SDL3Platform::getRequiredInstanceExtensions() const {
   uint32_t extensionCount = 0;
+  
   char const *const *sdlExtensions =
       SDL_Vulkan_GetInstanceExtensions(&extensionCount);
+  
   if (sdlExtensions == nullptr) {
     return {};
   }
-  return std::vector<const char *>(sdlExtensions,
-                                   sdlExtensions + extensionCount);
+
+  return {sdlExtensions, sdlExtensions + extensionCount};
 }
 
 bool SDL3Platform::createVulkanSurface(VkInstance instance,
@@ -158,10 +173,12 @@ bool SDL3Platform::createVulkanSurface(VkInstance instance,
     std::cerr << "createVulkanSurface failed: window is null\n";
     return false;
   }
+
   if (!SDL_Vulkan_CreateSurface(window_, instance, nullptr, surface)) {
     std::cerr << "SDL_Vulkan_CreateSurface failed: " << SDL_GetError() << "\n";
     return false;
   }
+  
   return true;
 }
 
@@ -173,8 +190,6 @@ void SDL3Platform::setRelativeMouseMode(bool enabled) {
   SDL_SetWindowRelativeMouseMode(window_, enabled);
 }
 
-void SDL3Platform::endInputFrame() {
-  inputState_.endFrame();
-}
+void SDL3Platform::endInputFrame() { inputState_.endFrame(); }
 
 } // namespace Raiden::Platform

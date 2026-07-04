@@ -15,10 +15,11 @@ public:
   // returns false if the swapchain is out of date and needs recreation
   bool beginFrame(VulkanSwapchain &swapchain, uint32_t &outImageIndex);
 
-  VkCommandBuffer currentCommandBuffer() const {
+  [[nodiscard]] VkCommandBuffer currentCommandBuffer() const {
     return commandBuffers_[currentFrame_];
   }
-  uint32_t currentFrame() const { return currentFrame_; }
+  
+  [[nodiscard]] uint32_t currentFrame() const { return currentFrame_; }
 
   // submits the recorded command buffer and presents. returns false if the
   // swapchain is out of date / suboptimal and needs recreation.

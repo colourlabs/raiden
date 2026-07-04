@@ -20,8 +20,8 @@ bool VulkanPipeline::initDynamic(VkDevice device, VkRenderPass renderPass,
                                  uint32_t setLayoutCount) {
   device_ = device;
 
-  VkPipelineShaderStageCreateInfo stages[] = {vertexShader.stageCreateInfo(),
-                                              fragmentShader.stageCreateInfo()};
+  std::array<VkPipelineShaderStageCreateInfo, 2> stages = {vertexShader.stageCreateInfo(),
+                                                           fragmentShader.stageCreateInfo()};
 
   VkPipelineVertexInputStateCreateInfo vertexInput{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -49,7 +49,7 @@ bool VulkanPipeline::initDynamic(VkDevice device, VkRenderPass renderPass,
       .polygonMode = VK_POLYGON_MODE_FILL,
       .cullMode = cullMode,
       .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-      .lineWidth = 1.0f,
+      .lineWidth = 1.0F,
   };
 
   VkPipelineMultisampleStateCreateInfo multisampling{
@@ -78,13 +78,13 @@ bool VulkanPipeline::initDynamic(VkDevice device, VkRenderPass renderPass,
       .stencilTestEnable = VK_FALSE,
   };
 
-  VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT,
-                                    VK_DYNAMIC_STATE_SCISSOR};
+  std::array<VkDynamicState, 2> dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT,
+                                                 VK_DYNAMIC_STATE_SCISSOR};
 
   VkPipelineDynamicStateCreateInfo dynamicState{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
       .dynamicStateCount = 2,
-      .pDynamicStates = dynamicStates,
+      .pDynamicStates = dynamicStates.data(),
   };
 
   VkPushConstantRange pushRange{
@@ -110,7 +110,7 @@ bool VulkanPipeline::initDynamic(VkDevice device, VkRenderPass renderPass,
   VkGraphicsPipelineCreateInfo pipelineInfo{
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
       .stageCount = 2,
-      .pStages = stages,
+      .pStages = stages.data(),
       .pVertexInputState = &vertexInput,
       .pInputAssemblyState = &inputAssembly,
       .pViewportState = &viewportState,
@@ -139,6 +139,7 @@ void VulkanPipeline::shutdown() {
     vkDestroyPipeline(device_, pipeline_, nullptr);
     pipeline_ = VK_NULL_HANDLE;
   }
+
   if (layout_ != VK_NULL_HANDLE) {
     vkDestroyPipelineLayout(device_, layout_, nullptr);
     layout_ = VK_NULL_HANDLE;

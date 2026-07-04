@@ -79,16 +79,17 @@ bool Application::loadGamePlugin(std::string_view path) {
   }
 
   if (!pluginLoader_.plugin().init(*device_, *vfs_, *assetManager_,
-                                    platform_.get(), audioDevice_.get())) {
+                                   platform_.get(), audioDevice_.get())) {
     s_logger.error("Game plugin init failed.");
     pluginLoader_.unload();
     return false;
   }
 
   auto *vkDev = dynamic_cast<IVulkanRenderDevice *>(device_.get());
-  if (vkDev) {
-    if (auto *world = pluginLoader_.plugin().getWorld())
+  if (vkDev != nullptr) {
+    if (auto *world = pluginLoader_.plugin().getWorld()) {
       vkDev->setWorld(world);
+    }
   }
 
   s_logger.info("Game plugin '{}' initialized.", pluginLoader_.plugin().name());
@@ -96,8 +97,9 @@ bool Application::loadGamePlugin(std::string_view path) {
 }
 
 void Application::shutdown() {
-  if (!running_)
+  if (!running_) {
     return;
+  }
   running_ = false;
 
   s_logger.info("Shutting down application...");
@@ -139,14 +141,14 @@ void Application::run() {
     assetManager_->processLoadQueue();
 
     if (overlay_) {
-      int w, h;
+      int w = 0, h = 0;
       platform_->getWindowSize(w, h);
 
       ProfilerFrameData profiler{};
-      profiler.cpuFrameTimeMs = deltaTime * 1000.0f;
+      profiler.cpuFrameTimeMs = deltaTime * 1000.0F;
 
       if (auto *vkDev = dynamic_cast<IVulkanRenderDevice *>(device_.get())) {
-        auto &d = dynamic_cast<const VulkanDevice &>(*vkDev);
+        const auto &d = dynamic_cast<const VulkanDevice &>(*vkDev);
         profiler.gpuFrameTimeMs = d.gpuTimeMs();
         profiler.drawCalls = d.lastDrawCalls();
         profiler.triangles = d.lastTriangles();
@@ -159,7 +161,7 @@ void Application::run() {
 
       overlay_->newFrame(platform_->getInputState(), w, h, deltaTime, profiler,
                          pluginUI);
-      overlay_->endFrame();
+      Raiden::Engine::ImGuiOverlay::endFrame();
     }
 
     device_->drawFrame([&](ICommandBuffer &cmd, uint32_t wi, uint32_t n) {
@@ -181,7 +183,7 @@ void Application::run() {
 
     // end the ImGui frame even if drawFrame skipped the callback (e.g. resize)
     if (overlay_) {
-      overlay_->endFrame();
+      Raiden::Engine::ImGuiOverlay::endFrame();
     }
 
     platform_->endInputFrame();
