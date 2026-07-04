@@ -6,22 +6,49 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$SCRIPT_DIR/.."
 
 cd "$PROJECT_DIR"
-BINARY=""
-for dir in \
-  build/linux-debug/src/Runtime/EngineRuntime \
-  build/default/src/Runtime/EngineRuntime \
-  build/*/src/Runtime/EngineRuntime \
-  build/src/Runtime/EngineRuntime; do
-  for f in $dir; do
-    if [ -x "$f" ]; then
-      BINARY="$f"
-      break 2
-    fi
-  done
+
+# first argument can be "editor" to use the editor binary and datapack
+ARGS=()
+DATAPACK_MODE="game"
+for arg in "$@"; do
+  if [ "$arg" = "editor" ] && [ "$DATAPACK_MODE" = "game" ]; then
+    DATAPACK_MODE="editor"
+  else
+    ARGS+=("$arg")
+  fi
 done
 
+BINARY=""
+if [ "$DATAPACK_MODE" = "editor" ]; then
+  for dir in \
+    build/linux-debug/src/RaidenEditor/EditorRuntime \
+    build/default/src/RaidenEditor/EditorRuntime \
+    build/*/src/RaidenEditor/EditorRuntime \
+    build/src/RaidenEditor/EditorRuntime; do
+    for f in $dir; do
+      if [ -x "$f" ]; then
+        BINARY="$f"
+        break 2
+      fi
+    done
+  done
+else
+  for dir in \
+    build/linux-debug/src/Runtime/EngineRuntime \
+    build/default/src/Runtime/EngineRuntime \
+    build/*/src/Runtime/EngineRuntime \
+    build/src/Runtime/EngineRuntime; do
+    for f in $dir; do
+      if [ -x "$f" ]; then
+        BINARY="$f"
+        break 2
+      fi
+    done
+  done
+fi
+
 if [ -z "$BINARY" ]; then
-  echo "[ERROR] EngineRuntime binary not found under build/."
+  echo "[ERROR] Binary not found under build/."
   echo "        Build the project first with: ./scripts/build.sh"
   exit 1
 fi
@@ -29,9 +56,8 @@ fi
 echo "  [OK]   Binary found: $BINARY"
 
 # auto-detect datapack when --datapack is not given
-ARGS=("$@")
 HAS_DATAPACK=false
-for arg in "$@"; do
+for arg in "${ARGS[@]}"; do
   if [ "$arg" = "--datapack" ] || [[ "$arg" == --datapack=* ]]; then
     HAS_DATAPACK=true
     break
@@ -40,15 +66,29 @@ done
 
 if [ "$HAS_DATAPACK" = false ]; then
   BUILD_PREFIX="${BINARY%/src/Runtime/EngineRuntime}"
-  DATAPACK=$(find "$BUILD_PREFIX" -name 'engine.toml' -path '*/ExampleGame/*' -exec dirname {} \; 2>/dev/null | head -1)
-  if [ -z "$DATAPACK" ]; then
-    DATAPACK=$(find "$PROJECT_DIR/build" -name 'engine.toml' -path '*/ExampleGame/*' -exec dirname {} \; 2>/dev/null | head -1)
-  fi
-  if [ -n "$DATAPACK" ]; then
-    echo "  [OK]   Datapack auto-detected: $DATAPACK"
-    ARGS+=(--datapack "$DATAPACK")
+
+  if [ "$DATAPACK_MODE" = "editor" ]; then
+    DATAPACK=$(find "$BUILD_PREFIX" -name 'engine.toml' -path '*/EditorData/*' -exec dirname {} \; 2>/dev/null | head -1)
+    if [ -z "$DATAPACK" ]; then
+      DATAPACK=$(find "$PROJECT_DIR/build" -name 'engine.toml' -path '*/EditorData/*' -exec dirname {} \; 2>/dev/null | head -1)
+    fi
+    if [ -n "$DATAPACK" ]; then
+      echo "  [OK]   Editor datapack auto-detected: $DATAPACK"
+      ARGS+=(--datapack "$DATAPACK")
+    else
+      echo "  [WARN] No editor datapack found under build/."
+    fi
   else
-    echo "  [WARN] No game datapack found under build/."
+    DATAPACK=$(find "$BUILD_PREFIX" -name 'engine.toml' -path '*/ExampleGame/*' -exec dirname {} \; 2>/dev/null | head -1)
+    if [ -z "$DATAPACK" ]; then
+      DATAPACK=$(find "$PROJECT_DIR/build" -name 'engine.toml' -path '*/ExampleGame/*' -exec dirname {} \; 2>/dev/null | head -1)
+    fi
+    if [ -n "$DATAPACK" ]; then
+      echo "  [OK]   Datapack auto-detected: $DATAPACK"
+      ARGS+=(--datapack "$DATAPACK")
+    else
+      echo "  [WARN] No game datapack found under build/."
+    fi
   fi
 fi
 

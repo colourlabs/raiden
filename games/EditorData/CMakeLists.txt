@@ -1,0 +1,9 @@
+cmake_minimum_required(VERSION 3.14)
+
+set(EDITOR_DATAPACK_DIR "${CMAKE_BINARY_DIR}/games/EditorData")
+
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/engine.toml
+     DESTINATION ${EDITOR_DATAPACK_DIR})
+
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/editor/
+     DESTINATION ${EDITOR_DATAPACK_DIR}/editor/)

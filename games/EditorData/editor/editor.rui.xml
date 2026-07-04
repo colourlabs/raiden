@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui>
+  <link rel="stylesheet" href="editor.css"/>
+
+  <div id="main-area">
+    <div id="sidebar">
+      <div class="panel-header">Scene</div>
+      <div class="tree-item selected">Player</div>
+      <div class="tree-item">Camera</div>
+      <div class="tree-item">Light</div>
+      <div class="tree-item">Ground</div>
+      <div class="tree-item">Enemy</div>
+      <div class="tree-item">Props</div>
+    </div>
+
+    <div id="viewport"/>
+
+    <div id="inspector">
+      <div class="panel-header">Inspector</div>
+      <div class="property-label">Position</div>
+      <div class="property-value">0.0, 1.0, 0.0</div>
+      <div class="property-label">Rotation</div>
+      <div class="property-value">0.0, 45.0, 0.0</div>
+      <div class="property-label">Scale</div>
+      <div class="property-value">1.0, 1.0, 1.0</div>
+    </div>
+  </div>
+
+  <div id="bottom-bar">
+    <span>Ready</span>
+  </div>
+</ui>

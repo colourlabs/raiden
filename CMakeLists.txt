@@ -13,5 +13,8 @@ include(cmake/CPM.cmake)
 add_subdirectory(src/Engine)
 add_subdirectory(src/Runtime)
 add_subdirectory(src/Shaders)
+add_subdirectory(src/RaidenUI)
+add_subdirectory(src/RaidenEditor)
 
 add_subdirectory(games/ExampleGame)
+add_subdirectory(games/EditorData)

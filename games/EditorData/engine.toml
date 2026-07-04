@@ -1,0 +1,12 @@
+[window]
+title = "Raiden Editor"
+width = 1280
+height = 720
+resizable = true
+fullscreen = false
+vsync = true
+
+[render]
+backend = "vulkan"
+validation = true
+antialiasing = "none"

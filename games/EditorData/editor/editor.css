@@ -1,0 +1,84 @@
+/* RaidenEditor Dark Mode */
+
+ui {
+  display: flex;
+  flex-direction: column;
+  background: #1e1e2e;
+  color: #cdd6f4;
+  font-family: "monospace";
+  font-size: 13px;
+}
+
+#main-area {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+}
+
+#sidebar {
+  background: #181825;
+  min-width: 220px;
+  border-right: 1px solid #313244;
+  padding: 8px;
+}
+
+#viewport {
+  background: #11111b;
+  flex: 1;
+}
+
+#inspector {
+  background: #181825;
+  min-width: 260px;
+  border-left: 1px solid #313244;
+  padding: 8px;
+}
+
+#bottom-bar {
+  background: #181825;
+  height: 28px;
+  border-top: 1px solid #313244;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+}
+
+.panel-header {
+  color: #a6adc8;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 8px 4px;
+  border-bottom: 1px solid #313244;
+  margin-bottom: 8px;
+}
+
+.tree-item {
+  padding: 3px 8px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.tree-item:hover {
+  background: #313244;
+}
+
+.tree-item.selected {
+  background: #45475a;
+}
+
+.property-label {
+  color: #a6adc8;
+  font-size: 12px;
+  min-width: 80px;
+  padding: 4px 0;
+}
+
+.property-value {
+  background: #313244;
+  border: 1px solid #45475a;
+  border-radius: 4px;
+  padding: 3px 6px;
+  color: #cdd6f4;
+  flex: 1;
+}

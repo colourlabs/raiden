@@ -31,6 +31,7 @@ public:
   void run();
 
   bool loadGamePlugin(std::string_view path);
+  bool registerPlugin(Raiden::Engine::IGamePlugin *plugin);
 
   [[nodiscard]] ::Raiden::Platform::IPlatform &getPlatform() const { return *platform_; }
   [[nodiscard]] ::Raiden::Renderer::IRenderDevice &getDevice() const { return *device_; }

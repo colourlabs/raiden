@@ -72,28 +72,43 @@ bool Application::init(const EngineConfig &config) {
   return true;
 }
 
+static bool initPlugin(GamePluginLoader &loader,
+                        IRenderDevice &device,
+                        IVirtualFileSystem &vfs,
+                        IAssetManager &assets,
+                        IPlatform *platform,
+                        IAudioDevice *audio) {
+  if (!loader.plugin().init(device, vfs, assets, platform, audio)) {
+    s_logger.error("Game plugin init failed.");
+    loader.unload();
+    return false;
+  }
+
+  auto *vkDev = dynamic_cast<IVulkanRenderDevice *>(&device);
+  if (vkDev != nullptr) {
+    if (auto *world = loader.plugin().getWorld()) {
+      vkDev->setWorld(world);
+    }
+  }
+
+  s_logger.info("Game plugin '{}' initialized.", loader.plugin().name());
+  return true;
+}
+
 bool Application::loadGamePlugin(std::string_view path) {
   if (!pluginLoader_.load(path)) {
     s_logger.error("Failed to load game plugin.");
     return false;
   }
 
-  if (!pluginLoader_.plugin().init(*device_, *vfs_, *assetManager_,
-                                   platform_.get(), audioDevice_.get())) {
-    s_logger.error("Game plugin init failed.");
-    pluginLoader_.unload();
-    return false;
-  }
+  return initPlugin(pluginLoader_, *device_, *vfs_, *assetManager_,
+                    platform_.get(), audioDevice_.get());
+}
 
-  auto *vkDev = dynamic_cast<IVulkanRenderDevice *>(device_.get());
-  if (vkDev != nullptr) {
-    if (auto *world = pluginLoader_.plugin().getWorld()) {
-      vkDev->setWorld(world);
-    }
-  }
-
-  s_logger.info("Game plugin '{}' initialized.", pluginLoader_.plugin().name());
-  return true;
+bool Application::registerPlugin(Raiden::Engine::IGamePlugin *plugin) {
+  pluginLoader_.registerPlugin(plugin);
+  return initPlugin(pluginLoader_, *device_, *vfs_, *assetManager_,
+                    platform_.get(), audioDevice_.get());
 }
 
 void Application::shutdown() {

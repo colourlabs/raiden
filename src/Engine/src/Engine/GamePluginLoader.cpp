@@ -62,10 +62,20 @@ bool GamePluginLoader::load(std::string_view path) {
   return true;
 }
 
+void GamePluginLoader::registerPlugin(IGamePlugin *plugin) {
+  plugin_ = plugin;
+  destroy_ = nullptr;
+  handle_ = nullptr;
+}
+
 void GamePluginLoader::unload() {
   if (plugin_ != nullptr) {
     plugin_->shutdown();
-    destroy_(plugin_);
+    if (destroy_ != nullptr) {
+      destroy_(plugin_);
+    } else {
+      delete plugin_;
+    }
     plugin_ = nullptr;
     destroy_ = nullptr;
   }

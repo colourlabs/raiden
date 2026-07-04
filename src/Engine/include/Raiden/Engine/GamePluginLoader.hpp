@@ -14,6 +14,7 @@ public:
   GamePluginLoader &operator=(const GamePluginLoader &) = delete;
 
   bool load(std::string_view path);
+  void registerPlugin(IGamePlugin *plugin);
   void unload();
   bool isLoaded() const { return plugin_ != nullptr; }
 
