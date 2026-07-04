@@ -21,7 +21,7 @@ class MemFile final : public IFile {
 public:
   explicit MemFile(std::vector<std::byte> data);
   size_t read(void *dst, size_t size) override;
-  size_t size() const override;
+  [[nodiscard]] size_t size() const override;
   bool seek(long offset, int origin) override;
   void close() override;
 
@@ -35,8 +35,14 @@ public:
   explicit OSFile(const std::string &path);
   ~OSFile() override;
 
+  OSFile(const OSFile&) = delete;
+  OSFile& operator=(const OSFile&) = delete;
+
+  OSFile(OSFile&& other) noexcept;
+  OSFile& operator=(OSFile&& other) noexcept;
+
   size_t read(void *dst, size_t size) override;
-  size_t size() const override;
+  [[nodiscard]] size_t size() const override;
   bool seek(long offset, int origin) override;
   void close() override;
 

@@ -62,7 +62,7 @@ bool VulkanRenderPass::init(VkDevice device, VkFormat imageFormat,
   VkAttachmentDescription depthAttachment{};
   VkAttachmentReference depthRef{};
   if (depthFormat != VK_FORMAT_UNDEFINED) {
-    attachments[msaa ? 1u : 1u] = {
+    attachments[msaa ? 1U : 1U] = {
         .format = depthFormat,
         .samples = sampleCount,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
@@ -72,9 +72,10 @@ bool VulkanRenderPass::init(VkDevice device, VkFormat imageFormat,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
     };
-    depthRef.attachment = msaa ? 1u : 1u;
+
+    depthRef.attachment = msaa ? 1U : 1U;
     depthRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    attachmentCount = msaa ? 3u : 2u;
+    attachmentCount = msaa ? 3U : 2U;
   }
 
   // subpass
@@ -83,15 +84,17 @@ bool VulkanRenderPass::init(VkDevice device, VkFormat imageFormat,
       .colorAttachmentCount = 1,
       .pColorAttachments = &colorRef,
   };
+
   if (msaa) {
     subpass.pResolveAttachments = &resolveRef;
   }
+ 
   if (depthFormat != VK_FORMAT_UNDEFINED) {
     subpass.pDepthStencilAttachment = &depthRef;
   }
 
   // dependencies
-  VkSubpassDependency dependencies[2]{};
+  std::array<VkSubpassDependency, 2> dependencies{};
   uint32_t dependencyCount = 1;
 
   dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -124,7 +127,7 @@ bool VulkanRenderPass::init(VkDevice device, VkFormat imageFormat,
       .subpassCount = 1,
       .pSubpasses = &subpass,
       .dependencyCount = dependencyCount,
-      .pDependencies = dependencies,
+      .pDependencies = dependencies.data(),
   };
 
   if (vkCreateRenderPass(device_, &renderPassInfo, nullptr, &renderPass_) !=

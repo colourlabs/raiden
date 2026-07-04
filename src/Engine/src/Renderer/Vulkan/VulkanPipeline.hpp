@@ -25,17 +25,16 @@ public:
   bool initDynamic(VkDevice device, VkRenderPass renderPass,
                    const VulkanShader &vertexShader,
                    const VulkanShader &fragmentShader,
-                   const VertexInputDescription &vertexInput,
-                   bool depthTestEnable, bool depthWriteEnable = true,
-                   VkCompareOp depthCompareOp = VK_COMPARE_OP_LESS,
-                   VkCullModeFlags cullMode = VK_CULL_MODE_BACK_BIT,
-                   VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT,
-                   VkDescriptorSetLayout *setLayouts = nullptr,
-                   uint32_t setLayoutCount = 0);
+                   const VertexInputDescription &vertexDesc,
+                   bool depthTestEnable, bool depthWriteEnable,
+                   VkCompareOp depthCompareOp, VkCullModeFlags cullMode,
+                   VkSampleCountFlagBits sampleCount,
+                   VkDescriptorSetLayout *setLayouts, uint32_t setLayoutCount);
+
   void shutdown();
 
-  VkPipeline pipeline() const { return pipeline_; }
-  VkPipelineLayout layout() const { return layout_; }
+  [[nodiscard]] VkPipeline pipeline() const { return pipeline_; }
+  [[nodiscard]] VkPipelineLayout layout() const { return layout_; }
 
 private:
   VkDevice device_ = VK_NULL_HANDLE;

@@ -42,8 +42,8 @@ bool MemFile::seek(long offset, int origin) {
   default:
     return false;
   }
-  if (pos_ > data_.size())
-    pos_ = data_.size();
+
+  pos_ = std::min(pos_, data_.size());
   return true;
 }
 
@@ -54,9 +54,8 @@ void MemFile::close() {
 
 // OSFile
 
-OSFile::OSFile(const std::string &path) {
-  fp_ = std::fopen(path.c_str(), "rb");
-  if (!fp_) {
+OSFile::OSFile(const std::string &path) : fp_(std::fopen(path.c_str(), "rb")) {
+  if (fp_ == nullptr) {
     return;
   }
 
@@ -72,21 +71,25 @@ OSFile::OSFile(const std::string &path) {
 OSFile::~OSFile() { close(); }
 
 size_t OSFile::read(void *dst, size_t size) {
-  if (!fp_)
+  if (fp_ == nullptr) {
     return 0;
+  }
+
   return std::fread(dst, 1, size, fp_);
 }
 
 size_t OSFile::size() const { return fileSize_; }
 
 bool OSFile::seek(long offset, int origin) {
-  if (!fp_)
+  if (fp_ == nullptr) {
     return false;
+  }
+
   return std::fseek(fp_, offset, origin) == 0;
 }
 
 void OSFile::close() {
-  if (fp_) {
+  if (fp_ != nullptr) {
     std::fclose(fp_);
     fp_ = nullptr;
   }
@@ -125,8 +128,10 @@ std::unique_ptr<IFile> OSFileSystem::open(std::string_view path) {
 bool OSFileSystem::exists(std::string_view path) const {
   std::shared_lock lock(mutex_);
 
-  if (memData_.contains(std::string(path)))
+  if (memData_.contains(std::string(path))) {
     return true;
+  }
+
   std::string realPath = resolveToRealPath(path);
   lock.unlock();
 
@@ -146,8 +151,9 @@ std::string OSFileSystem::readAll(std::string_view path) {
   }
 
   auto file = open(path);
-  if (!file)
+  if (!file) {
     return {};
+  }
 
   size_t sz = file->size();
   std::string result(sz, '\0');
@@ -168,8 +174,9 @@ std::vector<std::byte> OSFileSystem::readBytes(std::string_view path) {
   }
 
   auto file = open(path);
-  if (!file)
+  if (!file) {
     return {};
+  }
 
   size_t sz = file->size();
   std::vector<std::byte> result(sz);
@@ -183,8 +190,9 @@ bool OSFileSystem::mount(std::string_view virtualPath,
                          std::string_view realPath) {
   // normalize: ensure virtual prefix ends with /
   std::string vp(virtualPath);
-  if (!vp.empty() && vp.back() != '/')
+  if (!vp.empty() && vp.back() != '/') {
     vp.push_back('/');
+  }
 
   std::string rp(realPath);
   // ensure real path exists
@@ -193,8 +201,10 @@ bool OSFileSystem::mount(std::string_view virtualPath,
                    rp);
     return false;
   }
-  if (!rp.empty() && rp.back() != '/')
+
+  if (!rp.empty() && rp.back() != '/') {
     rp.push_back('/');
+  }
 
   {
     std::lock_guard lock(mutex_);
@@ -218,7 +228,7 @@ std::string OSFileSystem::resolveToRealPath(std::string_view path) const {
     }
   }
 
-  if (!best) {
+  if (best == nullptr) {
     return std::string(path);
   }
 

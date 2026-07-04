@@ -130,19 +130,21 @@ private:
       const VkDebugUtilsMessengerCallbackDataEXT *data, void *userData);
 
   bool checkValidationSupport();
-  VkResult createDebugUtilsMessengerEXT(
+  static VkResult createDebugUtilsMessengerEXT(
       VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT *createInfo,
       const VkAllocationCallbacks *allocator,
       VkDebugUtilsMessengerEXT *messenger);
-  void destroyDebugUtilsMessengerEXT(VkInstance instance,
-                                     VkDebugUtilsMessengerEXT messenger,
-                                     const VkAllocationCallbacks *allocator);
 
-  QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device,
+  static void
+  destroyDebugUtilsMessengerEXT(VkInstance instance,
+                                VkDebugUtilsMessengerEXT messenger,
+                                const VkAllocationCallbacks *allocator);
+
+  static QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device,
                                        VkSurfaceKHR surface);
   bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface);
   bool checkDeviceExtensionSupport(VkPhysicalDevice device);
-  SwapChainSupport querySwapChainSupport(VkPhysicalDevice device,
+  static SwapChainSupport querySwapChainSupport(VkPhysicalDevice device,
                                          VkSurfaceKHR surface);
 
   VkInstance instance_ = VK_NULL_HANDLE;
@@ -154,6 +156,7 @@ private:
   VkQueue presentQueue_ = VK_NULL_HANDLE;
   uint32_t graphicsQueueIndex_ = 0;
   uint32_t presentQueueIndex_ = 0;
+  
   ::Raiden::Platform::IPlatform *platform_ = nullptr;
   ::Raiden::Core::EngineConfig config_;
 

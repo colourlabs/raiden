@@ -17,16 +17,18 @@ public:
             bool vsync, VkSwapchainKHR oldSwapchain = VK_NULL_HANDLE);
 
   bool recreate(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
-    uint32_t graphicsFamily, uint32_t presentFamily,
-    uint32_t windowWidth, uint32_t windowHeight, bool vsync);
+                uint32_t graphicsFamily, uint32_t presentFamily,
+                uint32_t windowWidth, uint32_t windowHeight, bool vsync);
 
   void shutdown();
 
-  VkSwapchainKHR swapchain() const { return swapchain_; };
-  VkFormat imageFormat() const { return imageFormat_; };
-  VkExtent2D extent() const { return extent_; }
-  const std::vector<VkImageView> &imageViews() const { return imageViews_; }
-  const std::vector<VkImage> &images() const { return images_; }
+  [[nodiscard]] VkSwapchainKHR swapchain() const { return swapchain_; };
+  [[nodiscard]] VkFormat imageFormat() const { return imageFormat_; };
+  [[nodiscard]] VkExtent2D extent() const { return extent_; }
+  [[nodiscard]] const std::vector<VkImageView> &imageViews() const {
+    return imageViews_;
+  }
+  [[nodiscard]] const std::vector<VkImage> &images() const { return images_; }
 
 private:
   VkDevice device_ = VK_NULL_HANDLE; // kept for shutdown
@@ -40,13 +42,13 @@ private:
 
   void destroyImageViews();
 
-  VkSurfaceFormatKHR
-  chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &formats);
+  VkSurfaceFormatKHR static chooseSurfaceFormat(
+      const std::vector<VkSurfaceFormatKHR> &formats);
 
-  VkPresentModeKHR choosePresentMode(const std::vector<VkPresentModeKHR> &modes,
-                                     bool vsync);
+  static VkPresentModeKHR
+  choosePresentMode(const std::vector<VkPresentModeKHR> &modes, bool vsync);
 
-  VkExtent2D chooseExtent(const VkSurfaceCapabilitiesKHR &caps, uint32_t width,
+  static VkExtent2D chooseExtent(const VkSurfaceCapabilitiesKHR &caps, uint32_t width,
                           uint32_t height);
 };
 

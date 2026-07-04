@@ -6,7 +6,8 @@
 namespace Raiden::Renderer {
 
 void VulkanCommandBuffer::bindPipeline(const IPipeline &pipeline) {
-  auto &vkPipeline = static_cast<const VulkanPipelineImpl &>(pipeline);
+  const auto &vkPipeline = static_cast<const VulkanPipelineImpl &>(pipeline);
+  
   vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipeline.handle());
   currentLayout_ = vkPipeline.layout();
 

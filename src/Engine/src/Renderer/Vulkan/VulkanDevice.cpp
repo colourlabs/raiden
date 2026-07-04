@@ -203,7 +203,7 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
   if (sampleCount_ > VK_SAMPLE_COUNT_1_BIT) {
     VkSampleCountFlags colorCounts = props.limits.framebufferColorSampleCounts;
     VkSampleCountFlags depthCounts = props.limits.framebufferDepthSampleCounts;
-    
+
     if (((colorCounts & sampleCount_) == 0U) || ((depthCounts & sampleCount_) == 0U)) {
       s_logger.warn("MSAAx{} not supported, falling back to no MSAA",
                     static_cast<int>(sampleCount_));

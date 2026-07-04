@@ -9,8 +9,8 @@ namespace Raiden::Core {
 
 namespace {
 
-LogLevel g_minLogLevel = LogLevel::Info;
-std::mutex g_logMutex;
+LogLevel g_minLogLevel = LogLevel::Info; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+std::mutex g_logMutex; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 const char *get_level_color(LogLevel level) {
   switch (level) {
@@ -58,10 +58,10 @@ std::string get_current_time_string() {
   localtime_r(&time_t_now, &local_tm);
 #endif
 
-  char time_buffer[10]; // HH:MM:SS\0
-  std::strftime(time_buffer, sizeof(time_buffer), "%H:%M:%S", &local_tm);
+  std::array<char, 10> time_buffer; // HH:MM:SS\0
+  std::strftime(time_buffer.data(), time_buffer.size(), "%H:%M:%S", &local_tm);
 
-  return std::format("{}.{:03}", time_buffer, ms.count());
+  return std::format("{}.{:03}", std::string(time_buffer.data()), ms.count());
 }
 
 } // namespace

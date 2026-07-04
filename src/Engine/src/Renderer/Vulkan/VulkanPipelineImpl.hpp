@@ -26,8 +26,8 @@ public:
             uint32_t setLayoutCount = 0);
   void shutdown();
 
-  VkPipeline handle() const { return pipeline_.pipeline(); }
-  VkPipelineLayout layout() const { return pipeline_.layout(); }
+  [[nodiscard]] VkPipeline handle() const { return pipeline_.pipeline(); }
+  [[nodiscard]] VkPipelineLayout layout() const { return pipeline_.layout(); }
 
 private:
   VulkanPipeline pipeline_;

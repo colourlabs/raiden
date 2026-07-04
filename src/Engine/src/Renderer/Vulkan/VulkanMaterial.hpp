@@ -22,6 +22,9 @@ public:
   VulkanMaterial(const VulkanMaterial &) = delete;
   VulkanMaterial &operator=(const VulkanMaterial &) = delete;
 
+  VulkanMaterial(VulkanMaterial &&) noexcept = delete;
+  VulkanMaterial &operator=(VulkanMaterial &&) noexcept = delete;
+
   bool init(VkDevice device, VmaAllocator allocator, VulkanDescriptorPool &pool,
             IPipeline *pipeline, const MaterialDesc &desc,
             std::shared_ptr<ITexture> albedo,

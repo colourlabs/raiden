@@ -7,7 +7,8 @@
 
 namespace Raiden::Renderer {
 
-static const ::Raiden::Core::Logger s_logger("Raiden::Renderer::VulkanTextureImpl");
+static const ::Raiden::Core::Logger
+    s_logger("Raiden::Renderer::VulkanTextureImpl");
 
 VkFormat toVkFormat(Format format) {
   switch (format) {
@@ -54,12 +55,14 @@ bool VulkanTextureImpl::init(VkDevice device, VmaAllocator allocator,
       .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
       .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
       .aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT,
-      .arrayLayers = isCube ? 6u : 1u,
-      .createFlags = isCube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0u,
+      .arrayLayers = isCube ? 6U : 1U,
+      .createFlags = isCube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0U,
       .viewType = isCube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D,
   };
-  if (!image_.init(device_, allocator_, imgInfo))
+
+  if (!image_.init(device_, allocator_, imgInfo)) {
     return false;
+  }
 
   VkSamplerCreateInfo samplerInfo{
       .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -73,7 +76,7 @@ bool VulkanTextureImpl::init(VkDevice device, VmaAllocator allocator,
       .addressModeW = isCube ? VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE
                              : VK_SAMPLER_ADDRESS_MODE_REPEAT,
       .anisotropyEnable = VK_TRUE,
-      .maxAnisotropy = 16.0f,
+      .maxAnisotropy = 16.0F,
   };
 
   if (vkCreateSampler(device_, &samplerInfo, nullptr, &sampler_) !=
@@ -106,7 +109,8 @@ void VulkanTextureImpl::upload(const void *data, size_t size) {
 
   uint32_t layerCount = image_.arrayLayers();
   uint32_t faceSize = width_ * height_ * 4;
-  auto expectedSize = static_cast<size_t>(faceSize) * static_cast<size_t>(layerCount);
+  auto expectedSize =
+      static_cast<size_t>(faceSize) * static_cast<size_t>(layerCount);
 
   // staging buffer
   VulkanBuffer staging;
@@ -176,7 +180,7 @@ void VulkanTextureImpl::upload(const void *data, size_t size) {
   VkFenceCreateInfo fenceInfo{
       .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
   };
-  
+
   VkFence fence = nullptr;
   if (vkCreateFence(device_, &fenceInfo, nullptr, &fence) != VK_SUCCESS) {
     s_logger.error("Failed to create transfer fence");
@@ -204,12 +208,14 @@ void VulkanTextureImpl::upload(const void *data, size_t size) {
 VkDescriptorSet VulkanTextureImpl::getOrCreateDescriptorSet(
     VkDevice device, VkDescriptorPool pool, VkDescriptorSetLayout layout,
     VkSampler sampler) const {
-  if (descriptorSet_ != VK_NULL_HANDLE)
+  if (descriptorSet_ != VK_NULL_HANDLE) {
     return descriptorSet_;
+  }
 
   std::lock_guard<std::mutex> lock(descMutex_);
-  if (descriptorSet_ != VK_NULL_HANDLE)
+  if (descriptorSet_ != VK_NULL_HANDLE) {
     return descriptorSet_;
+  }
 
   VkDescriptorSetAllocateInfo allocInfo{
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -258,8 +264,8 @@ void VulkanTextureImpl::transitionLayout(VkCommandBuffer cmd,
       .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, layerCount},
   };
 
-  VkPipelineStageFlags srcStage;
-  VkPipelineStageFlags dstStage;
+  VkPipelineStageFlags srcStage = 0;
+  VkPipelineStageFlags dstStage = 0;
 
   if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
       newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
