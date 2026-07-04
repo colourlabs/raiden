@@ -9,8 +9,8 @@
 namespace Raiden::Engine {
 
 struct ProfilerFrameData {
-  float cpuFrameTimeMs = 0.0f;
-  float gpuFrameTimeMs = 0.0f;
+  float cpuFrameTimeMs = 0.0F;
+  float gpuFrameTimeMs = 0.0F;
   uint32_t drawCalls = 0;
   uint32_t triangles = 0;
 };
@@ -28,8 +28,8 @@ public:
   ImGuiOverlay &operator=(ImGuiOverlay &&) = delete;
 
   bool init(std::unique_ptr<IImGuiBackend> backend);
-  void newFrame(const ::Raiden::Platform::InputState &input, int displayW, int displayH, float dt,
-                const ProfilerFrameData &profiler,
+  void newFrame(const ::Raiden::Platform::InputState &input, int displayW,
+                int displayH, float dt, const ProfilerFrameData &profiler,
                 const std::function<void()> &pluginDebugUI);
   static void endFrame();
   void renderDrawData(::Raiden::Renderer::ICommandBuffer &cmd);
@@ -50,6 +50,18 @@ private:
   bool showFrameTime_ = false;
   bool showFps_ = false;
   bool showDrawCalls_ = false;
+
+  static constexpr float kFpsUpdateInterval = 0.5F;
+
+  float fpsAccumTime_ = 0.0F;
+  int fpsAccumFrames_ = 0;
+  float avgFps_ = 0.0F;
+
+  float cpuAccumTime_ = 0.0F;
+  float gpuAccumTime_ = 0.0F;
+  int perfAccumFrames_ = 0;
+  float avgCpuMs_ = 0.0F;
+  float avgGpuMs_ = 0.0F;
 };
 
 } // namespace Raiden::Engine

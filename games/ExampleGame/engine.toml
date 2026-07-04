@@ -4,7 +4,7 @@ width = 800
 height = 600
 resizable = true
 fullscreen = false
-vsync = false
+vsync = true
 
 [render]
 backend = "vulkan"

@@ -128,7 +128,7 @@ bool VulkanSwapchain::init(VkPhysicalDevice physicalDevice, VkDevice device,
 }
 
 void VulkanSwapchain::destroyImageViews() {
-  for (auto view : imageViews_) {
+  for (auto *view : imageViews_) {
     vkDestroyImageView(device_, view, nullptr);
   }
   imageViews_.clear();
@@ -157,7 +157,7 @@ VkSurfaceFormatKHR VulkanSwapchain::chooseSurfaceFormat(
 
 VkPresentModeKHR
 VulkanSwapchain::choosePresentMode(const std::vector<VkPresentModeKHR> &modes,
-                                   bool vsync) {
+                                    bool vsync) {
   if (!vsync) {
     for (const auto &m : modes) {
       if (m == VK_PRESENT_MODE_IMMEDIATE_KHR) {
@@ -166,13 +166,13 @@ VulkanSwapchain::choosePresentMode(const std::vector<VkPresentModeKHR> &modes,
     }
   } else {
     for (const auto &m : modes) {
-      if (m == VK_PRESENT_MODE_MAILBOX_KHR) {
+      if (m == VK_PRESENT_MODE_FIFO_KHR) {
         return m;
       }
     }
   }
 
-  return VK_PRESENT_MODE_FIFO_KHR; // always there
+  return VK_PRESENT_MODE_FIFO_KHR;
 }
 
 VkExtent2D VulkanSwapchain::chooseExtent(const VkSurfaceCapabilitiesKHR &caps,

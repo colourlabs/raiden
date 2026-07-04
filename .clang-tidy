@@ -20,7 +20,7 @@ Checks: >
 WarningsAsErrors: >
   clang-diagnostic-*,
 
-HeaderFilterRegex: ''
+HeaderFilterRegex: '^(?!.*InterFont\.hpp).*$'
 
 FormatStyle: none
 
