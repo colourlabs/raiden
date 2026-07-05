@@ -489,8 +489,6 @@ void inheritProperties(ComputedStyle &child, const ComputedStyle &parent) {
         it->second = parentIt->second;
         ++it;
       } else {
-        // Parent doesn't have this property — erase the literal "inherit"
-        // so downstream consumers (parseCssColor, etc.) don't see it.
         it = child.erase(it);
       }
     } else {

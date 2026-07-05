@@ -33,17 +33,28 @@ BoxEdges parseBoxShorthand(const std::string &str);
 struct FlexDirection {
   enum : std::uint8_t { Row, Column };
 };
+
 struct JustifyContent {
   enum : std::uint8_t { FlexStart, FlexEnd, Center, SpaceBetween, SpaceAround };
 };
+
 struct AlignItems {
   enum : std::uint8_t { FlexStart, FlexEnd, Center, Stretch };
 };
+
 struct FlexWrap {
   enum : std::uint8_t { NoWrap, Wrap, WrapReverse };
 };
+
 struct AlignContent {
-  enum : std::uint8_t { FlexStart, FlexEnd, Center, Stretch, SpaceBetween, SpaceAround };
+  enum : std::uint8_t {
+    FlexStart,
+    FlexEnd,
+    Center,
+    Stretch,
+    SpaceBetween,
+    SpaceAround
+  };
 };
 
 struct FlexStyle {

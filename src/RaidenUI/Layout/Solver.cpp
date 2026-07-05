@@ -1,6 +1,6 @@
-#include <RaidenUI/Layout/Solver.hpp>
 #include <RaidenUI/CSS/Selector.hpp>
 #include <RaidenUI/Layout/Flexbox.hpp>
+#include <RaidenUI/Layout/Solver.hpp>
 
 #include <algorithm>
 
@@ -8,8 +8,7 @@ namespace RaidenUI {
 
 namespace {
 
-void layoutElement_preorder(ElementNode *node,
-                            const CssStylesheet &stylesheet,
+void layoutElement_preorder(ElementNode *node, const CssStylesheet &stylesheet,
                             const ComputedStyle *parentStyle = nullptr) {
   const ComputedStyle &style = resolveStyle(node, stylesheet, parentStyle);
   FlexStyle fs = parseFlexStyle(style);
@@ -24,7 +23,7 @@ void layoutElement_preorder(ElementNode *node,
   if (fs.width.unit == Unit::Px) {
     node->computedWidth = fs.width.value;
   }
-  
+
   if (fs.height.unit == Unit::Px) {
     node->computedHeight = fs.height.value;
   }
@@ -35,8 +34,7 @@ void layoutElement_preorder(ElementNode *node,
 }
 
 void layoutElement(ElementNode *node, const CssStylesheet &stylesheet,
-                   bool parentSized = false,
-                   const MeasureFn &measure = nullptr,
+                   bool parentSized = false, const MeasureFn &measure = nullptr,
                    const ComputedStyle *parentStyle = nullptr) {
   const ComputedStyle &style = resolveStyle(node, stylesheet, parentStyle);
   FlexStyle fs = parseFlexStyle(style);
@@ -53,7 +51,8 @@ void layoutElement(ElementNode *node, const CssStylesheet &stylesheet,
   }
 
   if (fs.display == 1) {
-    LayoutSize content = layoutFlexContainer(node, fs, stylesheet, measure, &style);
+    LayoutSize content =
+        layoutFlexContainer(node, fs, stylesheet, measure, &style);
     for (auto &child : node->children) {
       if (child->visible) {
         layoutElement(child.get(), stylesheet, true, measure, &style);

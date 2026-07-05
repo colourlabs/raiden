@@ -1,8 +1,8 @@
 #pragma once
 
-#include <RaidenUI/Layout/Flexbox.hpp>
 #include <RaidenUI/CSS/Parser.hpp>
 #include <RaidenUI/DOM/Element.hpp>
+#include <RaidenUI/Layout/Flexbox.hpp>
 
 namespace RaidenUI {
 

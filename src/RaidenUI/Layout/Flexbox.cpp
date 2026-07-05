@@ -1,9 +1,9 @@
 #include <RaidenUI/Layout/Flexbox.hpp>
 
-#include <cmath>
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include <cmath>
 #include <cstdio>
 #include <functional>
 #include <string>
@@ -438,14 +438,16 @@ MinMaxSizes computeMinMaxSizes(const ElementNode *node, const FlexStyle &style,
         childNatural = childSizes.naturalSize;
       }
 
+      const float naturalMain =
+          isRow ? childNatural.width : childNatural.height;
+      const float naturalCross =
+          isRow ? childNatural.height : childNatural.width;
+
       float childMain =
-          (mainLen.unit == Unit::Px)
-              ? mainLen.value
-              : (isRow ? childNatural.width : childNatural.height);
+          (mainLen.unit == Unit::Px) ? mainLen.value : naturalMain;
+
       float childCross =
-          (crossLen.unit == Unit::Px)
-              ? crossLen.value
-              : (isRow ? childNatural.height : childNatural.width);
+          (crossLen.unit == Unit::Px) ? crossLen.value : naturalCross;
 
       if (mainLen.unit != Unit::Px) {
         childMain += isRow ? (childFs.padding.left + childFs.padding.right)
@@ -730,7 +732,7 @@ LayoutSize layoutFlexContainer(ElementNode *container,
 
       if (isRow) {
         float x = NAN;
-        
+
         if (isReversed) {
           float visualW =
               ms - item.childStyle.margin.left - item.childStyle.margin.right;

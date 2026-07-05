@@ -26,7 +26,7 @@ public:
         skipAtRule();
         continue;
       }
-    
+
       sheet.rules.push_back(parseRule());
       skipWhitespace();
     }
