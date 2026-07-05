@@ -9,6 +9,7 @@
 #include <Raiden/Platform/IPlatform.hpp>
 #include <Raiden/Renderer/IRenderDevice.hpp>
 
+#include <atomic>
 #include <chrono>
 #include <memory>
 
@@ -29,6 +30,7 @@ public:
   bool init(const ::Raiden::Core::EngineConfig &config);
   void shutdown();
   void run();
+  void requestShutdown();
 
   bool loadGamePlugin(std::string_view path);
   bool registerPlugin(Raiden::Engine::IGamePlugin *plugin);
@@ -50,7 +52,7 @@ private:
   ::Raiden::Core::EngineConfig config_;
   ::Raiden::Engine::GamePluginLoader pluginLoader_;
 
-  bool running_ = false;
+  std::atomic<bool> running_{false};
   std::chrono::steady_clock::time_point lastFrameTime_;
 };
 

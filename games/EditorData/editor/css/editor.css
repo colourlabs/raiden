@@ -1,36 +1,66 @@
-/* RaidenEditor Dark Mode */
-
 ui {
   display: flex;
   flex-direction: column;
   background: #1e1e2e;
   color: #cdd6f4;
-  font-family: "monospace";
   font-size: 13px;
+  height: 100%;
 }
 
 #main-area {
   display: flex;
   flex-direction: row;
   flex: 1;
+  min-height: 0;
+}
+
+#top-bar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  background: #11111b;
+  height: 100%;
+  padding: 0 12px;
+}
+
+.menu-item {
+  color: #a6adc8;
+  padding: 0 10px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.menu-item:hover {
+  background: #313244;
+  color: #cdd6f4;
+}
+
+.window-title {
+  margin-left: auto;
+  color: #585b70;
+  font-size: 12px;
+}
+
+.tabbed-panel {
+  display: flex;
+  flex-direction: column;
+  background: #181825;
 }
 
 #sidebar {
-  display: flex;
-  flex-direction: column;
-  background: #181825;
   min-width: 220px;
   border-right: 1px solid #313244;
-  padding: 8px;
 }
 
 #inspector {
-  display: flex;
-  flex-direction: column;
-  background: #181825;
   min-width: 260px;
   border-left: 1px solid #313244;
-  padding: 8px;
+}
+
+#viewport-container {
+  flex: 1;
 }
 
 #viewport {
@@ -38,51 +68,53 @@ ui {
   flex: 1;
 }
 
-#bottom-bar {
-  background: #181825;
-  height: 28px;
-  border-top: 1px solid #313244;
-  padding: 0 12px;
+.panel-content {
+  padding: 8px;
+  flex: 1;
   display: flex;
+  flex-direction: column;
+}
+
+.tab-header-row {
+  display: flex;
+  flex-direction: row;
   align-items: center;
-}
-
-.panel-header {
-  color: #a6adc8;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  padding: 8px 4px;
+  background: #11111b;
   border-bottom: 1px solid #313244;
-  margin-bottom: 8px;
+  padding-top: 4px;
+  height: 33px;
 }
 
-.tree-item {
-  padding: 3px 8px;
+.tab-header {
+  padding: 6px 16px;
+  color: #7f849c;
+  background: #11111b;
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
   cursor: pointer;
-  border-radius: 4px;
+  font-size: 11px;
+  margin-right: 2px;
 }
 
-.tree-item:hover {
-  background: #313244;
+.tab-header:hover {
+  background: #1e1e2e;
+  color: #cdd6f4;
 }
 
-.tree-item.selected {
-  background: #45475a;
+.tab-header.active {
+  background: #181825;
+  color: #cdd6f4;
+  border-left: 1px solid #313244;
+  border-right: 1px solid #313244;
+  border-top: 1px solid #313244;
+  position: relative;
+  margin-bottom: -1px;
 }
 
 .property-label {
   color: #a6adc8;
-  font-size: 12px;
-  min-width: 80px;
-  padding: 4px 0;
-}
-
-.property-value {
-  background: #313244;
-  border: 1px solid #45475a;
-  border-radius: 4px;
-  padding: 3px 6px;
-  color: #cdd6f4;
-  flex: 1;
+  font-size: 11px;
+  text-transform: uppercase;
+  margin-top: 8px;
+  padding-bottom: 2px;
 }

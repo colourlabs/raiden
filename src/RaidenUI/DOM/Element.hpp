@@ -1,5 +1,6 @@
 #pragma once
 
+#include <RaidenUI/CSS/Properties.hpp>
 #include <RaidenUI/Core/Signal.hpp>
 
 #include <functional>
@@ -32,6 +33,11 @@ struct ElementNode {
   bool visible{true};
   bool hovered{false};
 
+  // cached computed style (cleared when style attributes change)
+  ComputedStyle computedStyle;
+  bool styleDirty{true};
+  bool needsLayout{true};
+
   explicit ElementNode(std::string tag);
 
   void appendChild(std::unique_ptr<ElementNode> child);
@@ -54,5 +60,7 @@ struct ElementNode {
   ElementNode *lastChild() const;
   size_t childCount() const;
 };
+
+void requestLayout(ElementNode *node);
 
 } // namespace RaidenUI

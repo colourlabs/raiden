@@ -1,26 +1,55 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui>
+  <div id="top-bar">
+    <div class="menu-item">File</div>
+    <div class="menu-item">Edit</div>
+    <div class="menu-item">Selection</div>
+    <div class="menu-item">View</div>
+    <div class="menu-item">Go</div>
+    <div class="menu-item">Run</div>
+    <div class="menu-item">Terminal</div>
+    <div class="menu-item">Help</div>
+    <div class="window-title">Raiden Editor - Project: Sandbox</div>
+  </div>
+
   <div id="main-area">
-    <div id="sidebar">
-      <div class="panel-header">Scene</div>
-      <div class="tree-item selected">Player</div>
-      <div class="tree-item">Camera</div>
-      <div class="tree-item">Light</div>
-      <div class="tree-item">Ground</div>
-      <div class="tree-item">Enemy</div>
-      <div class="tree-item">Props</div>
+    <div id="sidebar" class="tabbed-panel">
+      <div class="tab-header-row">
+        <div class="tab-header active">Scene Outliner</div>
+        <div class="tab-header">Layers</div>
+      </div>
+      <div class="panel-content">
+        <div class="tree-item selected">Player</div>
+        <div class="tree-item">Camera</div>
+        <div class="tree-item">Light</div>
+        <div class="tree-item">Ground</div>
+        <div class="tree-item">Enemy</div>
+        <div class="tree-item">Props</div>
+      </div>
     </div>
 
-    <div id="viewport"/>
+    <div id="viewport-container" class="tabbed-panel">
+      <div class="tab-header-row">
+        <div class="tab-header active">Viewport (3D)</div>
+        <div class="tab-header">Blueprint / Material</div>
+      </div>
+      <div id="viewport" class="panel-content">
+      </div>
+    </div>
 
-    <div id="inspector">
-      <div class="panel-header">Inspector</div>
-      <div class="property-label">Position</div>
-      <div class="property-value">0.0, 1.0, 0.0</div>
-      <div class="property-label">Rotation</div>
-      <div class="property-value">0.0, 45.0, 0.0</div>
-      <div class="property-label">Scale</div>
-      <div class="property-value">1.0, 1.0, 1.0</div>
+    <div id="inspector" class="tabbed-panel">
+      <div class="tab-header-row">
+        <div class="tab-header active">Details</div>
+        <div class="tab-header">World Settings</div>
+      </div>
+      <div class="panel-content">
+        <div class="property-label">Position</div>
+        <div class="property-value">0.0, 1.0, 0.0</div>
+        <div class="property-label">Rotation</div>
+        <div class="property-value">0.0, 45.0, 0.0</div>
+        <div class="property-label">Scale</div>
+        <div class="property-value">1.0, 1.0, 1.0</div>
+      </div>
     </div>
   </div>
 

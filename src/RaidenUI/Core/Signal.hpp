@@ -18,7 +18,8 @@ struct TrackingContext {
   Effect *current{nullptr};
 };
 
-extern thread_local TrackingContext g_tracking; // NOLINT
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+extern thread_local TrackingContext g_tracking;
 
 // batcher: deferred effect execution
 

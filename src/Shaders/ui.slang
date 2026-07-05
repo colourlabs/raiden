@@ -15,21 +15,8 @@ struct VertexOutput
 [[vk::push_constant]]
 cbuffer PushConstants { float2 screenSize; };
 
-[[vk::binding(0, 2)]] Texture2D uTexture;
 [[vk::binding(0, 1)]] SamplerState uSampler;
-
-[shader("vertex")]
-VertexOutput vertexMain(VertexInput input)
-{
-  VertexOutput output;
-  float2 ndc;
-  ndc.x = (input.pos.x / screenSize.x) * 2.0 - 1.0;
-  ndc.y = -(input.pos.y / screenSize.y) * 2.0 + 1.0;
-  output.position = float4(ndc, 0.0, 1.0);
-  output.uv = input.uv;
-  output.color = input.color;
-  return output;
-}
+[[vk::binding(0, 2)]] Texture2D uTexture;
 
 float3 srgbToLinear(float3 c)
 {
@@ -38,10 +25,27 @@ float3 srgbToLinear(float3 c)
   return lerp(lo, hi, step(0.04045, c));
 }
 
-[shader("fragment")]
-float4 fragmentMain(VertexOutput input) : SV_Target
+[shader("vertex")]
+VertexOutput vertexMain(VertexInput input)
 {
-  float4 texel = uTexture.Sample(uSampler, input.uv);
-  float3 linearColor = srgbToLinear(input.color.rgb) * texel.rgb;
-  return float4(linearColor, input.color.a * texel.a);
+  VertexOutput output;
+  float2 ndc;
+  ndc.x = (input.pos.x / screenSize.x) * 2.0 - 1.0;
+  ndc.y = (input.pos.y / screenSize.y) * 2.0 - 1.0;
+
+  output.position = float4(ndc, 0.0, 1.0);
+  output.uv = input.uv;
+
+  output.color.rgb = srgbToLinear(input.color.rgb);
+  output.color.a = input.color.a;
+
+  return output;
+}
+
+[shader("fragment")]
+float4 fragmentMain(VertexOutput input) : SV_Target0
+{
+    float coverage = uTexture.Sample(uSampler, input.uv).a;
+    return float4(input.color.rgb * input.color.a * coverage,
+                  input.color.a * coverage);
 }

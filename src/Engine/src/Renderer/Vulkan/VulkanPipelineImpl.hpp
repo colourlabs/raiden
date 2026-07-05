@@ -24,7 +24,7 @@ public:
             VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT,
             VkDescriptorSetLayout *setLayouts = nullptr,
             uint32_t setLayoutCount = 0,
-            bool blendEnable = false);
+            const BlendConfig &blendConfig = {});
   void shutdown();
 
   [[nodiscard]] VkPipeline handle() const { return pipeline_.pipeline(); }

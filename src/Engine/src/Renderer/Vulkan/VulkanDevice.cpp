@@ -48,6 +48,52 @@ static VkCullModeFlags toVkCullMode(CullMode mode) {
   return VK_CULL_MODE_BACK_BIT;
 }
 
+static VkBlendFactor toVkBlendFactor(BlendFactor factor) {
+  switch (factor) {
+  case BlendFactor::Zero:
+    return VK_BLEND_FACTOR_ZERO;
+  case BlendFactor::One:
+    return VK_BLEND_FACTOR_ONE;
+  case BlendFactor::SrcAlpha:
+    return VK_BLEND_FACTOR_SRC_ALPHA;
+  case BlendFactor::OneMinusSrcAlpha:
+    return VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+  case BlendFactor::DstAlpha:
+    return VK_BLEND_FACTOR_DST_ALPHA;
+  case BlendFactor::OneMinusDstAlpha:
+    return VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+  case BlendFactor::SrcColor:
+    return VK_BLEND_FACTOR_SRC_COLOR;
+  case BlendFactor::OneMinusSrcColor:
+    return VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
+  case BlendFactor::DstColor:
+    return VK_BLEND_FACTOR_DST_COLOR;
+  case BlendFactor::OneMinusDstColor:
+    return VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR;
+  case BlendFactor::Src1Color:
+    return VK_BLEND_FACTOR_SRC1_COLOR;
+  case BlendFactor::OneMinusSrc1Color:
+    return VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR;
+  }
+  return VK_BLEND_FACTOR_ZERO;
+}
+
+static VkBlendOp toVkBlendOp(BlendOp op) {
+  switch (op) {
+  case BlendOp::Add:
+    return VK_BLEND_OP_ADD;
+  case BlendOp::Subtract:
+    return VK_BLEND_OP_SUBTRACT;
+  case BlendOp::ReverseSubtract:
+    return VK_BLEND_OP_REVERSE_SUBTRACT;
+  case BlendOp::Min:
+    return VK_BLEND_OP_MIN;
+  case BlendOp::Max:
+    return VK_BLEND_OP_MAX;
+  }
+  return VK_BLEND_OP_ADD;
+}
+
 VulkanDevice::~VulkanDevice() { shutdown(); }
 
 bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
@@ -164,6 +210,7 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
   }
 
   VkPhysicalDeviceFeatures deviceFeatures{
+      .dualSrcBlend = VK_TRUE,
       .samplerAnisotropy = VK_TRUE,
   };
 
@@ -380,10 +427,21 @@ VulkanDevice::createPipeline(const PipelineDesc &desc) {
                             ? VK_COMPARE_OP_LESS_OR_EQUAL
                             : VK_COMPARE_OP_LESS;
 
+  BlendConfig blendConfig{};
+  if (desc.blendEnable) {
+    blendConfig.blendEnable = true;
+    blendConfig.srcColorBlendFactor = toVkBlendFactor(desc.blendSrcFactor);
+    blendConfig.dstColorBlendFactor = toVkBlendFactor(desc.blendDstFactor);
+    blendConfig.colorBlendOp = toVkBlendOp(desc.blendOp);
+    blendConfig.srcAlphaBlendFactor = toVkBlendFactor(desc.blendSrcAlphaFactor);
+    blendConfig.dstAlphaBlendFactor = toVkBlendFactor(desc.blendDstAlphaFactor);
+    blendConfig.alphaBlendOp = toVkBlendOp(desc.blendAlphaOp);
+  }
+
   if (!impl->init(device_, renderPass_.renderPass(), vertShader, fragShader,
                   vertexDesc, desc.depthTestEnable, desc.depthWriteEnable,
                   depthOp, toVkCullMode(desc.cullMode), sampleCount_,
-                  setLayouts.data(), 3, desc.blendEnable)) {
+                  setLayouts.data(), 3, blendConfig)) {
     s_logger.error("Failed to create pipeline");
     vertShader.shutdown();
     fragShader.shutdown();

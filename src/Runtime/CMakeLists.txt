@@ -2,6 +2,8 @@ add_executable(EngineRuntime
   src/main.cpp
 )
 
+raiden_set_compile_options(EngineRuntime)
+
 target_include_directories(EngineRuntime PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>

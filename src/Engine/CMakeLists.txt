@@ -170,6 +170,21 @@ target_sources(EngineCore PRIVATE
   ${implot_SOURCE_DIR}/implot_items.cpp
 )
 
+# third-party sources compiled in-tree: suppress strict warnings
+set_source_files_properties(
+  ${imgui_SOURCE_DIR}/imgui.cpp
+  ${imgui_SOURCE_DIR}/imgui_draw.cpp
+  ${imgui_SOURCE_DIR}/imgui_tables.cpp
+  ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+  ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
+  ${implot_SOURCE_DIR}/implot.cpp
+  ${implot_SOURCE_DIR}/implot_items.cpp
+  PROPERTIES COMPILE_OPTIONS
+    "$<IF:$<CXX_COMPILER_ID:MSVC>,/W0,-w>"
+)
+
+raiden_set_compile_options(EngineCore)
+
 target_link_libraries(EngineCore PUBLIC
   volk
   SDL3::SDL3
@@ -181,6 +196,15 @@ target_link_libraries(EngineCore PUBLIC
   OpenAL::OpenAL
   miniaudio
 )
+
+# mark external dependency headers as SYSTEM (skipping ALIAS/IMPORTED targets with ::)
+foreach(dep IN ITEMS volk VulkanMemoryAllocator SDL3::SDL3 glm::glm
+                     tomlplusplus::tomlplusplus ktx fastgltf::fastgltf
+                     OpenAL::OpenAL miniaudio)
+  if(TARGET ${dep} AND NOT ${dep} MATCHES "::")
+    set_target_properties(${dep} PROPERTIES SYSTEM ON)
+  endif()
+endforeach()
 
 # opus support (optional)
 if(TARGET opus AND TARGET opusfile)

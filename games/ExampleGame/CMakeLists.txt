@@ -6,6 +6,8 @@ add_library(ExampleGame MODULE
   src/Game.cpp
 )
 
+raiden_set_compile_options(ExampleGame)
+
 target_include_directories(ExampleGame PRIVATE
   ${PROJECT_SOURCE_DIR}/src/Engine/include
 )

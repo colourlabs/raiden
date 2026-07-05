@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Raiden/Renderer/RenderTypes.hpp>
+#include <cstdint>
 #include <string>
 
 namespace Raiden::Renderer {
@@ -9,7 +10,7 @@ struct MaterialDesc {
   std::string shader = "builtin://pbr";
 
   // PBR factors
-  glm::vec4 baseColorFactor = {1.0f, 1.0f, 1.0f, 1.0f};
+  glm::vec4 baseColorFactor = {1.0F, 1.0F, 1.0F, 1.0F};
   glm::vec3 emissiveFactor = {0.0f, 0.0f, 0.0f};
   float metallicFactor = 0.0f;
   float roughnessFactor = 1.0f;
@@ -23,7 +24,7 @@ struct MaterialDesc {
   std::string occlusionTexture;
 
   // alpha
-  enum class AlphaMode { Opaque, Mask, Blend };
+  enum class AlphaMode : std::uint8_t { Opaque, Mask, Blend };
   AlphaMode alphaMode = AlphaMode::Opaque;
   float alphaCutoff = 0.5f;
 
@@ -39,7 +40,7 @@ struct MaterialDesc {
   bool castShadows = true;
   bool receiveShadows = true;
 
-  enum class VertexColorMode { Ignore, Multiply, Add };
+  enum class VertexColorMode : std::uint8_t { Ignore, Multiply, Add };
   VertexColorMode vertexColorMode = VertexColorMode::Ignore;
 
   bool operator==(const MaterialDesc &) const = default;

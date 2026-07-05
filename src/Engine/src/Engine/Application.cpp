@@ -111,6 +111,8 @@ bool Application::registerPlugin(Raiden::Engine::IGamePlugin *plugin) {
                     platform_.get(), audioDevice_.get());
 }
 
+void Application::requestShutdown() { running_ = false; }
+
 void Application::shutdown() {
   if (!running_) {
     return;

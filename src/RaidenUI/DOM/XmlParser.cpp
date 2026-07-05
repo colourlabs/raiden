@@ -43,12 +43,12 @@ std::unique_ptr<ElementNode> convertNode(const pugi::xml_node &xmlNode) {
         }
 
         std::string prop = value.substr(start, colon - start);
-        
+
         // trim
         while (!prop.empty() && prop.front() == ' ') {
           prop.erase(prop.begin());
         }
-        
+
         while (!prop.empty() && prop.back() == ' ') {
           prop.pop_back();
         }
@@ -56,11 +56,11 @@ std::unique_ptr<ElementNode> convertNode(const pugi::xml_node &xmlNode) {
         start = colon + 1;
         size_t semi = value.find(';', start);
         std::string val = value.substr(start, semi - start);
-        
+
         while (!val.empty() && val.front() == ' ') {
           val.erase(val.begin());
         }
-        
+
         while (!val.empty() && val.back() == ' ') {
           val.pop_back();
         }
@@ -82,7 +82,7 @@ std::unique_ptr<ElementNode> convertNode(const pugi::xml_node &xmlNode) {
   for (const auto &child : xmlNode.children()) {
     if (child.type() == pugi::node_element) {
       auto childNode = convertNode(child);
-      
+
       if (childNode) {
         childNode->parent = node.get();
         node->children.push_back(std::move(childNode));
@@ -90,17 +90,17 @@ std::unique_ptr<ElementNode> convertNode(const pugi::xml_node &xmlNode) {
     } else if (child.type() == pugi::node_pcdata) {
       // text node, store in content
       std::string text = child.value();
-      
+
       while (!text.empty() && (text.front() == ' ' || text.front() == '\n' ||
                                text.front() == '\t')) {
         text.erase(text.begin());
       }
-      
+
       while (!text.empty() && (text.back() == ' ' || text.back() == '\n' ||
                                text.back() == '\t')) {
         text.pop_back();
       }
-      
+
       if (!text.empty()) {
         node->content = text;
       }

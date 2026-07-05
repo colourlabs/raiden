@@ -1,3 +1,4 @@
+#include <RaidenUI/CSS/Selector.hpp>
 #include <RaidenUI/DOM/Reconciler.hpp>
 
 #include <algorithm>
@@ -35,12 +36,20 @@ void reconcileChildren(ElementNode *live, ElementNode *next) {
 void reconcile(ElementNode *live, ElementNode *next) {
   live->content = std::move(next->content);
 
+  bool styleChanged =
+      (live->attrs != next->attrs) || (live->style != next->style);
+
   live->attrs = std::move(next->attrs);
   live->style = std::move(next->style);
 
   live->onClick = std::move(next->onClick);
   live->onMouseEnter = std::move(next->onMouseEnter);
   live->onMouseLeave = std::move(next->onMouseLeave);
+
+  if (styleChanged) {
+    markStyleDirty(live);
+    requestLayout(live);
+  }
 
   // preserve runtime layout state
   // computedX/Y/Width/Height, visible, hovered are kept as-is

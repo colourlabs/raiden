@@ -473,8 +473,48 @@ bool selectorMatches(const Selector &selector, const ElementNode *element) {
   return selectorMatchesFull(selector, element);
 }
 
-ComputedStyle resolveStyle(const ElementNode *element,
-                           const CssStylesheet &stylesheet) {
+static const std::vector<std::string> kInheritedProps = {
+    "color",          "font-family",  "font-size",    "font-style",
+    "font-weight",    "font-stretch", "font-variant", "visibility",
+    "letter-spacing", "word-spacing", "white-space",  "text-transform",
+    "text-align",     "text-indent",  "cursor",       "line-height",
+    "direction",      "orphans",      "widows",
+};
+
+void inheritProperties(ComputedStyle &child, const ComputedStyle &parent) {
+  for (auto it = child.begin(); it != child.end();) {
+    if (it->second == "inherit") {
+      auto parentIt = parent.find(it->first);
+      if (parentIt != parent.end()) {
+        it->second = parentIt->second;
+        ++it;
+      } else {
+        // Parent doesn't have this property — erase the literal "inherit"
+        // so downstream consumers (parseCssColor, etc.) don't see it.
+        it = child.erase(it);
+      }
+    } else {
+      ++it;
+    }
+  }
+
+  for (const auto &prop : kInheritedProps) {
+    if (child.find(prop) == child.end()) {
+      auto it = parent.find(prop);
+      if (it != parent.end()) {
+        child[prop] = it->second;
+      }
+    }
+  }
+}
+
+const ComputedStyle &resolveStyle(ElementNode *element,
+                                  const CssStylesheet &stylesheet,
+                                  const ComputedStyle *parentStyle) {
+  if (!element->styleDirty) {
+    return element->computedStyle;
+  }
+
   struct Match {
     const CssRule *rule;
     Specificity specificity;
@@ -485,9 +525,9 @@ ComputedStyle resolveStyle(const ElementNode *element,
 
   for (size_t i = 0; i < stylesheet.rules.size(); ++i) {
     const auto &rule = stylesheet.rules[i];
-    Selector sel = parseSelectorString(rule.selector);
-    if (selectorMatches(sel, element)) {
-      matches.push_back({&rule, computeSpecificity(sel), static_cast<int>(i)});
+    if (selectorMatches(rule.selector, element)) {
+      matches.push_back(
+          {&rule, computeSpecificity(rule.selector), static_cast<int>(i)});
     }
   }
 
@@ -495,7 +535,7 @@ ComputedStyle resolveStyle(const ElementNode *element,
     if (a.specificity != b.specificity) {
       return a.specificity < b.specificity;
     }
-    
+
     return a.sourceOrder < b.sourceOrder;
   });
 
@@ -512,7 +552,32 @@ ComputedStyle resolveStyle(const ElementNode *element,
   }
 
   expandShorthands(result);
-  return result;
+
+  if (parentStyle != nullptr) {
+    inheritProperties(result, *parentStyle);
+  }
+
+  element->computedStyle = std::move(result);
+  element->styleDirty = false;
+
+  if (auto it = element->attrs.find("class");
+      it != element->attrs.end() &&
+      it->second.find("tab-header-row") != std::string::npos) {
+    auto aiIt = element->computedStyle.find("align-items");
+    std::fprintf(stderr, "[tab-header-row] align-items = '%s'\n",
+                 aiIt != element->computedStyle.end() ? aiIt->second.c_str()
+                                                      : "<MISSING>");
+  }
+
+  return element->computedStyle;
+}
+
+void markStyleDirty(ElementNode *node) {
+  node->styleDirty = true;
+  node->needsLayout = true;
+  for (auto &child : node->children) {
+    markStyleDirty(child.get());
+  }
 }
 
 } // namespace RaidenUI

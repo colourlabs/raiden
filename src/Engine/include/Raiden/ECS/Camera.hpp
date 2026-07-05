@@ -27,8 +27,8 @@ struct Camera {
   }
 
   void setOrthographic(float left, float right, float bottom, float top,
-                       float zNear = -1.0f, float zFar = 1.0f) {
-    projection = glm::ortho(left, right, bottom, top, zNear, zFar);
+                       float nearZ = -1.0f, float farZ = 1.0f) {
+    projection = glm::ortho(left, right, bottom, top, nearZ, farZ);
   }
 };
 

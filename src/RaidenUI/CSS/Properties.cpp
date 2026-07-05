@@ -65,6 +65,10 @@ uint32_t parseCssColor(const std::string &str) {
     return 0;
   }
 
+  if (sv == "inherit" || sv == "initial" || sv == "unset" || sv == "revert") {
+    return 0x00000000;
+  }
+
   if (sv[0] == '#') {
     return parseHexColor(sv);
   }

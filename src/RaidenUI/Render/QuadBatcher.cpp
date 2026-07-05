@@ -54,7 +54,10 @@ QuadBatcher::QuadBatcher(IRenderDevice &device) : m_device(&device) {
 
 QuadBatcher::~QuadBatcher() = default;
 
-void QuadBatcher::begin() { m_quads.clear(); }
+void QuadBatcher::begin() {
+  m_bgQuads.clear();
+  m_glyphQuads.clear();
+}
 
 void QuadBatcher::addQuad(float x, float y, float w, float h, uint32_t color,
                           const ITexture *texture) {
@@ -65,19 +68,19 @@ void QuadBatcher::addQuad(float x, float y, float w, float h, uint32_t color,
   quad.verts[3] = {.x = x, .y = y + h, .u = 0, .v = 1, .color = color};
   quad.texture = (texture != nullptr) ? texture : m_whiteTexture.get();
 
-  m_quads.push_back(quad);
+  m_bgQuads.push_back(quad);
 }
 
 void QuadBatcher::addGlyphQuad(float x, float y, float w, float h,
                                uint32_t color, float u0, float v0, float u1,
                                float v1, const ITexture *texture) {
   UIQuad quad;
-  quad.verts[0] = {.x = x, .y = y, .u = u0, .v = v1, .color = color};
-  quad.verts[1] = {.x = x + w, .y = y, .u = u1, .v = v1, .color = color};
-  quad.verts[2] = {.x = x + w, .y = y + h, .u = u1, .v = v0, .color = color};
-  quad.verts[3] = {.x = x, .y = y + h, .u = u0, .v = v0, .color = color};
+  quad.verts[0] = {.x = x, .y = y, .u = u0, .v = v0, .color = color};
+  quad.verts[1] = {.x = x + w, .y = y, .u = u1, .v = v0, .color = color};
+  quad.verts[2] = {.x = x + w, .y = y + h, .u = u1, .v = v1, .color = color};
+  quad.verts[3] = {.x = x, .y = y + h, .u = u0, .v = v1, .color = color};
   quad.texture = (texture != nullptr) ? texture : m_whiteTexture.get();
-  m_quads.push_back(quad);
+  m_glyphQuads.push_back(quad);
 }
 
 void QuadBatcher::growBuffers(size_t minVerts) {
@@ -100,14 +103,15 @@ void QuadBatcher::growBuffers(size_t minVerts) {
   m_bufferCapacity = newCap;
 }
 
-void QuadBatcher::flush(ICommandBuffer &cmd, const IPipeline &pipeline,
-                        const void *pushData, uint32_t pushSize) {
-  if (m_quads.empty()) {
+void QuadBatcher::flushBatch(ICommandBuffer &cmd, const IPipeline &pipeline,
+                             const void *pushData, uint32_t pushSize,
+                             const std::vector<UIQuad> &quads) {
+  if (quads.empty()) {
     return;
   }
 
-  size_t vertCount = m_quads.size() * 4;
-  size_t idxCount = m_quads.size() * 6;
+  size_t vertCount = quads.size() * 4;
+  size_t idxCount = quads.size() * 6;
 
   if (vertCount > m_bufferCapacity) {
     growBuffers(vertCount);
@@ -119,7 +123,7 @@ void QuadBatcher::flush(ICommandBuffer &cmd, const IPipeline &pipeline,
   verts.reserve(vertCount);
   indices.reserve(idxCount);
 
-  for (const auto &quad : m_quads) {
+  for (const auto &quad : quads) {
     auto base = static_cast<uint32_t>(verts.size());
 
     for (const auto &v : quad.verts) {
@@ -165,8 +169,8 @@ void QuadBatcher::flush(ICommandBuffer &cmd, const IPipeline &pipeline,
   size_t quadStart = 0;
   const ITexture *currentTex = nullptr;
 
-  for (size_t i = 0; i < m_quads.size(); ++i) {
-    const ITexture *tex = m_quads[i].texture;
+  for (size_t i = 0; i < quads.size(); ++i) {
+    const ITexture *tex = quads[i].texture;
 
     if (tex != currentTex) {
       size_t batchCount = i - quadStart;
@@ -186,7 +190,7 @@ void QuadBatcher::flush(ICommandBuffer &cmd, const IPipeline &pipeline,
   }
 
   // flush remaining batch
-  size_t remaining = m_quads.size() - quadStart;
+  size_t remaining = quads.size() - quadStart;
   if (remaining > 0) {
     if (currentTex != nullptr) {
       cmd.bindTexture(0, *currentTex);
@@ -197,13 +201,20 @@ void QuadBatcher::flush(ICommandBuffer &cmd, const IPipeline &pipeline,
   }
 }
 
+void QuadBatcher::flush(ICommandBuffer &cmd, const IPipeline &pipeline,
+                        const void *pushData, uint32_t pushSize) {
+  m_bgQuads.insert(m_bgQuads.end(), m_glyphQuads.begin(), m_glyphQuads.end());
+  flushBatch(cmd, pipeline, pushData, pushSize, m_bgQuads);
+}
+
 static void collectQuads(ElementNode *node, const CssStylesheet &stylesheet,
-                         const FontAtlas &fontAtlas, QuadBatcher &batcher) {
+                         const FontAtlas &fontAtlas, QuadBatcher &batcher,
+                         const ComputedStyle *parentStyle = nullptr) {
   if (!node->visible) {
     return;
   }
 
-  ComputedStyle style = resolveStyle(node, stylesheet);
+  const ComputedStyle &style = resolveStyle(node, stylesheet, parentStyle);
 
   auto bgColor = style.find("background-color");
   auto bg = style.find("background");
@@ -223,7 +234,52 @@ static void collectQuads(ElementNode *node, const CssStylesheet &stylesheet,
     }
   }
 
-  // Draw node text content if any
+  // borders
+  {
+    auto parseBorderWidth = [&](const char *prop) -> float {
+      auto it = style.find(prop);
+      if (it != style.end() && !it->second.empty()) {
+        return parseLength(it->second).value;
+      }
+      return 0;
+    };
+    auto parseBorderColor = [&](const char *prop) -> uint32_t {
+      auto it = style.find(prop);
+      if (it != style.end() && !it->second.empty()) {
+        return parseCssColor(it->second);
+      }
+      return 0;
+    };
+
+    float bwT = parseBorderWidth("border-top-width");
+    float bwR = parseBorderWidth("border-right-width");
+    float bwB = parseBorderWidth("border-bottom-width");
+    float bwL = parseBorderWidth("border-left-width");
+
+    uint32_t bcT = parseBorderColor("border-top-color");
+    uint32_t bcR = parseBorderColor("border-right-color");
+    uint32_t bcB = parseBorderColor("border-bottom-color");
+    uint32_t bcL = parseBorderColor("border-left-color");
+
+    float x = node->computedX;
+    float y = node->computedY;
+    float w = node->computedWidth;
+    float h = node->computedHeight;
+
+    if (bwT > 0 && bcT != 0) {
+      batcher.addQuad(x, y, w, bwT, bcT);
+    }
+    if (bwB > 0 && bcB != 0) {
+      batcher.addQuad(x, y + h - bwB, w, bwB, bcB);
+    }
+    if (bwL > 0 && bcL != 0) {
+      batcher.addQuad(x, y + bwT, bwL, h - bwT - bwB, bcL);
+    }
+    if (bwR > 0 && bcR != 0) {
+      batcher.addQuad(x + w - bwR, y + bwT, bwR, h - bwT - bwB, bcR);
+    }
+  }
+
   if (!node->content.empty()) {
     auto textColorProp = style.find("color");
     uint32_t textColor = 0xFFFFFFFF; // default to white
@@ -231,22 +287,43 @@ static void collectQuads(ElementNode *node, const CssStylesheet &stylesheet,
       textColor = parseCssColor(textColorProp->second);
     }
 
-    float x = node->computedX;
-    float y = node->computedY + fontAtlas.ascent();
+    BoxEdges pad;
+    auto padIt = style.find("padding");
+    if (padIt != style.end()) {
+      pad = parseBoxShorthand(padIt->second);
+    }
+    padIt = style.find("padding-top");
+    if (padIt != style.end()) {
+      pad.top = parseLength(padIt->second).value;
+    }
+    padIt = style.find("padding-left");
+    if (padIt != style.end()) {
+      pad.left = parseLength(padIt->second).value;
+    }
+
+    float x = node->computedX + pad.left;
+    float y = node->computedY + pad.top + fontAtlas.ascent();
 
     for (char c : node->content) {
       if (const GlyphInfo *g = fontAtlas.glyph(static_cast<char32_t>(c))) {
-        float gx = x + g->bearingX;
-        float gy = y + g->bearingY;
-        batcher.addGlyphQuad(gx, gy, g->width, g->height, textColor, g->u0,
-                             g->v0, g->u1, g->v1, fontAtlas.texture());
+        if (g->width > 0 && g->height > 0) {
+          float gx = x + g->bearingX;
+          float gy = y + g->bearingY;
+
+          float snappedX = std::floor(gx + 0.5F);
+          float snappedY = std::floor(gy + 0.5F);
+
+          batcher.addGlyphQuad(snappedX, snappedY, g->width, g->height,
+                               textColor, g->u0, g->v0, g->u1, g->v1,
+                               fontAtlas.texture());
+        }
         x += g->advance;
       }
     }
   }
 
   for (auto &child : node->children) {
-    collectQuads(child.get(), stylesheet, fontAtlas, batcher);
+    collectQuads(child.get(), stylesheet, fontAtlas, batcher, &style);
   }
 }
 

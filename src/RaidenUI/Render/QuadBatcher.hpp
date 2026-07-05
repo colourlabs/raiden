@@ -53,18 +53,24 @@ public:
                     float u0, float v0, float u1, float v1,
                     const Raiden::Renderer::ITexture *texture);
 
-  [[nodiscard]] size_t quadCount() const { return m_quads.size(); }
+  [[nodiscard]] size_t quadCount() const { return m_bgQuads.size(); }
+  [[nodiscard]] size_t glyphCount() const { return m_glyphQuads.size(); }
   void addElementTree(ElementNode *root, const CssStylesheet &stylesheet,
                       const FontAtlas &fontAtlas);
 
 private:
   void growBuffers(size_t minVerts);
+  void flushBatch(Raiden::Renderer::ICommandBuffer &cmd,
+                  const Raiden::Renderer::IPipeline &pipeline,
+                  const void *pushData, uint32_t pushSize,
+                  const std::vector<UIQuad> &quads);
 
   Raiden::Renderer::IRenderDevice *m_device;
   std::unique_ptr<Raiden::Renderer::IBuffer> m_vertexBuffer;
   std::unique_ptr<Raiden::Renderer::IBuffer> m_indexBuffer;
   std::unique_ptr<Raiden::Renderer::ITexture> m_whiteTexture;
-  std::vector<UIQuad> m_quads;
+  std::vector<UIQuad> m_bgQuads;
+  std::vector<UIQuad> m_glyphQuads;
   size_t m_bufferCapacity{0};
 };
 

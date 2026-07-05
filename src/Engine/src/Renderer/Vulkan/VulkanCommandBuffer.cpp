@@ -33,6 +33,8 @@ void VulkanCommandBuffer::bindIndexBuffer(const IBuffer &buffer) {
 }
 
 void VulkanCommandBuffer::bindTexture(uint32_t slot, const ITexture &texture) {
+  (void)slot; // slot is not used in Vulkan, as we bind textures via descriptor sets
+  
   if (currentLayout_ == VK_NULL_HANDLE) {
     return;
   }

@@ -51,14 +51,17 @@ bool EditorPlugin::init(Raiden::Renderer::IRenderDevice &device,
     s_logger.warn("No editor UI layout found: {}", e.what());
   }
 
-  // create UI pipeline
-  Raiden::Renderer::PipelineDesc pipelineDesc;
-  pipelineDesc.shader.path = "shaders/ui.slang";
-  pipelineDesc.vertexLayout = RaidenUI::getUIVertexLayout();
-  pipelineDesc.depthTestEnable = false;
-  pipelineDesc.depthWriteEnable = false;
-  pipelineDesc.blendEnable = true;
-  pipelineDesc.cullMode = Raiden::Renderer::CullMode::None;
+  // create UI pipeline (pre-multiplied alpha blending)
+  Raiden::Renderer::PipelineDesc pipelineDesc{
+      .shader = {.path = "shaders/ui.slang"},
+      .vertexLayout = RaidenUI::getUIVertexLayout(),
+      .depthTestEnable = false,
+      .depthWriteEnable = false,
+      .blendEnable = true,
+      .cullMode = Raiden::Renderer::CullMode::None,
+      .blendSrcFactor = Raiden::Renderer::BlendFactor::One,
+      .blendDstFactor = Raiden::Renderer::BlendFactor::OneMinusSrcAlpha,
+  };
 
   pipeline_ = device.createPipeline(pipelineDesc);
   if (!pipeline_) {
@@ -96,14 +99,19 @@ void EditorPlugin::render(Raiden::Renderer::ICommandBuffer &cmd) {
   int w = 0, h = 0;
   platform_->getWindowSize(w, h);
 
-  RaidenUI::MeasureFn measure = [this](const RaidenUI::ElementNode *node, float /*avail*/) {
-    return fontAtlas_->measureText(node->content);
+  uiRoot_->computedWidth = static_cast<float>(w);
+  uiRoot_->computedHeight = static_cast<float>(h);
+
+  RaidenUI::MeasureFn measure = [this](const RaidenUI::ElementNode *node, float) {
+    auto sz = fontAtlas_->measureText(node->content);
+    return sz;
   };
 
-  computeLayout(uiRoot_.get(), stylesheet_,
-               static_cast<float>(w), static_cast<float>(h), measure);
+  computeLayout(uiRoot_.get(), stylesheet_, static_cast<float>(w),
+                static_cast<float>(h), measure);
 
-  std::array<float, 2> screenSize = {static_cast<float>(w), static_cast<float>(h)};
+  std::array<float, 2> screenSize = {static_cast<float>(w),
+                                     static_cast<float>(h)};
 
   batcher_->begin();
   batcher_->addElementTree(uiRoot_.get(), stylesheet_, *fontAtlas_);

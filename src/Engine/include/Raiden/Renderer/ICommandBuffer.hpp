@@ -12,6 +12,12 @@ class ICommandBuffer {
 public:
   virtual ~ICommandBuffer() = default;
 
+  ICommandBuffer() = default;
+  ICommandBuffer(const ICommandBuffer&) = delete;
+  ICommandBuffer& operator=(const ICommandBuffer&) = delete;
+  ICommandBuffer(ICommandBuffer&&) = delete;
+  ICommandBuffer& operator=(ICommandBuffer&&) = delete;
+
   virtual void bindPipeline(const IPipeline &pipeline) = 0;
   virtual void bindVertexBuffer(const IBuffer &buffer) = 0;
   virtual void bindIndexBuffer(const IBuffer &buffer) = 0;

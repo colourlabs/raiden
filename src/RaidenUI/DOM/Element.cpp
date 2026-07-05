@@ -6,11 +6,13 @@
 
 namespace RaidenUI {
 
-ElementNode::ElementNode(std::string tag_) : tag(std::move(tag_)) {}
+ElementNode::ElementNode(std::string tag_)
+    : tag(std::move(tag_)) {}
 
 void ElementNode::appendChild(std::unique_ptr<ElementNode> child) {
   child->parent = this;
   children.push_back(std::move(child));
+  requestLayout(this);
 }
 
 void ElementNode::removeChild(const ElementNode *child) {
@@ -19,6 +21,7 @@ void ElementNode::removeChild(const ElementNode *child) {
   if (it != children.end()) {
     (*it)->parent = nullptr;
     children.erase(it);
+    requestLayout(this);
   }
 }
 
@@ -54,7 +57,7 @@ ElementNode *ElementNode::getElementById(const std::string &id) {
   }
   for (const auto &child : children) {
     ElementNode *found = child->getElementById(id);
-    if (found) {
+    if (found != nullptr) {
       return found;
     }
   }
@@ -132,5 +135,14 @@ ElementNode *ElementNode::lastChild() const {
 }
 
 size_t ElementNode::childCount() const { return children.size(); }
+
+void requestLayout(ElementNode *node) {
+  node->needsLayout = true;
+  node->styleDirty = true;
+  while (node->parent != nullptr) {
+    node = node->parent;
+    node->needsLayout = true;
+  }
+}
 
 } // namespace RaidenUI

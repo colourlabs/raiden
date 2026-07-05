@@ -5,6 +5,8 @@ add_library(RaidenEditor STATIC
   src/Panels/AssetBrowser.cpp
 )
 
+raiden_set_compile_options(RaidenEditor)
+
 target_include_directories(RaidenEditor PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
@@ -22,6 +24,8 @@ if(RAIDEN_BUILD_EDITOR)
   add_executable(EditorRuntime
     src/EditorRuntime.cpp
   )
+
+  raiden_set_compile_options(EditorRuntime)
 
   # Engine private headers (VulkanDevice.hpp etc.) live under src/Engine/src/
   target_include_directories(EditorRuntime PRIVATE

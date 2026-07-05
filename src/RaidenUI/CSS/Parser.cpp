@@ -1,4 +1,5 @@
 #include <RaidenUI/CSS/Parser.hpp>
+#include <RaidenUI/CSS/Selector.hpp>
 
 #include <cctype>
 #include <string>
@@ -117,7 +118,9 @@ private:
 
   CssRule parseRule() {
     CssRule rule;
-    rule.selector = parseSelectorList();
+    std::string selectorStr = parseSelectorList();
+    rule.selector_text = selectorStr;
+    rule.selector = parseSelectorString(selectorStr);
 
     skipWhitespace();
 

@@ -12,6 +12,16 @@ struct VertexInputDescription {
   std::vector<VkVertexInputAttributeDescription> attributes;
 };
 
+struct BlendConfig {
+  bool blendEnable = false;
+  VkBlendFactor srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+  VkBlendFactor dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+  VkBlendOp colorBlendOp = VK_BLEND_OP_ADD;
+  VkBlendFactor srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+  VkBlendFactor dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+  VkBlendOp alphaBlendOp = VK_BLEND_OP_ADD;
+};
+
 class VulkanPipeline {
 public:
   VulkanPipeline() = default;
@@ -30,7 +40,7 @@ public:
                    VkCompareOp depthCompareOp, VkCullModeFlags cullMode,
                    VkSampleCountFlagBits sampleCount,
                    VkDescriptorSetLayout *setLayouts, uint32_t setLayoutCount,
-                   bool blendEnable = false);
+                   const BlendConfig &blendConfig = {});
 
   void shutdown();
 

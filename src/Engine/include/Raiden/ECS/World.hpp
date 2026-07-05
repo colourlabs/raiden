@@ -68,10 +68,11 @@ template <typename... Ts> struct View {
     }
   }
 
-  size_t size() const {
+  [[nodiscard]] size_t size() const {
     size_t total = 0;
-    for (auto *a : archetypes)
+    for (auto *a : archetypes) {
       total += a->entities.size();
+    }
     return total;
   }
 };
@@ -106,14 +107,16 @@ public:
     sig.insert(it, componentId<T>());
 
     Archetype *dst = findOrCreateArchetype(sig);
-    int32_t dstRow = dst->add(Entity{e.index, slot.generation});
+    int32_t dstRow =
+        dst->add(Entity{.index = e.index, .generation = slot.generation});
 
     // move existing components from src to dst using proper move semantics
     for (size_t i = 0; i < src->signature.size(); ++i) {
       auto cid = src->signature[i];
       auto &cinfo = componentInfo_[cid];
       auto col = dst->indexOf(cid);
-      cinfo.move(dst->data(col, dstRow), src->data(static_cast<int32_t>(i), slot.row));
+      cinfo.move(dst->data(col, dstRow),
+                 src->data(static_cast<int32_t>(i), slot.row));
     }
 
     // destruct source components (moved-from)
@@ -125,7 +128,7 @@ public:
     }
 
     // construct the new component
-    auto &info = componentInfo_[componentId<T>()];
+    [[maybe_unused]] auto &info = componentInfo_[componentId<T>()];
     new (dst->data(dst->indexOf(componentId<T>()), dstRow))
         T(std::forward<Args>(args)...);
 
@@ -173,7 +176,8 @@ public:
         continue;
       auto &cinfo = componentInfo_[cid];
       auto col = dst->indexOf(cid);
-      cinfo.move(dst->data(col, dstRow), src->data(static_cast<int32_t>(i), slot.row));
+      cinfo.move(dst->data(col, dstRow),
+                 src->data(static_cast<int32_t>(i), slot.row));
     }
 
     // destruct removed component
@@ -203,7 +207,7 @@ public:
   template <typename T> T &get(Entity e) {
     auto &slot = slots_[e.index];
     (void)slot.generation;
-    auto &info = registerIfNew<T>();
+    [[maybe_unused]] auto &info = registerIfNew<T>();
     auto col = slot.archetype->indexOf(componentId<T>());
     return *(T *)(slot.archetype->data(col, slot.row));
   }
@@ -212,8 +216,7 @@ public:
     (registerIfNew<Ts>(), ...);
 
     uint64_t queryMask = 0;
-    ((queryMask |=
-       (uint64_t(1) << componentInfo_[componentId<Ts>()].bitIndex)),
+    ((queryMask |= (uint64_t(1) << componentInfo_[componentId<Ts>()].bitIndex)),
      ...);
 
     View<Ts...> v;
@@ -246,14 +249,21 @@ public:
 
 private:
   ComponentInfo &ensureComponent(ComponentId id, size_t sz,
-                                  void (*dtor)(void *) = nullptr,
-                                  void (*mv)(void *, void *) = nullptr) {
+                                 void (*dtor)(void *) = nullptr,
+                                 void (*mv)(void *, void *) = nullptr) {
     auto it = componentInfo_.find(id);
-    if (it != componentInfo_.end())
+
+    if (it != componentInfo_.end()) {
       return it->second;
+    }
+
     uint32_t bit = nextComponentBit_++;
     return componentInfo_
-        .emplace(id, ComponentInfo{sz, dtor, mv, {}, bit})
+        .emplace(id, ComponentInfo{.size = sz,
+                                   .destruct = dtor,
+                                   .move = mv,
+                                   .name = {},
+                                   .bitIndex = bit})
         .first->second;
   }
 

@@ -1,13 +1,9 @@
+find_package(Freetype REQUIRED)
+
 CPMAddPackage(
   NAME pugixml
   GITHUB_REPOSITORY zeux/pugixml
   GIT_TAG v1.14
-)
-
-CPMAddPackage(
-  NAME stb
-  GITHUB_REPOSITORY nothings/stb
-  GIT_TAG master
 )
 
 add_library(RaidenUI STATIC
@@ -29,7 +25,8 @@ add_library(RaidenUI STATIC
 target_include_directories(RaidenUI PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
   $<INSTALL_INTERFACE:include>
-  ${stb_SOURCE_DIR}
 )
 
-target_link_libraries(RaidenUI PUBLIC EngineCore pugixml)
+raiden_set_compile_options(RaidenUI)
+
+target_link_libraries(RaidenUI PUBLIC EngineCore pugixml Freetype::Freetype)

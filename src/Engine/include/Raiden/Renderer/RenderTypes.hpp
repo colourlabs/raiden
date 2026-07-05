@@ -1,6 +1,7 @@
 #pragma once
 
 #include <glm/glm.hpp>
+
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
@@ -8,20 +9,43 @@
 
 namespace Raiden::Renderer {
 
-enum class BufferUsage {
+enum class BufferUsage : std::uint8_t {
   Vertex,
   Index,
   Uniform,
 };
 
-enum class MemoryAccess {
+enum class MemoryAccess : std::uint8_t {
   GpuOnly,   // device-local, not CPU-mappable
   CpuToGpu,  // mappable, written by CPU, read by GPU
 };
 
-enum class IndexType {
+enum class IndexType : std::uint8_t {
   Uint16,
   Uint32,
+};
+
+enum class BlendFactor : uint8_t {
+  Zero,
+  One,
+  SrcAlpha,
+  OneMinusSrcAlpha,
+  DstAlpha,
+  OneMinusDstAlpha,
+  SrcColor,
+  OneMinusSrcColor,
+  DstColor,
+  OneMinusDstColor,
+  Src1Color,
+  OneMinusSrc1Color,
+};
+
+enum class BlendOp : uint8_t {
+  Add,
+  Subtract,
+  ReverseSubtract,
+  Min,
+  Max,
 };
 
 struct BufferDesc {
@@ -75,6 +99,12 @@ struct PipelineDesc {
   bool blendEnable = false;
   CullMode cullMode = CullMode::Back;
   CompareOp depthCompareOp = CompareOp::Less;
+  BlendFactor blendSrcFactor = BlendFactor::SrcAlpha;
+  BlendFactor blendDstFactor = BlendFactor::OneMinusSrcAlpha;
+  BlendOp blendOp = BlendOp::Add;
+  BlendFactor blendSrcAlphaFactor = BlendFactor::One;
+  BlendFactor blendDstAlphaFactor = BlendFactor::OneMinusSrcAlpha;
+  BlendOp blendAlphaOp = BlendOp::Add;
 };
 
 enum class TextureType : uint8_t {
