@@ -74,6 +74,7 @@ struct FlexStyle {
   float minHeight{0};
   BoxEdges margin;
   BoxEdges padding;
+  uint8_t marginAuto{0}; // bit flags: 1=top, 2=right, 4=bottom, 8=left
 };
 
 inline bool isMeasurableLeaf(const ElementNode *node) {

@@ -19,7 +19,14 @@ namespace Raiden::Renderer {
 
 class IRenderDevice {
 public:
+  IRenderDevice() = default;
   virtual ~IRenderDevice() = default;
+
+  IRenderDevice(const IRenderDevice&) = delete;
+  IRenderDevice& operator=(const IRenderDevice&) = delete;
+  IRenderDevice(IRenderDevice&&) = delete;
+  IRenderDevice& operator=(IRenderDevice&&) = delete;
+  
   virtual bool init(const ::Raiden::Core::EngineConfig &config, ::Raiden::Platform::IPlatform *platform) = 0;
   virtual void shutdown() = 0;
 

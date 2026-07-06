@@ -11,10 +11,10 @@ struct MaterialDesc {
 
   // PBR factors
   glm::vec4 baseColorFactor = {1.0F, 1.0F, 1.0F, 1.0F};
-  glm::vec3 emissiveFactor = {0.0f, 0.0f, 0.0f};
-  float metallicFactor = 0.0f;
-  float roughnessFactor = 1.0f;
-  float occlusionStrength = 1.0f;
+  glm::vec3 emissiveFactor = {0.0F, 0.0F, 0.0F};
+  float metallicFactor = 0.0F;
+  float roughnessFactor = 1.0F;
+  float occlusionStrength = 1.0F;
 
   // texture slots
   std::string baseColorTexture;
@@ -26,12 +26,12 @@ struct MaterialDesc {
   // alpha
   enum class AlphaMode : std::uint8_t { Opaque, Mask, Blend };
   AlphaMode alphaMode = AlphaMode::Opaque;
-  float alphaCutoff = 0.5f;
+  float alphaCutoff = 0.5F;
 
   // uv transform
-  glm::vec2 uvOffset = {0.0f, 0.0f};
-  glm::vec2 uvScale = {1.0f, 1.0f};
-  float uvRotation = 0.0f;
+  glm::vec2 uvOffset = {0.0F, 0.0F};
+  glm::vec2 uvScale = {1.0F, 1.0F};
+  float uvRotation = 0.0F;
 
   // misc
   bool doubleSided = false;
@@ -50,7 +50,14 @@ class ICommandBuffer;
 
 class IMaterial {
 public:
+  IMaterial() = default;
   virtual ~IMaterial() = default;
+
+  IMaterial(const IMaterial &) = delete;
+  IMaterial &operator=(const IMaterial &) = delete;
+  IMaterial(IMaterial &&) = delete;
+  IMaterial &operator=(IMaterial &&) = delete;
+
   virtual void bind(ICommandBuffer &cmd) = 0;
 };
 

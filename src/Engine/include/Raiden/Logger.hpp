@@ -3,6 +3,7 @@
 #include <format>
 #include <string>
 #include <string_view>
+#include <algorithm>
 #include <utility>
 
 #ifdef _WIN32
@@ -28,7 +29,7 @@ inline void enableWindowsAnsi() {
 #endif
 }
 
-enum class LogLevel { Debug, Info, Warning, Error, Critical };
+enum class LogLevel : std::uint8_t { Debug, Info, Warning, Error, Critical };
 
 class Logger {
 public:

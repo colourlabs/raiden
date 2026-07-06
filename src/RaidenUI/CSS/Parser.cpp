@@ -231,11 +231,13 @@ private:
           result += advance();
         }
         skipWhitespace();
+
         if (peek() == '"' || peek() == '\'') {
           result += parseString();
         } else {
           result += parseIdent();
         }
+
         skipWhitespace();
       }
       if (match(']')) {

@@ -31,18 +31,6 @@ CPMAddPackage(
 )
 
 CPMAddPackage(
-  NAME imgui
-  GITHUB_REPOSITORY ocornut/imgui
-  GIT_TAG v1.91.8
-)
-
-CPMAddPackage(
-  NAME implot
-  GITHUB_REPOSITORY epezent/implot
-  GIT_TAG v0.17
-)
-
-CPMAddPackage(
   NAME ktx
   GITHUB_REPOSITORY KhronosGroup/KTX-Software
   GIT_TAG v4.4.2

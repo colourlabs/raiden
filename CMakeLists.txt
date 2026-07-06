@@ -10,6 +10,18 @@ endif()
 
 include(cmake/CPM.cmake)
 
+CPMAddPackage(
+  NAME imgui
+  GITHUB_REPOSITORY ocornut/imgui
+  GIT_TAG v1.91.8
+)
+
+CPMAddPackage(
+  NAME implot
+  GITHUB_REPOSITORY epezent/implot
+  GIT_TAG v0.17
+)
+
 function(raiden_set_compile_options target)
   target_compile_options(${target} PRIVATE
     $<$<OR:$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:GNU>>:
@@ -21,6 +33,9 @@ function(raiden_set_compile_options target)
       -Wduplicated-cond
       -Wmisleading-indentation
       -Wvla
+    >
+    $<$<CXX_COMPILER_ID:GNU>:
+      -fdiagnostics-color=always
     >
     $<$<CXX_COMPILER_ID:MSVC>:
       /W4

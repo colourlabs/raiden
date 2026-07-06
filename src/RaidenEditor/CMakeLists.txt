@@ -17,6 +17,10 @@ target_link_libraries(RaidenEditor PUBLIC
   RaidenUI
 )
 
+target_include_directories(RaidenEditor PRIVATE
+  ${imgui_SOURCE_DIR}
+)
+
 # optional editor executable that embeds the runtime
 option(RAIDEN_BUILD_EDITOR "Build the RaidenEditor standalone executable" ON)
 
@@ -27,7 +31,7 @@ if(RAIDEN_BUILD_EDITOR)
 
   raiden_set_compile_options(EditorRuntime)
 
-  # Engine private headers (VulkanDevice.hpp etc.) live under src/Engine/src/
+  # engine private headers (VulkanDevice.hpp etc.) live under src/Engine/src/
   target_include_directories(EditorRuntime PRIVATE
     ${CMAKE_SOURCE_DIR}/src/Engine/src
   )

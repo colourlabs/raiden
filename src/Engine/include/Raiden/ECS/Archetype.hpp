@@ -19,7 +19,8 @@ struct Archetype {
 
   // columns_[col] is a vector of chunks
   // each Chunk owns kChunkCapacity * componentSizes[col] bytes
-  // entity at global row r: chunk = r / kChunkCapacity, offset = r % kChunkCapacity
+  // entity at global row r: chunk = r / kChunkCapacity, offset = r %
+  // kChunkCapacity
   struct Chunk {
     std::vector<std::byte> data;
   };
@@ -34,7 +35,7 @@ struct Archetype {
   }
 
   int32_t add(Entity e) {
-    int32_t row = static_cast<int32_t>(entities.size());
+    auto row = static_cast<int32_t>(entities.size());
     uint32_t chunkIdx = static_cast<uint32_t>(row) / kChunkCapacity;
 
     for (size_t ci = 0; ci < columns_.size(); ++ci) {
@@ -49,8 +50,7 @@ struct Archetype {
   }
 
   // swapRemove with callback to destruct last-row components after memcpy
-  template <typename F>
-  Entity swapRemove(int32_t row, F &&destructLast) {
+  template <typename F> Entity swapRemove(int32_t row, F &&destructLast) {
     int32_t last = static_cast<int32_t>(entities.size()) - 1;
     Entity moved{};
 
@@ -61,7 +61,7 @@ struct Archetype {
         auto sz = componentSizes[i];
         std::memcpy(data(i, row), data(i, last), sz);
       }
-      destructLast(last);
+      std::forward<F>(destructLast)(last);
     }
 
     entities.pop_back();
@@ -74,15 +74,18 @@ struct Archetype {
   }
 
   std::byte *data(size_t col, int32_t row) {
-    uint32_t r = static_cast<uint32_t>(row);
+    auto r = static_cast<uint32_t>(row);
     return columns_[col][r / kChunkCapacity].data.data() +
-           (r % kChunkCapacity) * componentSizes[col];
+           ((r % kChunkCapacity) * componentSizes[col]);
   }
 
-  int32_t indexOf(ComponentId id) const {
-    auto it = std::lower_bound(signature.begin(), signature.end(), id);
-    if (it != signature.end() && *it == id)
-      return static_cast<int32_t>(std::distance(signature.begin(), it));
+  [[nodiscard]] int32_t indexOf(ComponentId id) const {
+    auto it = std::ranges::lower_bound(signature, id);
+
+    if (it != signature.end() && *it == id) {
+      return static_cast<int32_t>(it - signature.begin());
+    }
+
     return -1;
   }
 };

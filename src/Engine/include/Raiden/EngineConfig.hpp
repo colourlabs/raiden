@@ -1,16 +1,17 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 namespace Raiden::Core {
 
-enum class RenderBackend {
+enum class RenderBackend : std::uint8_t{
   Vulkan,
 
   // TODO: maybe OpenGL ES in the future?
 };
 
-enum class Antialiasing {
+enum class Antialiasing : std::uint8_t {
   None,
   MSAAx2,
   MSAAx4,
@@ -27,7 +28,7 @@ struct WindowConfig {
 };
 
 struct AudioConfig {
-  float masterVolume = 1.0f;
+  float masterVolume = 1.0F;
 };
 
 struct PluginConfig {

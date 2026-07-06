@@ -42,10 +42,11 @@ template <typename T> void componentMove(void *dst, void *src) {
   } else {
     T *s = static_cast<T *>(src);
     T *d = static_cast<T *>(dst);
-    if constexpr (std::is_move_constructible_v<T>)
+    if constexpr (std::is_move_constructible_v<T>) {
       *d = std::move(*s);
-    else
+    } else {
       *d = *s;
+    }
   }
 }
 
@@ -58,11 +59,13 @@ template <typename... Ts> struct View {
     for (auto *arch : archetypes) {
       auto cols = std::array<int32_t, sizeof...(Ts)>{
           arch->indexOf(componentId<Ts>())...};
+
       size_t count = arch->entities.size();
+
       for (size_t r = 0; r < count; ++r) {
         [&]<size_t... I>(std::index_sequence<I...>) {
-          fn(arch->entities[r],
-             *(Ts *)(arch->data(cols[I], static_cast<int32_t>(r)))...);
+          std::forward<F>(fn)(arch->entities[r],
+                              *(Ts *)(arch->data(cols[I], static_cast<int32_t>(r)))...);
         }(std::index_sequence_for<Ts...>{});
       }
     }
@@ -87,6 +90,9 @@ public:
   World(const World &) = delete;
   World &operator=(const World &) = delete;
 
+  World(World &&) noexcept = default;
+  World &operator=(World &&) noexcept = default;
+
   Entity create();
   void destroy(Entity e);
 
@@ -94,16 +100,19 @@ public:
   void assign(Entity e, Args &&...args) {
     registerIfNew<T>();
     auto &slot = slots_[e.index];
-    if (slot.generation != e.generation)
+    if (slot.generation != e.generation) {
       return;
+    }
 
     Archetype *src = slot.archetype;
 
     // build destination signature
     std::vector<ComponentId> sig = src->signature;
     auto it = std::lower_bound(sig.begin(), sig.end(), componentId<T>());
-    if (it != sig.end() && *it == componentId<T>())
+    if (it != sig.end() && *it == componentId<T>()) {
       return; // already has it
+    }
+    
     sig.insert(it, componentId<T>());
 
     Archetype *dst = findOrCreateArchetype(sig);
@@ -123,8 +132,9 @@ public:
     for (size_t i = 0; i < src->signature.size(); ++i) {
       auto cid = src->signature[i];
       auto &cinfo = componentInfo_[cid];
-      if (cinfo.destruct)
+      if (cinfo.destruct) {
         cinfo.destruct(src->data(static_cast<int32_t>(i), slot.row));
+      }
     }
 
     // construct the new component
@@ -139,12 +149,14 @@ public:
       for (size_t i = 0; i < srcArch->signature.size(); ++i) {
         auto cid = srcArch->signature[i];
         auto &cinfo = componentInfo_[cid];
-        if (cinfo.destruct)
+        if (cinfo.destruct) {
           cinfo.destruct(srcArch->data(static_cast<int32_t>(i), r));
+        }
       }
     });
-    if (moved.index != uint32_t(-1))
+    if (moved.index != uint32_t(-1)) {
       slots_[moved.index].row = oldRow;
+    }
 
     slot.archetype = dst;
     slot.row = dstRow;
@@ -153,27 +165,33 @@ public:
   template <typename T> void remove(Entity e) {
     registerIfNew<T>();
     auto &slot = slots_[e.index];
-    if (slot.generation != e.generation)
+    if (slot.generation != e.generation) {
       return;
+    }
 
     Archetype *src = slot.archetype;
 
     std::vector<ComponentId> sig;
-    for (auto id : src->signature)
-      if (id != componentId<T>())
+    for (auto id : src->signature) {
+      if (id != componentId<T>()) {
         sig.push_back(id);
+      }
+    }
 
-    if (sig.size() == src->signature.size())
+    if (sig.size() == src->signature.size()) {
       return; // didn't have it
+    }
 
     Archetype *dst = findOrCreateArchetype(sig);
-    int32_t dstRow = dst->add(Entity{e.index, slot.generation});
+    int32_t dstRow =
+        dst->add(Entity{.index = e.index, .generation = slot.generation});
 
     // move all except the removed component
     for (size_t i = 0; i < src->signature.size(); ++i) {
       auto cid = src->signature[i];
-      if (cid == componentId<T>())
+      if (cid == componentId<T>()) {
         continue;
+      }
       auto &cinfo = componentInfo_[cid];
       auto col = dst->indexOf(cid);
       cinfo.move(dst->data(col, dstRow),
@@ -183,8 +201,9 @@ public:
     // destruct removed component
     auto &rinfo = componentInfo_[componentId<T>()];
     auto remCol = src->indexOf(componentId<T>());
-    if (rinfo.destruct)
+    if (rinfo.destruct) {
       rinfo.destruct(src->data(remCol, slot.row));
+    }
 
     // remove from src (destructs last-row components via callback)
     int32_t oldRow = slot.row;
@@ -193,12 +212,14 @@ public:
       for (size_t i = 0; i < srcArch->signature.size(); ++i) {
         auto cid = srcArch->signature[i];
         auto &cinfo = componentInfo_[cid];
-        if (cinfo.destruct)
+        if (cinfo.destruct) {
           cinfo.destruct(srcArch->data(static_cast<int32_t>(i), r));
+        }
       }
     });
-    if (moved.index != uint32_t(-1))
+    if (moved.index != uint32_t(-1)) {
       slots_[moved.index].row = oldRow;
+    }
 
     slot.archetype = dst;
     slot.row = dstRow;
@@ -221,8 +242,9 @@ public:
 
     View<Ts...> v;
     for (auto &[mask, arch] : archetypes_) {
-      if ((mask & queryMask) == queryMask)
+      if ((mask & queryMask) == queryMask) {
         v.archetypes.push_back(&arch);
+      }
     }
     return v;
   }
@@ -236,14 +258,16 @@ public:
   // visitor receives (Entity, ComponentId, std::string_view name, void *data)
   template <typename F> void forEachComponent(Entity e, F &&visitor) {
     auto &slot = slots_[e.index];
-    if (slot.generation != e.generation)
+    if (slot.generation != e.generation) {
       return;
+    }
+
     auto *arch = slot.archetype;
     for (size_t i = 0; i < arch->signature.size(); ++i) {
       auto cid = arch->signature[i];
       auto &info = componentInfo_[cid];
       void *comp = arch->data(static_cast<int32_t>(i), slot.row);
-      visitor(e, cid, info.name, comp);
+      std::forward<F>(visitor)(e, cid, info.name, comp);
     }
   }
 

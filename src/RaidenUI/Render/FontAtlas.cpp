@@ -69,8 +69,7 @@ FontAtlas::FontAtlas(Raiden::Renderer::IRenderDevice &device,
       continue;
     }
 
-    if (FT_Load_Glyph(face, glyphIndex,
-                       FT_LOAD_DEFAULT | FT_LOAD_TARGET_NORMAL) != 0) {
+    if (FT_Load_Glyph(face, glyphIndex, FT_LOAD_TARGET_LIGHT) != 0) {
       continue;
     }
 
@@ -79,7 +78,7 @@ FontAtlas::FontAtlas(Raiden::Renderer::IRenderDevice &device,
     float bearingX =
         static_cast<float>(face->glyph->metrics.horiBearingX) / 64.0F;
 
-    if (FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL) != 0) {
+    if (FT_Render_Glyph(face->glyph, FT_RENDER_MODE_LIGHT) != 0) {
       PackedGlyph pg;
       pg.codepoint = cp;
       pg.advance = advance;

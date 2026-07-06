@@ -15,7 +15,7 @@ struct Mesh {
   uint32_t indexOffset = 0;
   std::shared_ptr<IMaterial> material;
 
-  bool isValid() const { return vertexBuffer && indexBuffer && indexCount > 0; }
+  [[nodiscard]] bool isValid() const { return vertexBuffer && indexBuffer && indexCount > 0; }
 };
 
 } // namespace Raiden::Renderer

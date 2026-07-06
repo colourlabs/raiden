@@ -288,19 +288,35 @@ FlexStyle parseFlexStyle(const ComputedStyle &style) {
   // individual margin properties override shorthand
   it = style.find("margin-top");
   if (it != style.end()) {
-    fs.margin.top = parseLength(it->second).value;
+    Length len = parseLength(it->second);
+    fs.margin.top = len.value;
+    if (len.unit == Unit::Auto) {
+      fs.marginAuto |= 1;
+    }
   }
   it = style.find("margin-right");
   if (it != style.end()) {
-    fs.margin.right = parseLength(it->second).value;
+    Length len = parseLength(it->second);
+    fs.margin.right = len.value;
+    if (len.unit == Unit::Auto) {
+      fs.marginAuto |= 2;
+    }
   }
   it = style.find("margin-bottom");
   if (it != style.end()) {
-    fs.margin.bottom = parseLength(it->second).value;
+    Length len = parseLength(it->second);
+    fs.margin.bottom = len.value;
+    if (len.unit == Unit::Auto) {
+      fs.marginAuto |= 4;
+    }
   }
   it = style.find("margin-left");
   if (it != style.end()) {
-    fs.margin.left = parseLength(it->second).value;
+    Length len = parseLength(it->second);
+    fs.margin.left = len.value;
+    if (len.unit == Unit::Auto) {
+      fs.marginAuto |= 8;
+    }
   }
 
   // individual padding properties override shorthand
@@ -603,7 +619,7 @@ LayoutSize layoutFlexContainer(ElementNode *container,
     }
   }
 
-  // Helpers shared across line processing
+  // helpers shared across line processing
   auto layoutLine = [&](const std::vector<size_t> &indices, float availableMain,
                         float lineCrossOrigin, float lineCrossSize)
       -> std::pair<float /*usedMain*/, float /*grossCross*/> {
@@ -706,7 +722,27 @@ LayoutSize layoutFlexContainer(ElementNode *container,
       extraAround = freeMain / static_cast<float>(count);
     }
 
-    // --- position items ---
+    // auto margins override justify-content on the main axis
+    bool hasAutoMargin = false;
+    float autoMarginFree = freeMain;
+    int autoMainStartCount = 0;
+    for (int i = 0; i < count; ++i) {
+      auto &item = items[indices[static_cast<size_t>(i)]];
+      uint8_t ma = item.childStyle.marginAuto;
+      bool startAuto = isRow ? (ma & 8) : (ma & 1); // left or top
+      if (startAuto) {
+        ++autoMainStartCount;
+        hasAutoMargin = true;
+      }
+    }
+    if (hasAutoMargin) {
+      // auto margins consume free space instead of justify-content
+      mainCursor = 0;
+      extraBetween = 0;
+      extraAround = 0;
+    }
+
+    // position items
     for (int i = 0; i < count; ++i) {
       auto &item = items[indices[static_cast<size_t>(i)]];
       float ms = item.baseMain;
@@ -730,6 +766,17 @@ LayoutSize layoutFlexContainer(ElementNode *container,
       crossOffset = std::max(0.0F, crossOffset);
       crossSize = std::max(0.0F, crossSize);
 
+      // auto margin offset on the main axis
+      float autoMainOffset = 0;
+      if (hasAutoMargin) {
+        uint8_t ma = item.childStyle.marginAuto;
+        bool startAuto = isRow ? (ma & 8) : (ma & 1);
+        if (startAuto && autoMainStartCount > 0) {
+          autoMainOffset =
+              autoMarginFree / static_cast<float>(autoMainStartCount);
+        }
+      }
+
       if (isRow) {
         float x = NAN;
 
@@ -738,9 +785,15 @@ LayoutSize layoutFlexContainer(ElementNode *container,
               ms - item.childStyle.margin.left - item.childStyle.margin.right;
           x = container->computedX + container->computedWidth - padR -
               mainCursor - item.childStyle.margin.right - visualW;
+          // reversed: auto margin-left pushes left (toward start)
+          uint8_t ma = item.childStyle.marginAuto;
+          bool startAuto = (ma & 8);
+          if (startAuto && hasAutoMargin && autoMainStartCount > 0) {
+            x -= autoMarginFree / static_cast<float>(autoMainStartCount);
+          }
         } else {
           x = container->computedX + padL + mainCursor +
-              item.childStyle.margin.left;
+              item.childStyle.margin.left + autoMainOffset;
         }
         float y = container->computedY + padT + lineCrossOrigin + crossOffset +
                   item.childStyle.margin.top;
@@ -757,9 +810,14 @@ LayoutSize layoutFlexContainer(ElementNode *container,
               ms - item.childStyle.margin.top - item.childStyle.margin.bottom;
           y = container->computedY + container->computedHeight - padB -
               mainCursor - item.childStyle.margin.bottom - visualH;
+          uint8_t ma = item.childStyle.marginAuto;
+          bool startAuto = (ma & 1);
+          if (startAuto && hasAutoMargin && autoMainStartCount > 0) {
+            y -= autoMarginFree / static_cast<float>(autoMainStartCount);
+          }
         } else {
           y = container->computedY + padT + mainCursor +
-              item.childStyle.margin.top;
+              item.childStyle.margin.top + autoMainOffset;
         }
         float x = container->computedX + padL + lineCrossOrigin + crossOffset +
                   item.childStyle.margin.left;

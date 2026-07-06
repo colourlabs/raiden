@@ -1,4 +1,5 @@
 #include <RaidenUI/DOM/Events.hpp>
+#include <RaidenUI/CSS/Selector.hpp>
 
 #include <ranges>
 
@@ -30,11 +31,13 @@ void EventSystem::update(ElementNode *root, float mouseX, float mouseY) {
   if (target != m_prevHover) {
     if (m_prevHover != nullptr) {
       m_prevHover->hovered = false;
+      markStyleDirty(m_prevHover);
       if (m_prevHover->onMouseLeave) { m_prevHover->onMouseLeave(); }
     }
-    
+
     if (target != nullptr) {
       target->hovered = true;
+      markStyleDirty(target);
       if (target->onMouseEnter) { target->onMouseEnter(); }
     }
 

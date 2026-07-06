@@ -19,6 +19,7 @@ add_library(RaidenUI STATIC
   Layout/Solver.cpp
   Render/QuadBatcher.cpp
   Render/FontAtlas.cpp
+  Render/FontFace.cpp
   Render/TextureCache.cpp
 )
 

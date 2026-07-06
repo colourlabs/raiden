@@ -7,7 +7,11 @@
 #include <Raiden/Renderer/RenderTypes.hpp>
 
 #include <algorithm>
+#include <array>
+#include <cctype>
+#include <cmath>
 #include <cstring>
+#include <numbers>
 #include <string>
 
 namespace RaidenUI {
@@ -45,7 +49,9 @@ QuadBatcher::QuadBatcher(IRenderDevice &device) : m_device(&device) {
   desc.height = 1;
   desc.format = Format::R8G8B8A8_UNORM;
   desc.type = TextureType::Texture2D;
+  
   m_whiteTexture = m_device->createTexture(desc);
+
   if (m_whiteTexture) {
     uint32_t whitePixel = 0xFFFFFFFF;
     m_whiteTexture->upload(&whitePixel, sizeof(whitePixel));
@@ -69,6 +75,58 @@ void QuadBatcher::addQuad(float x, float y, float w, float h, uint32_t color,
   quad.texture = (texture != nullptr) ? texture : m_whiteTexture.get();
 
   m_bgQuads.push_back(quad);
+}
+
+void QuadBatcher::addRoundedRect(float x, float y, float w, float h,
+                                  float radius, uint32_t color) {
+  if (radius <= 0 || w <= 0 || h <= 0) {
+    addQuad(x, y, w, h, color);
+    return;
+  }
+
+  float maxR = std::min(w, h) * 0.5F;
+  radius = std::min(radius, maxR);
+
+  // center rectangle
+  addQuad(x + radius, y + radius, w - (radius * 2), h - (radius * 2), color);
+
+  // edge rectangles
+  addQuad(x + radius, y, w - (radius * 2), radius, color);
+  addQuad(x + radius, y + h - radius, w - (radius * 2), radius, color);
+  addQuad(x, y + radius, radius, h - (radius * 2), color);
+  addQuad(x + w - radius, y + radius, radius, h - (radius * 2), color);
+
+  // corner triangle fans (4 segments each)
+  auto addCorner = [&](float cx, float cy, float startRad, float endRad) {
+    int segs = 4;
+    for (int i = 0; i < segs; ++i) {
+      float t0 = startRad + ((endRad - startRad) * static_cast<float>(i) /
+                                static_cast<float>(segs));
+      float t1 = startRad + ((endRad - startRad) * static_cast<float>(i + 1) /
+                                static_cast<float>(segs));
+      float x1 = cx + (radius * std::cos(t0));
+      float y1 = cy + (radius * std::sin(t0));
+      float x2 = cx + (radius * std::cos(t1));
+      float y2 = cy + (radius * std::sin(t1));
+
+      UIQuad quad;
+      quad.verts[0] = {.x = cx, .y = cy, .u = 0, .v = 0, .color = color};
+      quad.verts[1] = {.x = x1, .y = y1, .u = 0, .v = 0, .color = color};
+      quad.verts[2] = {.x = x2, .y = y2, .u = 0, .v = 0, .color = color};
+      quad.verts[3] = {.x = x2, .y = y2, .u = 0, .v = 0, .color = color};
+      quad.texture = m_whiteTexture.get();
+      m_bgQuads.push_back(quad);
+    }
+  };
+
+  addCorner(x + radius, y + radius, std::numbers::pi_v<float>,
+            static_cast<float>(M_PI * 1.5)); // TL
+  addCorner(x + w - radius, y + radius, static_cast<float>(M_PI * 1.5),
+            static_cast<float>(M_PI * 2.0)); // TR
+  addCorner(x + w - radius, y + h - radius, 0.0F,
+            static_cast<float>(M_PI * 0.5)); // BR
+  addCorner(x + radius, y + h - radius, static_cast<float>(M_PI * 0.5),
+            static_cast<float>(M_PI)); // BL
 }
 
 void QuadBatcher::addGlyphQuad(float x, float y, float w, float h,
@@ -208,7 +266,7 @@ void QuadBatcher::flush(ICommandBuffer &cmd, const IPipeline &pipeline,
 }
 
 static void collectQuads(ElementNode *node, const CssStylesheet &stylesheet,
-                         const FontAtlas &fontAtlas, QuadBatcher &batcher,
+                         FontFace &fontFace, QuadBatcher &batcher,
                          const ComputedStyle *parentStyle = nullptr) {
   if (!node->visible) {
     return;
@@ -229,8 +287,19 @@ static void collectQuads(ElementNode *node, const CssStylesheet &stylesheet,
   if (colorStr != nullptr) {
     uint32_t color = parseCssColor(*colorStr);
     if (color != 0) {
-      batcher.addQuad(node->computedX, node->computedY, node->computedWidth,
-                      node->computedHeight, color);
+      float borderRadius = 0;
+      auto brIt = style.find("border-radius");
+      if (brIt != style.end() && !brIt->second.empty()) {
+        borderRadius = parseLength(brIt->second).value;
+      }
+      if (borderRadius > 0) {
+        batcher.addRoundedRect(node->computedX, node->computedY,
+                               node->computedWidth, node->computedHeight,
+                               borderRadius, color);
+      } else {
+        batcher.addQuad(node->computedX, node->computedY, node->computedWidth,
+                        node->computedHeight, color);
+      }
     }
   }
 
@@ -282,9 +351,32 @@ static void collectQuads(ElementNode *node, const CssStylesheet &stylesheet,
 
   if (!node->content.empty()) {
     auto textColorProp = style.find("color");
-    uint32_t textColor = 0xFFFFFFFF; // default to white
+    uint32_t textColor = 0xFFFFFFFF;
     if (textColorProp != style.end() && !textColorProp->second.empty()) {
       textColor = parseCssColor(textColorProp->second);
+    }
+
+    float fontSize = 13.0F;
+    auto fsIt = style.find("font-size");
+    if (fsIt != style.end() && !fsIt->second.empty()) {
+      fontSize = parseLength(fsIt->second).value;
+    }
+    const FontAtlas &fontAtlas = fontFace.getAtlas(fontSize);
+
+    // text-transform
+    std::string displayText = node->content;
+    auto ttIt = style.find("text-transform");
+    if (ttIt != style.end() && ttIt->second == "uppercase") {
+      for (auto &ch : displayText) {
+        ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+      }
+    }
+
+    // letter-spacing
+    float letterSpacing = 0;
+    auto lsIt = style.find("letter-spacing");
+    if (lsIt != style.end() && !lsIt->second.empty()) {
+      letterSpacing = parseLength(lsIt->second).value;
     }
 
     BoxEdges pad;
@@ -296,16 +388,95 @@ static void collectQuads(ElementNode *node, const CssStylesheet &stylesheet,
     if (padIt != style.end()) {
       pad.top = parseLength(padIt->second).value;
     }
+    padIt = style.find("padding-bottom");
+    if (padIt != style.end()) {
+      pad.bottom = parseLength(padIt->second).value;
+    }
     padIt = style.find("padding-left");
     if (padIt != style.end()) {
       pad.left = parseLength(padIt->second).value;
     }
+    padIt = style.find("padding-right");
+    if (padIt != style.end()) {
+      pad.right = parseLength(padIt->second).value;
+    }
 
-    float x = node->computedX + pad.left;
-    float y = node->computedY + pad.top + fontAtlas.ascent();
+    float contentW = std::max(0.0F, node->computedWidth - pad.left - pad.right);
+    float contentH = std::max(0.0F, node->computedHeight - pad.top - pad.bottom);
 
-    for (char c : node->content) {
-      if (const GlyphInfo *g = fontAtlas.glyph(static_cast<char32_t>(c))) {
+    // measure text width (including letter-spacing)
+    float textW = 0;
+    for (size_t i = 0; i < displayText.size(); ++i) {
+      if (const GlyphInfo *g =
+              fontAtlas.glyph(static_cast<char32_t>(displayText[i]))) {
+        textW += g->advance;
+        if (i + 1 < displayText.size()) {
+          textW += letterSpacing;
+        }
+      }
+    }
+    float textH = fontAtlas.lineHeight();
+
+    int justifyContent = 0; // FlexStart
+    auto jcIt = style.find("justify-content");
+    if (jcIt != style.end()) {
+      if (jcIt->second == "center") {
+        justifyContent = 1;
+      } else if (jcIt->second == "flex-end") {
+        justifyContent = 2;
+      }
+    }
+
+    int alignItems = -1; // auto
+    auto aiIt = style.find("align-items");
+    if (aiIt != style.end()) {
+      if (aiIt->second == "center") {
+        alignItems = 2;
+      } else if (aiIt->second == "flex-end") {
+        alignItems = 1;
+      } else if (aiIt->second == "stretch") {
+        alignItems = 3;
+      } else if (aiIt->second == "flex-start") {
+        alignItems = 0;
+      }
+    }
+    // align-self overrides
+    auto asIt = style.find("align-self");
+    if (asIt != style.end()) {
+      if (asIt->second == "center") {
+        alignItems = 2;
+      } else if (asIt->second == "flex-end") {
+        alignItems = 1;
+      } else if (asIt->second == "stretch") {
+        alignItems = 3;
+      } else if (asIt->second == "flex-start") {
+        alignItems = 0;
+      }
+    }
+    if (alignItems < 0) {
+      alignItems = 3; // default stretch
+    }
+
+    float textX = pad.left;
+    if (justifyContent == 1) {
+      textX = pad.left + (contentW - textW) * 0.5F;
+    } else if (justifyContent == 2) {
+      textX = pad.left + (contentW - textW);
+    }
+
+    float baseY = pad.top;
+    if (alignItems == 2) {
+      baseY = pad.top + (contentH - textH) * 0.5F;
+    } else if (alignItems == 1) {
+      baseY = pad.top + (contentH - textH);
+    }
+
+    float x = node->computedX + textX;
+    float y = node->computedY + baseY + fontAtlas.ascent();
+
+    for (size_t i = 0; i < displayText.size(); ++i) {
+      if (const GlyphInfo *g =
+              fontAtlas.glyph(static_cast<char32_t>(displayText[i]))) {
         if (g->width > 0 && g->height > 0) {
           float gx = x + g->bearingX;
           float gy = y + g->bearingY;
@@ -317,20 +488,20 @@ static void collectQuads(ElementNode *node, const CssStylesheet &stylesheet,
                                textColor, g->u0, g->v0, g->u1, g->v1,
                                fontAtlas.texture());
         }
-        x += g->advance;
+        x += g->advance + letterSpacing;
       }
     }
   }
 
   for (auto &child : node->children) {
-    collectQuads(child.get(), stylesheet, fontAtlas, batcher, &style);
+    collectQuads(child.get(), stylesheet, fontFace, batcher, &style);
   }
 }
 
 void QuadBatcher::addElementTree(ElementNode *root,
                                  const CssStylesheet &stylesheet,
-                                 const FontAtlas &fontAtlas) {
-  collectQuads(root, stylesheet, fontAtlas, *this);
+                                 FontFace &fontFace) {
+  collectQuads(root, stylesheet, fontFace, *this);
 }
 
 } // namespace RaidenUI

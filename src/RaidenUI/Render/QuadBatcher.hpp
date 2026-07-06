@@ -3,6 +3,7 @@
 #include <RaidenUI/CSS/Parser.hpp>
 #include <RaidenUI/CSS/Selector.hpp>
 #include <RaidenUI/DOM/Element.hpp>
+#include <RaidenUI/Render/FontFace.hpp>
 
 #include <Raiden/Renderer/ICommandBuffer.hpp>
 #include <Raiden/Renderer/IRenderDevice.hpp>
@@ -29,8 +30,6 @@ struct UIQuad {
 
 Raiden::Renderer::VertexLayout getUIVertexLayout();
 
-class FontAtlas;
-
 class QuadBatcher {
 public:
   explicit QuadBatcher(Raiden::Renderer::IRenderDevice &device);
@@ -45,6 +44,8 @@ public:
   void begin();
   void addQuad(float x, float y, float w, float h, uint32_t color,
                const Raiden::Renderer::ITexture *texture = nullptr);
+  void addRoundedRect(float x, float y, float w, float h, float radius,
+                      uint32_t color);
   void flush(Raiden::Renderer::ICommandBuffer &cmd,
              const Raiden::Renderer::IPipeline &pipeline,
              const void *pushData = nullptr, uint32_t pushSize = 0);
@@ -55,8 +56,9 @@ public:
 
   [[nodiscard]] size_t quadCount() const { return m_bgQuads.size(); }
   [[nodiscard]] size_t glyphCount() const { return m_glyphQuads.size(); }
+
   void addElementTree(ElementNode *root, const CssStylesheet &stylesheet,
-                      const FontAtlas &fontAtlas);
+                      FontFace &fontFace);
 
 private:
   void growBuffers(size_t minVerts);

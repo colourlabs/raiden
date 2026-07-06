@@ -558,15 +558,6 @@ const ComputedStyle &resolveStyle(ElementNode *element,
   element->computedStyle = std::move(result);
   element->styleDirty = false;
 
-  if (auto it = element->attrs.find("class");
-      it != element->attrs.end() &&
-      it->second.find("tab-header-row") != std::string::npos) {
-    auto aiIt = element->computedStyle.find("align-items");
-    std::fprintf(stderr, "[tab-header-row] align-items = '%s'\n",
-                 aiIt != element->computedStyle.end() ? aiIt->second.c_str()
-                                                      : "<MISSING>");
-  }
-
   return element->computedStyle;
 }
 
