@@ -2,18 +2,17 @@
 
 #include <volk.h>
 
-// volk handles this for us so
 #define VMA_STATIC_VULKAN_FUNCTIONS 0
-#define VMA_VULKAN_VERSION 1004000 // vulkan 1.4
+#define VMA_VULKAN_VERSION 1004000
 
 #include <vk_mem_alloc.h>
 
 namespace Raiden::Renderer {
 
-// abstraction over the VulkanMemoryAllocator for convienence
 class VulkanAllocator {
 public:
-  bool init(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device);
+  bool init(VkInstance instance, VkPhysicalDevice physicalDevice,
+            VkDevice device);
   void shutdown();
 
   [[nodiscard]] VmaAllocator handle() const noexcept { return allocator_; }

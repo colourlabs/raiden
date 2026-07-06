@@ -65,7 +65,7 @@ void JobSystem::init(const JobSystemConfig &config) {
 void JobSystem::shutdown() {
   if (!initialized_) {
     return;
-}
+  }
 
   shutdownRequested_.store(true, std::memory_order_release);
   wakeAll();
@@ -73,7 +73,7 @@ void JobSystem::shutdown() {
   for (auto &worker : workers_) {
     if (worker->thread.joinable()) {
       worker->thread.join();
-}
+    }
   }
 
   workers_.clear();
@@ -82,7 +82,7 @@ void JobSystem::shutdown() {
     std::scoped_lock lock(globalMutex_);
     for (auto &q : globalQueues_) {
       q.clear();
-}
+    }
   }
 
   {
@@ -104,7 +104,7 @@ void JobSystem::wakeAll() { wakeCV_.notify_all(); }
 void JobSystem::enqueue(std::shared_ptr<InternalJob> job) {
   if (!job) {
     return;
-}
+  }
   std::scoped_lock lock(globalMutex_);
   globalQueues_[static_cast<size_t>(job->priority)].push_back(std::move(job));
 }
@@ -121,7 +121,7 @@ JobCounter JobSystem::submit(JobDesc desc) {
   job->dependency = std::move(desc.dependency);
 
   if (dependencyUnmet(*job)) {
-  std::scoped_lock lock(pendingMutex_);
+    std::scoped_lock lock(pendingMutex_);
     pendingJobs_.push_back(std::move(job));
   } else {
     enqueue(std::move(job));
@@ -177,7 +177,7 @@ JobCounter JobSystem::submitBatch(std::span<JobDesc> descs) {
 
   if (enqueuedAny) {
     wakeAll();
-}
+  }
 
   JobCounter result;
   result.impl_ = std::move(counter);
@@ -201,7 +201,9 @@ void JobSystem::parallelFor(uint32_t begin, uint32_t end, uint32_t grainSize,
     uint32_t chunkEnd = std::min(chunkStart + grainSize, end);
 
     descs.push_back(
-        {.task = [fn, chunkStart, chunkEnd]() { fn(chunkStart, chunkEnd); }});
+        {.task = [fn, chunkStart, chunkEnd]() { fn(chunkStart, chunkEnd); },
+         .dependency = JobCounter{},
+         .label = ""});
 
     chunkStart = chunkEnd;
   }
@@ -257,14 +259,14 @@ JobSystem::tryGetJob(uint32_t workerIndex) {
     uint32_t start = static_cast<uint32_t>(std::rand()) % numWorkers;
     for (uint32_t i = 0; i < numWorkers; ++i) {
       uint32_t victimIndex = (start + i) % numWorkers;
-      
+
       if (victimIndex == workerIndex) {
         continue;
       }
 
       auto &victim = workers_[victimIndex];
       std::scoped_lock lock(victim->mutex);
-      
+
       if (!victim->queue.empty()) {
         auto job = std::move(victim->queue.front());
         victim->queue.erase(victim->queue.begin());
@@ -292,7 +294,7 @@ JobSystem::tryGetJob(uint32_t workerIndex) {
 void JobSystem::executeJob(std::shared_ptr<InternalJob> job) {
   if (!job) {
     return;
-}
+  }
 
   if (dependencyUnmet(*job)) {
     std::scoped_lock lock(pendingMutex_);
@@ -302,7 +304,7 @@ void JobSystem::executeJob(std::shared_ptr<InternalJob> job) {
 
   if (job->task) {
     job->task();
-}
+  }
 
   auto counter = job->counterToDecrement;
   job->counterToDecrement.reset();
@@ -342,7 +344,7 @@ bool JobSystem::tryExecuteOne(uint32_t workerIndex) {
   auto job = tryGetJob(workerIndex);
   if (!job) {
     return false;
-}
+  }
 
   executeJob(std::move(job));
 
@@ -357,7 +359,7 @@ void JobSystem::workerMain(uint32_t workerIndex) {
   while (true) {
     if (tryExecuteOne(workerIndex)) {
       continue;
-}
+    }
 
     promotePendingJobs();
 

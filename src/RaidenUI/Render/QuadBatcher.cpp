@@ -474,9 +474,9 @@ static void collectQuads(ElementNode *node, const CssStylesheet &stylesheet,
     float x = node->computedX + textX;
     float y = node->computedY + baseY + fontAtlas.ascent();
 
-    for (size_t i = 0; i < displayText.size(); ++i) {
+    for (char i : displayText) {
       if (const GlyphInfo *g =
-              fontAtlas.glyph(static_cast<char32_t>(displayText[i]))) {
+              fontAtlas.glyph(static_cast<char32_t>(i))) {
         if (g->width > 0 && g->height > 0) {
           float gx = x + g->bearingX;
           float gy = y + g->bearingY;
