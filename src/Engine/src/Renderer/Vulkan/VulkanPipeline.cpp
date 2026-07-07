@@ -2,6 +2,8 @@
 #include <Renderer/Vulkan/VulkanPipeline.hpp>
 #include <Renderer/Vulkan/VulkanShader.hpp>
 
+#include <array>
+
 namespace Raiden::Renderer {
 
 static const ::Raiden::Core::Logger s_logger("Raiden::Renderer::VulkanPipeline");

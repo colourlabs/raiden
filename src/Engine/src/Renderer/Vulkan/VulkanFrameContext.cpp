@@ -2,6 +2,8 @@
 #include <Renderer/Vulkan/VulkanFrameContext.hpp>
 #include <Renderer/Vulkan/VulkanSwapchain.hpp>
 
+#include <array>
+
 namespace Raiden::Renderer {
 
 static const ::Raiden::Core::Logger s_logger("Raiden::Renderer::VulkanFrameContext");

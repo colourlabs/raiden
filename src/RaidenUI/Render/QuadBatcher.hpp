@@ -11,6 +11,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <array>
 #include <vector>
 
 namespace RaidenUI {

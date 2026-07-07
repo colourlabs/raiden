@@ -1,4 +1,13 @@
-find_package(Freetype REQUIRED)
+CPMAddPackage(
+  NAME freetype
+  GITHUB_REPOSITORY freetype/freetype
+  GIT_TAG VER-2-13-3
+  OPTIONS
+    "FT_DISABLE_BZIP2 ON"
+    "FT_DISABLE_PNG ON"
+    "FT_DISABLE_HARFBUZZ ON"
+    "FT_DISABLE_BROTLI ON"
+)
 
 CPMAddPackage(
   NAME pugixml
@@ -30,4 +39,4 @@ target_include_directories(RaidenUI PUBLIC
 
 raiden_set_compile_options(RaidenUI)
 
-target_link_libraries(RaidenUI PUBLIC EngineCore pugixml Freetype::Freetype)
+target_link_libraries(RaidenUI PUBLIC EngineCore pugixml freetype)

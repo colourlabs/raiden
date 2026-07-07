@@ -9,10 +9,11 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
-#include <cmath>
 #include <cstring>
 #include <numbers>
 #include <string>
+
+constexpr float pi = std::numbers::pi_v<float>;
 
 namespace RaidenUI {
 
@@ -49,7 +50,7 @@ QuadBatcher::QuadBatcher(IRenderDevice &device) : m_device(&device) {
   desc.height = 1;
   desc.format = Format::R8G8B8A8_UNORM;
   desc.type = TextureType::Texture2D;
-  
+
   m_whiteTexture = m_device->createTexture(desc);
 
   if (m_whiteTexture) {
@@ -119,14 +120,14 @@ void QuadBatcher::addRoundedRect(float x, float y, float w, float h,
     }
   };
 
-  addCorner(x + radius, y + radius, std::numbers::pi_v<float>,
-            static_cast<float>(M_PI * 1.5)); // TL
-  addCorner(x + w - radius, y + radius, static_cast<float>(M_PI * 1.5),
-            static_cast<float>(M_PI * 2.0)); // TR
+  addCorner(x + radius, y + radius, pi,
+            static_cast<float>(pi * 1.5)); // TL
+  addCorner(x + w - radius, y + radius, static_cast<float>(pi * 1.5),
+            static_cast<float>(pi * 2.0)); // TR
   addCorner(x + w - radius, y + h - radius, 0.0F,
-            static_cast<float>(M_PI * 0.5)); // BR
-  addCorner(x + radius, y + h - radius, static_cast<float>(M_PI * 0.5),
-            static_cast<float>(M_PI)); // BL
+            static_cast<float>(pi * 0.5)); // BR
+  addCorner(x + radius, y + h - radius, static_cast<float>(pi * 0.5),
+            static_cast<float>(pi)); // BL
 }
 
 void QuadBatcher::addGlyphQuad(float x, float y, float w, float h,

@@ -200,3 +200,5 @@ if(TARGET opus AND TARGET opusfile)
   target_link_libraries(EngineCore PRIVATE opus opusfile)
   target_include_directories(EngineCore PRIVATE ${opus_SOURCE_DIR}/include ${opusfile_SOURCE_DIR}/include)
 endif()
+
+target_compile_definitions(EngineCore PRIVATE _CRT_SECURE_NO_WARNINGS)

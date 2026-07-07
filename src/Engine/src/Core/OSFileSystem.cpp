@@ -65,8 +65,14 @@ OSFile::OSFile(const std::string &path) : fp_(std::fopen(path.c_str(), "rb")) {
     fp_ = nullptr;
     return;
   }
-  fileSize_ = static_cast<size_t>(std::ftell(fp_));
-  std::fseek(fp_, 0, SEEK_SET);
+
+  auto pos = std::ftell(fp_);
+  if (pos < 0) {
+    close();
+    return;
+  }
+
+  fileSize_ = static_cast<size_t>(pos);
 }
 
 OSFile::~OSFile() { close(); }
