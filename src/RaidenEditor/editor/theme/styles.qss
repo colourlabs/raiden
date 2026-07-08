@@ -1,0 +1,436 @@
+
+QMainWindow,
+QDockWidget,
+QMenuBar,
+QStatusBar,
+QToolBar {
+  background: #191919;
+  color: #cccccc;
+  font-size: 13px;
+}
+
+QMainWindow::separator {
+  background: #232323;
+  border: 1px solid #050505;
+  width: 4px;
+  height: 4px;
+}
+
+QMainWindow::separator:hover {
+  background: #4C8BF5;
+  border: 1px solid #4C8BF5;
+}
+
+#CustomTitleBar {
+  background: #1c1c1c;
+  border-bottom: 1px solid #050505;
+}
+
+#TitleLabel {
+  color: #8a8a8a;
+  font-size: 11px;
+}
+
+#EmbeddedMenuBar {
+  background: transparent;
+  border: none;
+  font-size: 12px;
+}
+
+#EmbeddedMenuBar::item {
+  padding: 4px 10px;
+  color: #aaaaaa;
+  border-radius: 3px;
+}
+
+#EmbeddedMenuBar::item:selected {
+  background: #2f2f2f;
+  color: #e8e8e8;
+}
+
+#MinButton,
+#MaxButton,
+#CloseButton {
+  background: transparent;
+  border: none;
+  color: #aaaaaa;
+  font-size: 14px;
+}
+
+#MinButton:hover,
+#MaxButton:hover {
+  background: #2f2f2f;
+  color: #e8e8e8;
+}
+
+#CloseButton:hover {
+  background: #C42B1C;
+  color: #ffffff;
+}
+
+QMenu {
+  background: #1e1e1e;
+  color: #cccccc;
+  border: 1px solid #050505;
+  padding: 2px;
+  font-size: 12px;
+}
+
+QMenu::item {
+  padding: 5px 22px 5px 10px;
+  border-radius: 3px;
+}
+
+QMenu::item:selected {
+  background: #2f2f2f;
+  color: #e8e8e8;
+}
+
+QMenu::separator {
+  height: 1px;
+  background: #050505;
+  margin: 4px 6px;
+}
+
+#ViewportToolBar {
+  background: #1c1c1c;
+  border-bottom: 1px solid #050505;
+  padding: 3px 6px;
+  spacing: 2px;
+}
+
+#ViewportToolBar QToolButton {
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: #cccccc;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+#ViewportToolBar QToolButton:hover {
+  background: #2f2f2f;
+}
+
+#ViewportToolBar QToolButton:pressed {
+  background: #4C8BF5;
+  color: #ffffff;
+}
+
+#PlayButton {
+  background: rgba(76, 139, 245, 0.16);
+  border-radius: 3px;
+}
+
+#PlayButton:hover {
+  background: #4C8BF5;
+  color: #ffffff;
+}
+
+QDockWidget {
+  titlebar-close-icon: none;
+  font-size: 12px;
+}
+
+QDockWidget::title {
+  background: #1c1c1c;
+  padding: 5px 8px;
+  border-bottom: 1px solid #050505;
+  color: #9a9a9a;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ---- Tabs (tabified docks) — compact, Unity-style ---- */
+QTabBar {
+  background: #1c1c1c;
+  border-bottom: 1px solid #050505;
+}
+
+QTabBar::tab {
+  background: #1c1c1c;
+  color: #8a8a8a;
+  padding: 4px 14px;
+  border: none;
+  border-right: 1px solid #050505;
+  border-radius: 0px;
+  margin: 0px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+QTabBar::tab:selected {
+  background: #2b2b2b;
+  color: #e8e8e8;
+}
+
+QTabBar::tab:hover:!selected {
+  background: #242424;
+  color: #bbbbbb;
+}
+
+/* ---- Scene hierarchy tree ---- */
+QTreeWidget {
+  background: #191919;
+  color: #cccccc;
+  border: none;
+  outline: none;
+  font-size: 12px;
+}
+
+QTreeWidget::item {
+  padding: 3px 4px;
+  border-radius: 2px;
+}
+
+QTreeWidget::item:selected {
+  background: #4C8BF5;
+  color: #ffffff;
+}
+
+QTreeWidget::item:hover:!selected {
+  background: #242424;
+}
+
+QTreeWidget::branch {
+  background: transparent;
+}
+
+/* ---- Asset browser list ---- */
+QListWidget {
+  background: #191919;
+  color: #cccccc;
+  border: none;
+  font-size: 11px;
+}
+
+QListWidget::item {
+  padding: 4px;
+  border-radius: 3px;
+}
+
+QListWidget::item:selected {
+  background: #4C8BF5;
+  color: #ffffff;
+}
+
+QListWidget::item:hover:!selected {
+  background: #242424;
+}
+
+#Breadcrumb {
+  color: #8a8a8a;
+  font-size: 11px;
+}
+
+QLineEdit {
+  background: #191919;
+  color: #cccccc;
+  border: 1px solid #050505;
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-size: 11px;
+  selection-background-color: #4C8BF5;
+}
+
+QLineEdit:focus {
+  border-color: #4C8BF5;
+}
+
+/* ---- Output log ---- */
+QPlainTextEdit {
+  background: #141414;
+  color: #a8c6a8;
+  border: none;
+  font-family: "Consolas", monospace;
+  font-size: 11px;
+}
+
+/* ============================================================
+   Inspector — component cards
+   ============================================================ */
+
+/* Scroll area / panel behind the cards */
+#InspectorPanel,
+#WorldSettingsPanel {
+  background: #1e1e1e;
+}
+
+/* Card container (replaces QGroupBox visually; QGroupBox kept
+   as the layout container but its native title is suppressed
+   in favor of #ComponentHeader) */
+QGroupBox#ComponentCard {
+  background: #242424;
+  border: 1px solid #050505;
+  border-radius: 3px;
+  margin-top: 6px;
+  padding: 0px;
+  font-size: 11px;
+}
+
+QGroupBox#ComponentCard::title {
+  width: 0px;
+  height: 0px;
+  padding: 0px;
+  margin: 0px;
+}
+
+/* Header row: icon + name + toggle pill + kebab menu */
+#ComponentHeader {
+  background: transparent;
+  border-bottom: 1px solid #050505;
+  min-height: 24px;
+  max-height: 24px;
+}
+
+#ComponentIcon {
+  color: #8a8a8a;
+  font-size: 12px;
+}
+
+#ComponentTitle {
+  color: #dddddd;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+#ComponentMenuButton {
+  background: transparent;
+  border: none;
+  color: #8a8a8a;
+  font-size: 13px;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+#ComponentMenuButton:hover {
+  background: #2f2f2f;
+  color: #e8e8e8;
+}
+
+/* Card body (holds the QFormLayout of fields) */
+#ComponentBody {
+  background: transparent;
+  padding: 6px;
+}
+
+/* Pill-style enable/disable toggle in card headers */
+QCheckBox#ComponentToggle {
+  spacing: 0px;
+}
+
+QCheckBox#ComponentToggle::indicator {
+  width: 26px;
+  height: 15px;
+  border-radius: 7px;
+  background: #3D3D3D;
+  border: 1px solid #050505;
+}
+
+QCheckBox#ComponentToggle::indicator:checked {
+  background: #4C8BF5;
+  border: 1px solid #4C8BF5;
+}
+
+QCheckBox#ComponentToggle::indicator:hover {
+  border: 1px solid #5a5a5a;
+}
+
+QCheckBox#ComponentToggle::indicator:checked:hover {
+  background: #5c98f7;
+  border: 1px solid #5c98f7;
+}
+
+/* ---- Field rows ---- */
+QLabel#FieldLabel {
+  color: #999999;
+  font-size: 11px;
+}
+
+QLabel#AxisLabel {
+  color: #8a8a8a;
+  font-size: 10px;
+  font-weight: 600;
+  min-width: 10px;
+  max-width: 12px;
+  padding-right: 2px;
+}
+
+QDoubleSpinBox {
+  background: #2b2b2b;
+  color: #dddddd;
+  border: 1px solid #050505;
+  border-radius: 2px;
+  padding: 2px 4px;
+  min-height: 18px;
+  max-height: 18px;
+  font-size: 11px;
+}
+
+QDoubleSpinBox:focus {
+  border: 1px solid #4C8BF5;
+}
+
+QDoubleSpinBox::up-button,
+QDoubleSpinBox::down-button {
+  width: 10px;
+  border: none;
+  background: transparent;
+}
+
+/* Generic labels (mesh/material value fields etc.) */
+QLabel {
+  color: #cccccc;
+  font-size: 11px;
+}
+
+/* ---- World Settings environment fields ---- */
+#WorldSettingsPanel QDoubleSpinBox,
+#WorldSettingsPanel QLabel {
+  font-size: 11px;
+}
+
+/* ---- Status bar ---- */
+QStatusBar {
+  border-top: 1px solid #050505;
+  color: #888888;
+  font-size: 11px;
+}
+
+QScrollBar:vertical {
+  background: #191919;
+  width: 10px;
+  margin: 0;
+}
+
+QScrollBar::handle:vertical {
+  background: #3D3D3D;
+  min-height: 20px;
+  border-radius: 3px;
+}
+
+QScrollBar::handle:vertical:hover {
+  background: #4a4a4a;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+  height: 0;
+}
+
+QScrollBar:horizontal {
+  background: #191919;
+  height: 10px;
+  margin: 0;
+}
+
+QScrollBar::handle:horizontal {
+  background: #3D3D3D;
+  min-width: 20px;
+  border-radius: 3px;
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+  width: 0;
+}

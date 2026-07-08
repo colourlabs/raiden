@@ -91,13 +91,13 @@ if !errorlevel! neq 0 (
   set BUILD_PREFIX=!BUILD_PREFIX:\src\Runtime\EngineRuntime.exe=!
 
   if "!DATAPACK_MODE!"=="editor" (
-    if exist "!BUILD_PREFIX!\games\EditorData\engine.toml" (
-      set DATAPACK=!BUILD_PREFIX!\games\EditorData
+    if exist "!BUILD_PREFIX!\editor\RaidenEditor\engine.toml" (
+      set DATAPACK=!BUILD_PREFIX!\editor\RaidenEditor
       echo   [OK]   Editor datapack auto-detected: !DATAPACK!
       set ARGS=!ARGS! --datapack "!DATAPACK!"
     ) else (
       for /r build %%f in (engine.toml) do (
-        echo %%f | findstr /C:"EditorData" >nul
+        echo %%f | findstr /C:"RaidenEditor" >nul
         if !errorlevel! equ 0 (
           set "DATAPACK=%%~dpf"
           set "DATAPACK=!DATAPACK:~0,-1!"

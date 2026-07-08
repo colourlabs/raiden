@@ -21,6 +21,8 @@ struct ElementNode {
   ElementNode *parent{nullptr};
 
   std::function<void()> onClick;
+  std::function<void()> onMouseDown;
+  std::function<void()> onMouseUp;
   std::function<void()> onMouseEnter;
   std::function<void()> onMouseLeave;
 

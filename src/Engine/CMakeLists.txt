@@ -81,6 +81,14 @@ CPMAddPackage(
     "OPUS_BUILD_PROGRAMS OFF"
 )
 
+if(RAIDEN_USE_QT)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(XCB REQUIRED xcb)
+  pkg_check_modules(WAYLAND_CLIENT REQUIRED wayland-client)
+
+  find_package(Qt5 REQUIRED COMPONENTS Gui)
+endif()
+
 add_library(EngineCore STATIC
   src/Engine/Application.cpp
   src/Core/Logger.cpp
@@ -122,6 +130,14 @@ add_library(EngineCore STATIC
   src/Renderer/Vulkan/VulkanDescriptorPool.cpp
   src/Renderer/Vulkan/VulkanMaterial.cpp
 )
+
+if(RAIDEN_USE_QT)
+  target_sources(EngineCore PRIVATE
+    src/Platform/Qt/QtPlatform.cpp
+    include/Raiden/Platform/Qt/QtPlatform.hpp
+  )
+  set_target_properties(EngineCore PROPERTIES AUTOMOC ON)
+endif()
 
 target_compile_definitions(EngineCore PUBLIC
   SHADERS_DIR="${CMAKE_BINARY_DIR}/shaders"
@@ -184,6 +200,17 @@ target_link_libraries(EngineCore PUBLIC
   OpenAL::OpenAL
   miniaudio
 )
+
+if(RAIDEN_USE_QT)
+  target_link_libraries(EngineCore PUBLIC Qt5::Gui)
+  target_include_directories(EngineCore PRIVATE ${XCB_INCLUDE_DIRS} ${WAYLAND_CLIENT_INCLUDE_DIRS})
+  target_link_libraries(EngineCore PUBLIC ${XCB_LIBRARIES} ${WAYLAND_CLIENT_LIBRARIES})
+
+  get_target_property(QT5_PRIVATE_INCLUDE_DIRS Qt5::GuiPrivate INTERFACE_INCLUDE_DIRECTORIES)
+  if(QT5_PRIVATE_INCLUDE_DIRS)
+    target_include_directories(EngineCore PRIVATE ${QT5_PRIVATE_INCLUDE_DIRS})
+  endif()
+endif()
 
 # mark external dependency headers as SYSTEM (skipping ALIAS/IMPORTED targets with ::)
 foreach(dep IN ITEMS volk VulkanMemoryAllocator SDL3::SDL3 glm::glm

@@ -25,8 +25,28 @@ ElementNode *EventSystem::hitTest(ElementNode *node, float mx,
   return nullptr;
 }
 
-void EventSystem::update(ElementNode *root, float mouseX, float mouseY) {
-  auto *target = hitTest(root, mouseX, mouseY);
+void EventSystem::update(ElementNode *root, float mouseX, float mouseY,
+                         bool mouseBtnDown) {
+  // mousedown edge: 0 -> 1
+  if (mouseBtnDown && !m_prevMouseDown) {
+    auto *target = hitTest(root, mouseX, mouseY);
+    if (target != nullptr && target->onMouseDown) {
+      m_captured = target;
+      target->onMouseDown();
+    }
+  }
+
+  // mouseup edge: 1 -> 0
+  if (!mouseBtnDown && m_prevMouseDown) {
+    if (m_captured != nullptr && m_captured->onMouseUp) {
+      m_captured->onMouseUp();
+    }
+    m_captured = nullptr;
+  }
+
+  // hover tracking: use captured element (if any) so drags work outside bounds
+  ElementNode *target =
+      m_captured != nullptr ? m_captured : hitTest(root, mouseX, mouseY);
 
   if (target != m_prevHover) {
     if (m_prevHover != nullptr) {
@@ -43,6 +63,8 @@ void EventSystem::update(ElementNode *root, float mouseX, float mouseY) {
 
     m_prevHover = target;
   }
+
+  m_prevMouseDown = mouseBtnDown;
 }
 
 void EventSystem::click(ElementNode *root, float mouseX, float mouseY) {

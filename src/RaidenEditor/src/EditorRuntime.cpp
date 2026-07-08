@@ -4,10 +4,20 @@
 
 #include <toml++/toml.hpp>
 
-#include <Raiden/Platform/SDL3/SDL3Platform.hpp>
+#include <Raiden/Platform/Qt/QtPlatform.hpp>
 #include <Renderer/Vulkan/VulkanDevice.hpp>
 
-#include <RaidenEditor/EditorPlugin.hpp>
+#include <RaidenEditor/EditorMainWindow.hpp>
+
+#include <QApplication>
+#include <QFile>
+#include <QFont>
+#include <QFontDatabase>
+#include <QPalette>
+#include <QProxyStyle>
+#include <QString>
+#include <QStyleFactory>
+#include <QTextStream>
 
 #include <cstring>
 #include <filesystem>
@@ -62,6 +72,93 @@ static void printUsage(const char *argv0) {
   s_logger.info("Usage: {} --datapack <path>", argv0);
 }
 
+static void loadInterFont() {
+  auto loadFont = [](const QString &path, int pointSize) -> bool {
+    int id = QFontDatabase::addApplicationFont(path);
+    if (id >= 0) {
+      QStringList families = QFontDatabase::applicationFontFamilies(id);
+      if (!families.isEmpty()) {
+        QFont font(families.first());
+        font.setPointSize(pointSize);
+        QApplication::setFont(font);
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // try IBM Plex Sans first, fall back to Inter, then system
+  if (loadFont(QStringLiteral(":/editor/fonts/IBMPlexSans-Regular.ttf"), 10)) {
+    s_logger.info("Loaded IBM Plex Sans font from built-in resources");
+    // also load Plex Mono for code/monospace use
+    int monoId = QFontDatabase::addApplicationFont(
+        QStringLiteral(":/editor/fonts/IBMPlexMono-Regular.ttf"));
+    if (monoId >= 0) {
+      s_logger.info("Loaded IBM Plex Mono font from built-in resources");
+    }
+  } else if (loadFont(QStringLiteral(":/editor/fonts/InterVariable.ttf"), 10)) {
+    s_logger.info("Loaded Inter font from built-in resources");
+  } else {
+    s_logger.warn("No bundled font found, using system font");
+  }
+}
+
+class RaidenStyle : public QProxyStyle {
+public:
+  int styleHint(StyleHint hint, const QStyleOption *option,
+                const QWidget *widget,
+                QStyleHintReturn *returnData) const override {
+    if (hint == SH_UnderlineShortcut) return 0;
+    return QProxyStyle::styleHint(hint, option, widget, returnData);
+  }
+};
+
+static void applyDarkPalette() {
+  QApplication::setStyle(new RaidenStyle);
+
+  QPalette pal;
+  pal.setColor(QPalette::Window, QColor("#191919"));
+  pal.setColor(QPalette::WindowText, QColor("#cccccc"));
+  pal.setColor(QPalette::Base, QColor("#191919"));
+  pal.setColor(QPalette::AlternateBase, QColor("#232323"));
+  pal.setColor(QPalette::Text, QColor("#cccccc"));
+  pal.setColor(QPalette::Button, QColor("#232323"));
+  pal.setColor(QPalette::ButtonText, QColor("#cccccc"));
+  pal.setColor(QPalette::ToolTipBase, QColor("#232323"));
+  pal.setColor(QPalette::ToolTipText, QColor("#cccccc"));
+  pal.setColor(QPalette::Highlight, QColor("#3D5A99"));
+  pal.setColor(QPalette::HighlightedText, QColor("#ffffff"));
+  pal.setColor(QPalette::PlaceholderText, QColor("#777777"));
+  pal.setColor(QPalette::Disabled, QPalette::Text, QColor("#666666"));
+  pal.setColor(QPalette::Disabled, QPalette::WindowText, QColor("#666666"));
+  pal.setColor(QPalette::Light, QColor("#2f2f2f"));
+  pal.setColor(QPalette::Midlight, QColor("#2a2a2a"));
+  pal.setColor(QPalette::Mid, QColor("#1a1a1a"));
+  pal.setColor(QPalette::Dark, QColor("#0f0f0f"));
+  pal.setColor(QPalette::Shadow, QColor("#000000"));
+
+  QApplication::setPalette(pal);
+}
+
+static constexpr const char *kFallbackStyleSheet = R"(
+  QMainWindow, QDockWidget, QMenuBar, QStatusBar, QToolBar {
+    background: #191919;
+    color: #cccccc;
+  }
+)";
+
+static void loadStyleSheet(QApplication &qtApp) {
+  QFile file(QStringLiteral(":/editor/theme/styles.qss"));
+  if (file.open(QFile::ReadOnly | QFile::Text)) {
+    QTextStream stream(&file);
+    qtApp.setStyleSheet(stream.readAll());
+    s_logger.info("Loaded stylesheet from built-in resources");
+  } else {
+    s_logger.warn("styles.qss not found in resources, using fallback theme");
+    qtApp.setStyleSheet(QString::fromLatin1(kFallbackStyleSheet));
+  }
+}
+
 int main(int argc, char *argv[]) {
   std::string datapackPath;
 
@@ -89,8 +186,16 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  auto platform = std::make_unique<Raiden::Platform::SDL3Platform>();
+  QApplication qtApp(argc, argv);
+  applyDarkPalette();
+  loadInterFont();
+  loadStyleSheet(qtApp);
+
+  auto platform = std::make_unique<Raiden::Platform::QtPlatform>();
   auto device = std::make_unique<Raiden::Renderer::VulkanDevice>();
+
+  RaidenEditor::EditorMainWindow mainWindow(*platform);
+  mainWindow.show();
 
   Raiden::Core::EngineConfig config;
 
@@ -102,12 +207,6 @@ int main(int argc, char *argv[]) {
                                   std::move(vfs));
 
   if (!app.init(config)) {
-    return 1;
-  }
-
-  auto editorPlugin = std::make_unique<RaidenEditor::EditorPlugin>();
-  if (!app.registerPlugin(editorPlugin.release())) {
-    s_logger.error("Failed to register editor plugin.");
     return 1;
   }
 

@@ -1,8 +1,13 @@
 add_library(RaidenEditor STATIC
-  src/EditorPlugin.cpp
-  src/Panels/InspectorPanel.cpp
-  src/Panels/SceneTreePanel.cpp
-  src/Panels/AssetBrowser.cpp
+  src/EditorMainWindow.cpp
+  src/CustomWidgets/CustomTitleBar.cpp
+  src/Helpers/FramelessResizeHelper.cpp
+  include/RaidenEditor/EditorMainWindow.hpp
+  include/RaidenEditor/CustomWidgets/CustomTitleBar.hpp
+  include/RaidenEditor/Helpers/FramelessResizeHelper.hpp
+  src/Icons/FluentIcons.cpp
+  include/RaidenEditor/Icons/FluentIcons.hpp
+  editor_resources.qrc
 )
 
 raiden_set_compile_options(RaidenEditor)
@@ -14,17 +19,19 @@ target_include_directories(RaidenEditor PUBLIC
 
 target_link_libraries(RaidenEditor PUBLIC
   EngineCore
-  RaidenUI
-)
-
-target_include_directories(RaidenEditor PRIVATE
-  ${imgui_SOURCE_DIR}
 )
 
 # optional editor executable that embeds the runtime
 option(RAIDEN_BUILD_EDITOR "Build the RaidenEditor standalone executable" ON)
 
-if(RAIDEN_BUILD_EDITOR)
+if(RAIDEN_BUILD_EDITOR AND NOT RAIDEN_USE_QT)
+  message(STATUS "EditorRuntime requires RAIDEN_USE_QT=ON - skipping")
+elseif(RAIDEN_BUILD_EDITOR AND RAIDEN_USE_QT)
+  find_package(Qt5 REQUIRED COMPONENTS Widgets)
+
+  target_link_libraries(RaidenEditor PUBLIC Qt5::Widgets)
+  set_target_properties(RaidenEditor PROPERTIES AUTOMOC ON AUTORCC ON)
+
   add_executable(EditorRuntime
     src/EditorRuntime.cpp
   )
@@ -37,12 +44,12 @@ if(RAIDEN_BUILD_EDITOR)
   )
 
   if(MSVC)
-    target_link_libraries(EditorRuntime PRIVATE RaidenEditor)
+    target_link_libraries(EditorRuntime PRIVATE RaidenEditor Qt5::Widgets)
     target_link_options(EditorRuntime PRIVATE
       /WHOLEARCHIVE:$<TARGET_FILE:RaidenEditor>
     )
   elseif(APPLE)
-    target_link_libraries(EditorRuntime PRIVATE RaidenEditor)
+    target_link_libraries(EditorRuntime PRIVATE RaidenEditor Qt5::Widgets)
     target_link_options(EditorRuntime PRIVATE
       -Wl,-force_load,$<TARGET_FILE:RaidenEditor>
     )
@@ -51,6 +58,7 @@ if(RAIDEN_BUILD_EDITOR)
       -Wl,--whole-archive
       RaidenEditor
       -Wl,--no-whole-archive
+      Qt5::Widgets
     )
   endif()
 endif()

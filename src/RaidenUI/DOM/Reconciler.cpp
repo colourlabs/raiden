@@ -43,6 +43,8 @@ void reconcile(ElementNode *live, ElementNode *next) {
   live->style = std::move(next->style);
 
   live->onClick = std::move(next->onClick);
+  live->onMouseDown = std::move(next->onMouseDown);
+  live->onMouseUp = std::move(next->onMouseUp);
   live->onMouseEnter = std::move(next->onMouseEnter);
   live->onMouseLeave = std::move(next->onMouseLeave);
 

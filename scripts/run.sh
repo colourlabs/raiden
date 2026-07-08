@@ -68,9 +68,9 @@ if [ "$HAS_DATAPACK" = false ]; then
   BUILD_PREFIX="${BINARY%/src/Runtime/EngineRuntime}"
 
   if [ "$DATAPACK_MODE" = "editor" ]; then
-    DATAPACK=$(find "$BUILD_PREFIX" -name 'engine.toml' -path '*/EditorData/*' -exec dirname {} \; 2>/dev/null | head -1)
+    DATAPACK=$(find "$BUILD_PREFIX" -name 'engine.toml' -path '*/RaidenEditor/*' -exec dirname {} \; 2>/dev/null | head -1)
     if [ -z "$DATAPACK" ]; then
-      DATAPACK=$(find "$PROJECT_DIR/build" -name 'engine.toml' -path '*/EditorData/*' -exec dirname {} \; 2>/dev/null | head -1)
+      DATAPACK=$(find "$PROJECT_DIR/build" -name 'engine.toml' -path '*/RaidenEditor/*' -exec dirname {} \; 2>/dev/null | head -1)
     fi
     if [ -n "$DATAPACK" ]; then
       echo "  [OK]   Editor datapack auto-detected: $DATAPACK"
