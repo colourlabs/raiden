@@ -207,7 +207,7 @@ void VulkanTextureImpl::upload(const void *data, size_t size) {
 
 VkDescriptorSet VulkanTextureImpl::getOrCreateDescriptorSet(
     VkDevice device, VkDescriptorPool pool, VkDescriptorSetLayout layout,
-    VkSampler sampler) const {
+    VkSampler /*sampler*/) const {
   if (descriptorSet_ != VK_NULL_HANDLE) {
     return descriptorSet_;
   }

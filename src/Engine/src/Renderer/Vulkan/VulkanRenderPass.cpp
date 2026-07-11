@@ -59,7 +59,6 @@ bool VulkanRenderPass::init(VkDevice device, VkFormat imageFormat,
     attachmentCount = 3;
   }
 
-  VkAttachmentDescription depthAttachment{};
   VkAttachmentReference depthRef{};
   if (depthFormat != VK_FORMAT_UNDEFINED) {
     attachments[msaa ? 1U : 1U] = {

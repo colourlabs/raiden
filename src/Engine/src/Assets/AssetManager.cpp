@@ -113,7 +113,8 @@ std::shared_ptr<ITexture> AssetManager::loadTexture(std::string_view vfsPath) {
 
   auto ctr =
       js_->submit({.task = [this, rawPtr, path = std::string(vfsPath)]() {
-        auto bytes = vfs_.readBytes(path);
+                     auto bytes = vfs_.readBytes(path);
+                     // NOLINTNEXTLINE(modernize-use-trailing-return-type)
         if (bytes.empty()) {
           rawPtr->failed = true;
           return;

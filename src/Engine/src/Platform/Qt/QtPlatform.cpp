@@ -315,7 +315,7 @@ bool QtPlatform::createVulkanSurface(VkInstance instance,
   // XCB path
   int screen = 0;
   xcbConnection_ = xcb_connect(nullptr, &screen);
-  if (xcb_connection_has_error(xcbConnection_)) {
+  if (xcb_connection_has_error(xcbConnection_) != 0) {
     std::cerr << "QtPlatform: failed to connect to X server via XCB\n";
     return false;
   }

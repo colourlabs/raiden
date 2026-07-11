@@ -2,8 +2,12 @@
 
 #include "Archetype.hpp"
 #include "Entity.hpp"
+#include "System.hpp"
 
 #include <cstring>
+#include <memory>
+#include <list>
+#include <stdexcept>
 #include <string_view>
 #include <type_traits>
 #include <unordered_map>
@@ -64,8 +68,9 @@ template <typename... Ts> struct View {
 
       for (size_t r = 0; r < count; ++r) {
         [&]<size_t... I>(std::index_sequence<I...>) {
-          std::forward<F>(fn)(arch->entities[r],
-                              *(Ts *)(arch->data(cols[I], static_cast<int32_t>(r)))...);
+          std::forward<F>(fn)(
+              arch->entities[r],
+              *(Ts *)(arch->data(cols[I], static_cast<int32_t>(r)))...);
         }(std::index_sequence_for<Ts...>{});
       }
     }
@@ -96,30 +101,31 @@ public:
   Entity create();
   void destroy(Entity e);
 
-  template <typename T, typename... Args>
-  void assign(Entity e, Args &&...args) {
+  [[nodiscard]] uint32_t entityCount() const {
+    return static_cast<uint32_t>(slots_.size());
+  }
+
+  template <typename T, typename... Args> T &assign(Entity e, Args &&...args) {
     registerIfNew<T>();
     auto &slot = slots_[e.index];
     if (slot.generation != e.generation) {
-      return;
+      throw std::runtime_error("assign<T>() called with invalid Entity handle");
     }
 
     Archetype *src = slot.archetype;
 
-    // build destination signature
     std::vector<ComponentId> sig = src->signature;
     auto it = std::lower_bound(sig.begin(), sig.end(), componentId<T>());
     if (it != sig.end() && *it == componentId<T>()) {
-      return; // already has it
+      return get<T>(e);
     }
-    
+
     sig.insert(it, componentId<T>());
 
     Archetype *dst = findOrCreateArchetype(sig);
     int32_t dstRow =
         dst->add(Entity{.index = e.index, .generation = slot.generation});
 
-    // move existing components from src to dst using proper move semantics
     for (size_t i = 0; i < src->signature.size(); ++i) {
       auto cid = src->signature[i];
       auto &cinfo = componentInfo_[cid];
@@ -128,7 +134,6 @@ public:
                  src->data(static_cast<int32_t>(i), slot.row));
     }
 
-    // destruct source components (moved-from)
     for (size_t i = 0; i < src->signature.size(); ++i) {
       auto cid = src->signature[i];
       auto &cinfo = componentInfo_[cid];
@@ -137,29 +142,34 @@ public:
       }
     }
 
-    // construct the new component
-    [[maybe_unused]] auto &info = componentInfo_[componentId<T>()];
-    new (dst->data(dst->indexOf(componentId<T>()), dstRow))
-        T(std::forward<Args>(args)...);
+    auto dstCol = dst->indexOf(componentId<T>());
+    T *ptr = new (dst->data(dstCol, dstRow)) T(std::forward<Args>(args)...);
 
-    // remove from src (destructs last-row components via callback)
     int32_t oldRow = slot.row;
     auto *srcArch = src;
-    Entity moved = srcArch->swapRemove(oldRow, [&](int32_t r) {
-      for (size_t i = 0; i < srcArch->signature.size(); ++i) {
-        auto cid = srcArch->signature[i];
-        auto &cinfo = componentInfo_[cid];
-        if (cinfo.destruct) {
-          cinfo.destruct(srcArch->data(static_cast<int32_t>(i), r));
-        }
-      }
-    });
+    Entity moved = srcArch->swapRemove(
+        oldRow,
+        [&](int32_t ci, int32_t dstRow_, int32_t srcRow_) {
+          auto cid = srcArch->signature[ci];
+          auto &cinfo = componentInfo_[cid];
+          cinfo.move(srcArch->data(ci, dstRow_),
+                     srcArch->data(ci, srcRow_));
+        },
+        [&](int32_t ci, int32_t r) {
+          auto cid = srcArch->signature[ci];
+          auto &cinfo = componentInfo_[cid];
+          if (cinfo.destruct) {
+            cinfo.destruct(srcArch->data(ci, r));
+          }
+        });
     if (moved.index != uint32_t(-1)) {
       slots_[moved.index].row = oldRow;
     }
 
     slot.archetype = dst;
     slot.row = dstRow;
+
+    return *ptr;
   }
 
   template <typename T> void remove(Entity e) {
@@ -205,18 +215,24 @@ public:
       rinfo.destruct(src->data(remCol, slot.row));
     }
 
-    // remove from src (destructs last-row components via callback)
+    // remove from src (moves last-row components then destructs)
     int32_t oldRow = slot.row;
     auto *srcArch = src;
-    Entity moved = srcArch->swapRemove(oldRow, [&](int32_t r) {
-      for (size_t i = 0; i < srcArch->signature.size(); ++i) {
-        auto cid = srcArch->signature[i];
-        auto &cinfo = componentInfo_[cid];
-        if (cinfo.destruct) {
-          cinfo.destruct(srcArch->data(static_cast<int32_t>(i), r));
-        }
-      }
-    });
+    Entity moved = srcArch->swapRemove(
+        oldRow,
+        [&](int32_t ci, int32_t dstRow_, int32_t srcRow_) {
+          auto cid = srcArch->signature[ci];
+          auto &cinfo = componentInfo_[cid];
+          cinfo.move(srcArch->data(ci, dstRow_),
+                     srcArch->data(ci, srcRow_));
+        },
+        [&](int32_t ci, int32_t r) {
+          auto cid = srcArch->signature[ci];
+          auto &cinfo = componentInfo_[cid];
+          if (cinfo.destruct) {
+            cinfo.destruct(srcArch->data(ci, r));
+          }
+        });
     if (moved.index != uint32_t(-1)) {
       slots_[moved.index].row = oldRow;
     }
@@ -241,8 +257,8 @@ public:
      ...);
 
     View<Ts...> v;
-    for (auto &[mask, arch] : archetypes_) {
-      if ((mask & queryMask) == queryMask) {
+    for (auto &arch : archetypes_) {
+      if ((arch.mask & queryMask) == queryMask) {
         v.archetypes.push_back(&arch);
       }
     }
@@ -252,6 +268,25 @@ public:
   // set a human-readable name for a component type (used by forEachComponent)
   template <typename T> void registerComponent(std::string_view name) {
     registerIfNew<T>().name = name;
+  }
+
+  template <typename T, typename... Args> T &addSystem(Args &&...args) {
+    auto system = std::make_unique<T>(std::forward<Args>(args)...);
+    T &ref = *system;
+    systems_.push_back(std::move(system));
+    return ref;
+  }
+
+  void updateSystems(float dt) {
+    for (auto &sys : systems_) {
+      sys->update(*this, dt);
+    }
+  }
+
+  void renderSystems() {
+    for (auto &sys : systems_) {
+      sys->render(*this);
+    }
   }
 
   // iterate all components on an entity without knowing types at compile time
@@ -298,12 +333,18 @@ private:
   }
   Archetype *findOrCreateArchetype(const std::vector<ComponentId> &sig);
 
+  Archetype &rootArchetype();
+  Archetype *lookupArchetype(uint64_t mask);
+  Archetype &createArchetype(uint64_t mask, std::vector<ComponentId> sig,
+                             std::vector<size_t> sizes);
+
   std::vector<Slot> slots_;
   uint32_t freeHead_ = uint32_t(-1);
-  std::unordered_map<uint64_t, Archetype> archetypes_;
-  Archetype *rootArchetype_ = nullptr;
+  std::list<Archetype> archetypes_;
+  std::unordered_map<uint64_t, Archetype *> archetypeIndex_;
   uint32_t nextComponentBit_ = 0;
   std::unordered_map<ComponentId, ComponentInfo> componentInfo_;
+  std::vector<std::unique_ptr<System>> systems_;
 };
 
 } // namespace Raiden::ECS

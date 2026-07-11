@@ -14,7 +14,6 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
-#include <vector>
 
 class ExampleGame : public Raiden::Engine::IGamePlugin {
 public:
@@ -63,15 +62,16 @@ private:
 
   // camera controls
   Raiden::ECS::Entity camEntity_;
-  glm::vec3 position_ = {0.0f, 0.0f, 3.0f};
-  float yaw_ = -1.5707963f;
-  float pitch_ = 0.0f;
+  glm::vec3 position_ = {0.0F, 0.0F, 3.0F};
+  float yaw_ = -1.5707963F;
+  float pitch_ = 0.0F;
   bool mouseCaptured_ = false;
 
-  float rotation_ = 0.0f;
+  float rotation_ = 0.0F;
 
   MeshCache &getOrCreateCache(const std::string &meshPath,
                               const std::string &texturePath,
                               const std::string &shader, float metallic,
-                              float roughness, const glm::vec4 &baseColorFactor);
+                              float roughness,
+                              const glm::vec4 &baseColorFactor);
 };

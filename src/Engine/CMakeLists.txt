@@ -136,6 +136,28 @@ add_library(EngineCore STATIC
   src/Renderer/Vulkan/VulkanMaterial.cpp
 )
 
+# Suppress Vulkan C struct designated initializer warnings
+set(VULKAN_SOURCES
+  src/Renderer/Vulkan/VulkanAllocator.cpp
+  src/Renderer/Vulkan/VulkanDevice.cpp
+  src/Renderer/Vulkan/VulkanSwapchain.cpp
+  src/Renderer/Vulkan/VulkanFrameContext.cpp
+  src/Renderer/Vulkan/VulkanRenderPass.cpp
+  src/Renderer/Vulkan/VulkanShader.cpp
+  src/Renderer/Vulkan/VulkanPipeline.cpp
+  src/Renderer/Vulkan/VulkanPipelineImpl.cpp
+  src/Renderer/Vulkan/VulkanBuffer.cpp
+  src/Renderer/Vulkan/VulkanImage.cpp
+  src/Renderer/Vulkan/VulkanSampler.cpp
+  src/Renderer/Vulkan/VulkanTextureImpl.cpp
+  src/Renderer/Vulkan/VulkanCommandBuffer.cpp
+  src/Renderer/Vulkan/VulkanDescriptorPool.cpp
+  src/Renderer/Vulkan/VulkanMaterial.cpp
+)
+set_source_files_properties(${VULKAN_SOURCES} PROPERTIES
+  COMPILE_FLAGS "-Wno-missing-field-initializers -Wno-extra"
+)
+
 if(RAIDEN_USE_QT)
   target_sources(EngineCore PRIVATE
     src/Platform/Qt/QtPlatform.cpp

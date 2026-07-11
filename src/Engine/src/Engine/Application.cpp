@@ -7,6 +7,7 @@
 #include <Raiden/Renderer/Vulkan/IVulkanRenderDevice.hpp>
 #include <Renderer/Vulkan/VulkanDevice.hpp>
 
+#include <array>
 #include <cstring>
 #include <functional>
 
@@ -181,24 +182,24 @@ void Application::run() {
 
       // pass active camera matrices to overlay for ImGui
       if (auto *world = getWorld()) {
-        float viewMat[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
-        float projMat[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+        std::array<float, 16> viewMat = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+        std::array<float, 16> projMat = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
         world->view<Raiden::ECS::Camera>().each(
             [&](Raiden::ECS::Entity, Raiden::ECS::Camera &cam) {
               if (cam.active) {
-                std::memcpy(viewMat, &cam.view, sizeof(float) * 16);
+                std::memcpy(viewMat.data(), &cam.view, sizeof(float) * 16);
                 float aspect = static_cast<float>(w) /
                                static_cast<float>(h > 1 ? h : 1);
                 auto proj = glm::perspective(glm::radians(cam.fov), aspect,
                                              cam.zNear, cam.zFar);
                 proj[1][1] *= -1.0F;
                 // Vulkan depth remap
-                proj[2][2] = 0.5F * proj[2][2] + 0.5F * proj[2][3];
-                proj[3][2] = 0.5F * proj[3][2] + 0.5F * proj[3][3];
-                std::memcpy(projMat, &proj, sizeof(float) * 16);
+                proj[2][2] = (0.5F * proj[2][2]) + (0.5F * proj[2][3]);
+                proj[3][2] = (0.5F * proj[3][2]) + (0.5F * proj[3][3]);
+                std::memcpy(projMat.data(), &proj, sizeof(float) * 16);
               }
             });
-        overlay_->setCameraMatrices(viewMat, projMat, w, h);
+        overlay_->setCameraMatrices(viewMat.data(), projMat.data(), w, h);
       }
 
       overlay_->newFrame(platform_->getInputState(), w, h, deltaTime, profiler,

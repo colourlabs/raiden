@@ -174,7 +174,7 @@ static std::string resolveGltfTexture(const fastgltf::Asset &asset,
 // load a glTF PBR material into an engine material
 static std::shared_ptr<IMaterial>
 loadMaterial(const fastgltf::Asset &asset, const fastgltf::Material &gltfMat,
-             std::string_view basePath, IRenderDevice &device,
+             std::string_view basePath, IRenderDevice & /*device*/,
              IAssetManager &assets) {
   MaterialDesc desc;
   desc.shader = "builtin://pbr";
@@ -362,7 +362,7 @@ std::vector<Mesh> loadGltf(IRenderDevice &device, IAssetManager &assets,
     // compute local transform
     glm::mat4 localXform(1.0F);
     if (const auto *mat = std::get_if<fastgltf::math::fmat4x4>(&node.transform)) {
-      std::memcpy(&localXform, mat->data(), sizeof(float) * 16);
+      std::copy_n(mat->data(), 16, glm::value_ptr(localXform));
       localXform = glm::transpose(localXform);
     }
 

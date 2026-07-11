@@ -461,7 +461,7 @@ void GizmoRenderer::applyRotateDrag(const Ray &ray, int axis,
 void GizmoRenderer::applyScaleDrag(const Ray &ray, int axis,
                                    const glm::mat4 &gizmoWorld,
                                    Raiden::ECS::Transform &transform) {
-  glm::vec3 center = glm::vec3(gizmoWorld[3]);
+  auto center = glm::vec3(gizmoWorld[3]);
   glm::vec3 axisDirVec = axisDir(axis);
 
   // find closest point on axis to mouse ray

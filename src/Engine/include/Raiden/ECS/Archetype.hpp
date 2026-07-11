@@ -2,10 +2,11 @@
 
 #include "Entity.hpp"
 
-#include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <vector>
+#include <algorithm>
 
 namespace Raiden::ECS {
 
@@ -49,10 +50,37 @@ struct Archetype {
     return row;
   }
 
-  // swapRemove with callback to destruct last-row components after memcpy
-  template <typename F> Entity swapRemove(int32_t row, F &&destructLast) {
+  // swapRemove with callbacks
+  // moveColumn(col, dstRow, srcRow) — moves one column from srcRow to dstRow
+  // destructColumn(col, row) — destructs one column at the given row
+  // Both are called with the ACTUAL row values (not data pointers), allowing
+  // the caller to use World-level knowledge for proper move construction.
+  template <typename FM, typename FD>
+  Entity swapRemove(int32_t row, FM &&moveColumn, FD &&destructColumn) {
     int32_t last = static_cast<int32_t>(entities.size()) - 1;
-    Entity moved{};
+    Entity moved{.index = UINT32_MAX, .generation = 0};
+
+    if (row != last) {
+      moved = entities[last];
+      entities[row] = moved;
+
+      for (size_t i = 0; i < columns_.size(); ++i) {
+        std::forward<FM>(moveColumn)(static_cast<int32_t>(i), row, last);
+      }
+
+      for (size_t i = 0; i < columns_.size(); ++i) {
+        std::forward<FD>(destructColumn)(static_cast<int32_t>(i), last);
+      }
+    }
+
+    entities.pop_back();
+    return moved;
+  }
+
+  // overload without callbacks (trivially-movable components)
+  Entity swapRemove(int32_t row) {
+    int32_t last = static_cast<int32_t>(entities.size()) - 1;
+    Entity moved{.index = UINT32_MAX, .generation = 0};
 
     if (row != last) {
       moved = entities[last];
@@ -61,16 +89,10 @@ struct Archetype {
         auto sz = componentSizes[i];
         std::memcpy(data(i, row), data(i, last), sz);
       }
-      std::forward<F>(destructLast)(last);
     }
 
     entities.pop_back();
     return moved;
-  }
-
-  // overload without callback (for callers that pre-destructed)
-  Entity swapRemove(int32_t row) {
-    return swapRemove(row, [](int32_t) {});
   }
 
   std::byte *data(size_t col, int32_t row) {

@@ -72,7 +72,7 @@ static uint8_t parseGamepadButton(std::string_view s) {
   };
 
   auto it = kMap.find(s);
-  return it != kMap.end() ? it->second : SDL_GAMEPAD_BUTTON_SOUTH;
+  return it != kMap.end() ? it->second : static_cast<uint8_t>(SDL_GAMEPAD_BUTTON_SOUTH);
 }
 
 static uint8_t parseGamepadAxis(std::string_view s) {
@@ -106,7 +106,8 @@ static uint8_t parseGamepadAxis(std::string_view s) {
 static uint8_t parseCode(ActionBinding::Source source, std::string_view s) {
   switch (source) {
   case ActionBinding::Keyboard:
-    return static_cast<uint8_t>(SDL_GetScancodeFromName(std::string(s).c_str()));
+    return static_cast<uint8_t>(
+        SDL_GetScancodeFromName(std::string(s).c_str()));
   case ActionBinding::MouseButton:
     return parseMouseButton(s);
   case ActionBinding::GamepadButton:
@@ -152,17 +153,30 @@ bool ActionMap::loadFromString(std::string_view tomlSource) {
     auto table = toml::parse(tomlSource);
 
     for (auto &[key, val] : table) {
-      if (!val.is_array()) {
+      const toml::array *bindingsArray = nullptr;
+
+      if (val.is_array()) {
+        // flat format: name = [ { source = ..., code = ... }, ... ]
+        bindingsArray = val.as_array();
+      } else if (val.is_table()) {
+        // nested format: [name]\nbindings = [ { ... }, ... ]
+        auto bindingsNode = (*val.as_table())["bindings"];
+        if (bindingsNode.is_array()) {
+          bindingsArray = bindingsNode.as_array();
+        }
+      }
+
+      if (bindingsArray == nullptr) {
         continue;
       }
 
       Action action;
-      for (auto &elem : *val.as_array()) {
+      for (const auto &elem : *bindingsArray) {
         if (!elem.is_table()) {
           continue;
         }
 
-        auto &b = *elem.as_table();
+        const auto &b = *elem.as_table();
         ActionBinding binding;
 
         binding.source =

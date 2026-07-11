@@ -21,8 +21,8 @@ struct ActionBinding {
 
   Source source;
   uint8_t code;
-  float deadZone = 0.0f;
-  float scale = 1.0f;
+  float deadZone = 0.0F;
+  float scale = 1.0F;
   int modifier = -1; // scancode that must be held, -1 = none
 };
 
@@ -33,7 +33,7 @@ struct Action {
   bool pressed = false;
   bool justPressed = false;
   bool justReleased = false;
-  float value = 0.0f;
+  float value = 0.0F;
 };
 
 class ActionMap {

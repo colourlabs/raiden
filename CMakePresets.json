@@ -22,7 +22,8 @@
       "description": "Uses the system default generator",
       "inherits": "base",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "RAIDEN_ENABLE_ASAN": "ON"
       }
     },
     {
@@ -48,7 +49,8 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_C_COMPILER": "gcc",
-        "CMAKE_CXX_COMPILER": "g++"
+        "CMAKE_CXX_COMPILER": "g++",
+        "RAIDEN_ENABLE_ASAN": "ON"
       }
     },
     {
@@ -169,6 +171,16 @@
       "name": "windows-vs2026-release",
       "configurePreset": "windows-vs2026",
       "configuration": "Release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default"
+    },
+    {
+      "name": "linux-debug",
+      "configurePreset": "linux-debug"
     }
   ]
 }

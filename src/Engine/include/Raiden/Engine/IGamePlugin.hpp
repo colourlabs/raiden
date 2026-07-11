@@ -11,10 +11,11 @@ namespace Raiden::Renderer { class IRenderDevice; class ICommandBuffer; }
 
 namespace Raiden::Engine {
 
-class IGamePlugin {
+class IGamePlugin { // NOLINT
 public:
   virtual ~IGamePlugin() = default;
-  virtual const char *name() const = 0;
+  
+  [[nodiscard]] virtual const char *name() const = 0;
   virtual bool init(::Raiden::Renderer::IRenderDevice &device, ::Raiden::Core::IVirtualFileSystem &vfs, ::Raiden::Assets::IAssetManager &assets, ::Raiden::Platform::IPlatform *platform, ::Raiden::Audio::IAudioDevice *audio = nullptr) = 0;
   virtual void update(float deltaTime, const ::Raiden::Platform::InputState &input) = 0;
   virtual void render(::Raiden::Renderer::ICommandBuffer &cmd) = 0;

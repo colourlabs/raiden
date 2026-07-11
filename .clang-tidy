@@ -9,6 +9,7 @@ Checks: >
   -cppcoreguidelines-pro-bounds-*,
   -cppcoreguidelines-pro-type-*,
   -cppcoreguidelines-owning-memory,
+  -cppcoreguidelines-avoid-c-arrays,
   -modernize-use-trailing-return-type,
   -performance-no-int-to-ptr,
   -readability-identifier-length,
@@ -16,11 +17,15 @@ Checks: >
   -readability-function-cognitive-complexity,
   -readability-isolate-declaration,
   -readability-avoid-const-params-in-decls,
+  -clang-diagnostic-missing-designated-field-initializers,
+  -clang-diagnostic-cast-align,
+  -clang-diagnostic-missing-field-initializers,
+  -clang-diagnostic-vla,
 
 WarningsAsErrors: >
   clang-diagnostic-*,
 
-HeaderFilterRegex: '^(?!.*InterFont\.hpp).*$'
+HeaderFilterRegex: '^(?!.*InterFont\.hpp)(?!.*\.cpm-cache)(?!.*spa/)(?!.*vulkan/).*$'
 
 FormatStyle: none
 

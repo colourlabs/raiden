@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <typeindex>
 
 namespace Raiden::ECS {
@@ -21,3 +22,9 @@ template <typename T> inline ComponentId componentId() {
 }
 
 } // namespace Raiden::ECS
+
+template <> struct std::hash<Raiden::ECS::Entity> {
+  size_t operator()(Raiden::ECS::Entity e) const noexcept {
+    return (static_cast<size_t>(e.index) << 32) | e.generation;
+  }
+};

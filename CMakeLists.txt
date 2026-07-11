@@ -5,6 +5,9 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(RAIDEN_USE_QT "Build with Qt5 support (editor)" ON)
+option(RAIDEN_ENABLE_ASAN "Enable AddressSanitizer + UndefinedBehaviorSanitizer" OFF)
+option(RAIDEN_BUILD_TESTS "Build unit tests" ON)
+option(RAIDEN_BUILD_BENCHMARKS "Build benchmarks" ON)
 
 if(WIN32)
   add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
@@ -60,3 +63,13 @@ add_subdirectory(src/RaidenEditor)
 
 add_subdirectory(games/ExampleGame)
 add_subdirectory(src/RaidenEditor/editor)
+
+if(RAIDEN_BUILD_TESTS)
+  enable_testing()
+  add_subdirectory(tests)
+endif()
+
+if(RAIDEN_ENABLE_ASAN)
+  add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+  add_link_options(-fsanitize=address,undefined)
+endif()

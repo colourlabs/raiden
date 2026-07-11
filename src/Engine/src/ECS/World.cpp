@@ -2,18 +2,48 @@
 
 namespace Raiden::ECS {
 
-World::World() { rootArchetype_ = &archetypes_[0]; }
+World::World() {
+  // ensure root archetype exists and is stable
+  rootArchetype();
+}
+
+Archetype &World::rootArchetype() {
+  auto *ptr = lookupArchetype(0);
+  if (ptr != nullptr) {
+    return *ptr;
+  }
+  // signature is empty for root
+  return createArchetype(0, {}, {});
+}
+
+Archetype *World::lookupArchetype(uint64_t mask) {
+  auto it = archetypeIndex_.find(mask);
+  if (it != archetypeIndex_.end()) {
+    return it->second;
+  }
+  return nullptr;
+}
+
+Archetype &World::createArchetype(uint64_t mask, std::vector<ComponentId> sig,
+                                  std::vector<size_t> sizes) {
+  archetypes_.emplace_back(mask, std::move(sig), std::move(sizes));
+  auto *ptr = &archetypes_.back();
+  archetypeIndex_[mask] = ptr;
+  return *ptr;
+}
 
 World::~World() {
-  // destruct all components in all archetypes
-  for (auto &[mask, arch] : archetypes_) {
+  for (auto &arch : archetypes_) {
     for (size_t i = 0; i < arch.signature.size(); ++i) {
       auto cid = arch.signature[i];
-      auto &info = componentInfo_[cid];
+      auto it = componentInfo_.find(cid);
+      if (it == componentInfo_.end()) {
+        continue;
+      }
+      auto &info = it->second;
       if (info.destruct == nullptr) {
         continue;
       }
-
       for (size_t r = 0; r < arch.entities.size(); ++r) {
         info.destruct(arch.data(i, static_cast<int32_t>(r)));
       }
@@ -33,9 +63,9 @@ Entity World::create() {
 
   auto &slot = slots_[idx];
   slot.generation++;
-  slot.archetype = rootArchetype_;
-  slot.row =
-      rootArchetype_->add(Entity{.index = idx, .generation = slot.generation});
+  auto &root = rootArchetype();
+  slot.archetype = &root;
+  slot.row = root.add(Entity{.index = idx, .generation = slot.generation});
   return {.index = idx, .generation = slot.generation};
 }
 
@@ -50,23 +80,39 @@ void World::destroy(Entity e) {
   // destruct all components
   for (size_t i = 0; i < arch->signature.size(); ++i) {
     auto cid = arch->signature[i];
-    auto &info = componentInfo_[cid];
+    auto it = componentInfo_.find(cid);
+    if (it == componentInfo_.end()) {
+      continue;
+    }
+    auto &info = it->second;
     if (info.destruct != nullptr) {
         info.destruct(arch->data(static_cast<int32_t>(i), slot.row));
     }
   }
 
-  // remove from archetype (destructs last-row components via callback)
+  // remove from archetype (moves last-row components then destructs them)
   int32_t oldRow = slot.row;
-  Entity moved = arch->swapRemove(oldRow, [&](int32_t r) {
-    for (size_t i = 0; i < arch->signature.size(); ++i) {
-      auto cid = arch->signature[i];
-      auto &cinfo = componentInfo_[cid];
-      if (cinfo.destruct) {
-        cinfo.destruct(arch->data(static_cast<int32_t>(i), r));
-      }
-    }
-  });
+  Entity moved = arch->swapRemove(
+      oldRow,
+      [&](int32_t col, int32_t dstRow, int32_t srcRow) {
+        auto cid = arch->signature[col];
+        auto it = componentInfo_.find(cid);
+        if (it == componentInfo_.end()) {
+          return;
+        }
+        it->second.move(arch->data(col, dstRow), arch->data(col, srcRow));
+      },
+      [&](int32_t col, int32_t row) {
+        auto cid = arch->signature[col];
+        auto it = componentInfo_.find(cid);
+        if (it == componentInfo_.end()) {
+          return;
+        }
+        auto &cinfo = it->second;
+        if (cinfo.destruct) {
+          cinfo.destruct(arch->data(col, row));
+        }
+      });
   if (moved.index != UINT32_MAX) {
     slots_[moved.index].row = oldRow;
   }
@@ -88,9 +134,9 @@ Archetype *World::findOrCreateArchetype(const std::vector<ComponentId> &sig) {
     }
   }
 
-  auto it = archetypes_.find(mask);
-  if (it != archetypes_.end()) {
-    return &it->second;
+  auto *existing = lookupArchetype(mask);
+  if (existing != nullptr) {
+    return existing;
   }
 
   // build component sizes for the new archetype
@@ -100,12 +146,7 @@ Archetype *World::findOrCreateArchetype(const std::vector<ComponentId> &sig) {
     sizes.push_back(componentInfo_[cid].size);
   }
 
-  auto &arch = archetypes_[mask];
-  arch.mask = mask;
-  arch.signature = sig;
-  arch.componentSizes = std::move(sizes);
-  arch.columns_.resize(arch.signature.size());
-  return &arch;
+  return &createArchetype(mask, sig, std::move(sizes));
 }
 
 } // namespace Raiden::ECS
