@@ -1,4 +1,3 @@
-
 QMainWindow,
 QDockWidget,
 QMenuBar,
@@ -38,7 +37,7 @@ QMainWindow::separator:hover {
 }
 
 #EmbeddedMenuBar::item {
-  padding: 4px 10px;
+  padding: 6px 7px;
   color: #aaaaaa;
   border-radius: 3px;
 }
@@ -88,33 +87,62 @@ QMenu::item:selected {
 
 QMenu::separator {
   height: 1px;
-  background: #050505;
+  background: #3D3D3D;
   margin: 4px 6px;
 }
 
-#ViewportToolBar {
+#ViewportToolBar,
+#EditorToolBar {
   background: #1c1c1c;
   border-bottom: 1px solid #050505;
   padding: 3px 6px;
   spacing: 2px;
 }
 
-#ViewportToolBar QToolButton {
+#ViewportToolBar::separator,
+#EditorToolBar::separator {
+  background: #050505;
+  width: 1px;
+  margin: 4px 4px;
+}
+
+#ViewportToolBar QToolButton,
+#EditorToolBar QToolButton {
   background: transparent;
   border: none;
   border-radius: 3px;
   color: #cccccc;
-  padding: 4px 8px;
+  padding: 4px;
   font-size: 13px;
 }
 
-#ViewportToolBar QToolButton:hover {
+#ViewportToolBar QToolButton:hover,
+#EditorToolBar QToolButton:hover {
   background: #2f2f2f;
 }
 
-#ViewportToolBar QToolButton:pressed {
+#ViewportToolBar QToolButton:pressed,
+#EditorToolBar QToolButton:pressed {
   background: #4C8BF5;
   color: #ffffff;
+}
+
+#EditorToolBar QToolButton:checked {
+  background: #4C8BF5;
+  color: #ffffff;
+}
+
+/* vertical toolbar overrides */
+#EditorToolBar {
+  border-bottom: none;
+  border-right: 1px solid #050505;
+  padding: 6px 4px;
+}
+
+#EditorToolBar::separator {
+  width: auto;
+  height: 1px;
+  margin: 4px 4px;
 }
 
 #PlayButton {
@@ -141,35 +169,32 @@ QDockWidget::title {
   font-weight: 600;
 }
 
-/* ---- Tabs (tabified docks) — compact, Unity-style ---- */
 QTabBar {
-  background: #1c1c1c;
-  border-bottom: 1px solid #050505;
+  background: #1e1e1e;
+  border: none;
 }
 
 QTabBar::tab {
-  background: #1c1c1c;
+  background: transparent;
   color: #8a8a8a;
-  padding: 4px 14px;
+  padding: 5px 14px;
   border: none;
-  border-right: 1px solid #050505;
-  border-radius: 0px;
+  border-bottom: 2px solid transparent;
   margin: 0px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
 }
 
 QTabBar::tab:selected {
-  background: #2b2b2b;
   color: #e8e8e8;
+  border-bottom: 2px solid #4C8BF5;
 }
 
 QTabBar::tab:hover:!selected {
-  background: #242424;
   color: #bbbbbb;
+  border-bottom: 2px solid #333333;
 }
 
-/* ---- Scene hierarchy tree ---- */
 QTreeWidget {
   background: #191919;
   color: #cccccc;
@@ -179,8 +204,9 @@ QTreeWidget {
 }
 
 QTreeWidget::item {
-  padding: 3px 4px;
-  border-radius: 2px;
+  padding: 4px 8px;
+  margin: 0px 4px;
+  border-radius: 3px;
 }
 
 QTreeWidget::item:selected {
@@ -192,16 +218,19 @@ QTreeWidget::item:hover:!selected {
   background: #242424;
 }
 
+QTreeWidget::item:focus {
+  outline: none;
+}
+
 QTreeWidget::branch {
   background: transparent;
 }
 
-/* ---- Asset browser list ---- */
 QListWidget {
   background: #191919;
   color: #cccccc;
   border: none;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 QListWidget::item {
@@ -218,9 +247,64 @@ QListWidget::item:hover:!selected {
   background: #242424;
 }
 
+#AssetGrid {
+  background: #191919;
+  border: none;
+  outline: none;
+}
+
+#AssetGrid::item {
+  padding: 6px 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  margin: 2px;
+}
+
+#AssetGrid::item:selected {
+  background: #4C8BF5;
+  color: #ffffff;
+  border-color: #6da3f7;
+}
+
+#AssetGrid::item:hover:!selected {
+  background: #242424;
+  border-color: #333333;
+}
+
+#AssetTree {
+  background: #191919;
+  border: none;
+  border-right: 1px solid #050505;
+  font-size: 12px;
+  outline: none;
+}
+
+#AssetTree::item {
+  padding: 3px 4px;
+  margin: 0px 2px;
+  border-radius: 2px;
+}
+
+#AssetTree::item:selected {
+  background: #4C8BF5;
+  color: #ffffff;
+}
+
+#AssetTree::item:hover:!selected {
+  background: #242424;
+}
+
+#AssetTree::branch {
+  background: transparent;
+}
+
 #Breadcrumb {
   color: #8a8a8a;
   font-size: 11px;
+  padding: 2px 6px;
+  background: #1c1c1c;
+  border: 1px solid #050505;
+  border-radius: 3px;
 }
 
 QLineEdit {
@@ -237,45 +321,77 @@ QLineEdit:focus {
   border-color: #4C8BF5;
 }
 
-/* ---- Output log ---- */
+/* output log */
 QPlainTextEdit {
   background: #141414;
   color: #a8c6a8;
   border: none;
   font-family: "Consolas", monospace;
-  font-size: 11px;
+  font-size: 13px;
+  padding: 8px;
 }
 
-/* ============================================================
-   Inspector — component cards
-   ============================================================ */
+QTabWidget::pane {
+  background: #1e1e1e;
+  border: none;
+}
 
-/* Scroll area / panel behind the cards */
+#SectionHeader {
+  color: #9a9a9a;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0px 12px;
+  margin-top: 8px;
+}
+
+#TransformP,
+#TransformR,
+#TransformS {
+  color: #8a8a8a;
+  font-size: 10px;
+  font-weight: 600;
+  min-width: 16px;
+  max-width: 16px;
+}
+
+#AxisLetter {
+  color: #8a8a8a;
+  font-size: 10px;
+  font-weight: 600;
+  min-width: 10px;
+}
+
+#AddComponentButton {
+  border: 1px dashed #3D3D3D;
+  border-radius: 3px;
+  color: #8a8a8a;
+  font-size: 11px;
+  padding: 6px;
+  background: transparent;
+  margin: 6px 12px;
+}
+
+#AddComponentButton:hover {
+  border-color: #4C8BF5;
+  color: #4C8BF5;
+}
+
+#SceneSearchBox {
+  margin: 4px 6px;
+}
+
 #InspectorPanel,
 #WorldSettingsPanel {
   background: #1e1e1e;
 }
 
-/* Card container (replaces QGroupBox visually; QGroupBox kept
-   as the layout container but its native title is suppressed
-   in favor of #ComponentHeader) */
-QGroupBox#ComponentCard {
+#ComponentCard {
   background: #242424;
   border: 1px solid #050505;
   border-radius: 3px;
-  margin-top: 6px;
-  padding: 0px;
-  font-size: 11px;
+  margin: 6px 12px;
 }
 
-QGroupBox#ComponentCard::title {
-  width: 0px;
-  height: 0px;
-  padding: 0px;
-  margin: 0px;
-}
-
-/* Header row: icon + name + toggle pill + kebab menu */
 #ComponentHeader {
   background: transparent;
   border-bottom: 1px solid #050505;
@@ -308,13 +424,11 @@ QGroupBox#ComponentCard::title {
   color: #e8e8e8;
 }
 
-/* Card body (holds the QFormLayout of fields) */
 #ComponentBody {
   background: transparent;
   padding: 6px;
 }
 
-/* Pill-style enable/disable toggle in card headers */
 QCheckBox#ComponentToggle {
   spacing: 0px;
 }
@@ -341,10 +455,15 @@ QCheckBox#ComponentToggle::indicator:checked:hover {
   border: 1px solid #5c98f7;
 }
 
-/* ---- Field rows ---- */
 QLabel#FieldLabel {
   color: #999999;
   font-size: 11px;
+}
+
+#FieldValue {
+  color: #dddddd;
+  font-size: 11px;
+  text-align: right;
 }
 
 QLabel#AxisLabel {
@@ -378,19 +497,16 @@ QDoubleSpinBox::down-button {
   background: transparent;
 }
 
-/* Generic labels (mesh/material value fields etc.) */
 QLabel {
   color: #cccccc;
   font-size: 11px;
 }
 
-/* ---- World Settings environment fields ---- */
 #WorldSettingsPanel QDoubleSpinBox,
 #WorldSettingsPanel QLabel {
   font-size: 11px;
 }
 
-/* ---- Status bar ---- */
 QStatusBar {
   border-top: 1px solid #050505;
   color: #888888;
@@ -433,4 +549,142 @@ QScrollBar::handle:horizontal {
 QScrollBar::add-line:horizontal,
 QScrollBar::sub-line:horizontal {
   width: 0;
+}
+
+/* ---- Project Launcher Dialog ---- */
+
+#ProjectLauncherDialog {
+  background: #1e1e1e;
+  border: 1px solid #0a0a0a;
+  border-radius: 6px;
+}
+
+#LauncherTitle {
+  color: #e8e8e8;
+  font-size: 22px;
+  font-weight: 600;
+  padding: 4px 0 8px 0;
+}
+
+#SectionHeader {
+  color: #9a9a9a;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 0 4px 0;
+}
+
+#ProjectList {
+  background: #161616;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  padding: 4px;
+  font-size: 13px;
+  color: #cccccc;
+  outline: none;
+}
+
+#ProjectList::item {
+  padding: 8px 10px;
+  border-radius: 3px;
+}
+
+#ProjectList::item:selected {
+  background: #2a3a5c;
+  color: #e8e8e8;
+}
+
+#ProjectList::item:hover:!selected {
+  background: #252525;
+  color: #e8e8e8;
+}
+
+#NewProjectButton {
+  background: #4C8BF5;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+#NewProjectButton:hover {
+  background: #5a96ff;
+}
+
+#NewProjectButton:pressed {
+  background: #3a7ae0;
+}
+
+#RefreshButton, #OpenButton {
+  background: #2a2a2a;
+  color: #cccccc;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+#RefreshButton:hover, #OpenButton:hover {
+  background: #333333;
+  border-color: #4a4a4a;
+}
+
+#OpenButton {
+  background: #3D5A99;
+  color: #ffffff;
+  border: none;
+}
+
+#OpenButton:hover {
+  background: #4a6aaa;
+}
+
+/* ---- New Project Dialog ---- */
+
+#NewProjectDialog {
+  background: #1e1e1e;
+  border: 1px solid #0a0a0a;
+  border-radius: 6px;
+}
+
+#ProjectNameInput, #ProjectLocationInput {
+  background: #161616;
+  border: 1px solid #2a2a2a;
+  border-radius: 3px;
+  color: #cccccc;
+  padding: 6px 8px;
+  font-size: 13px;
+  selection-background-color: #3D5A99;
+}
+
+#ProjectNameInput:focus, #ProjectLocationInput:focus {
+  border-color: #4C8BF5;
+}
+
+#BrowseButton {
+  background: #2a2a2a;
+  color: #cccccc;
+  border: 1px solid #3a3a3a;
+  border-radius: 3px;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+#BrowseButton:hover {
+  background: #333333;
+}
+
+#createButton {
+  background: #4C8BF5;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+#createButton:hover {
+  background: #5a96ff;
 }

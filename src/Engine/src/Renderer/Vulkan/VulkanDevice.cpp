@@ -438,10 +438,17 @@ VulkanDevice::createPipeline(const PipelineDesc &desc) {
     blendConfig.alphaBlendOp = toVkBlendOp(desc.blendAlphaOp);
   }
 
+  VkPrimitiveTopology vkTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  if (desc.topology == Topology::LineList) {
+    vkTopology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+  } else if (desc.topology == Topology::LineStrip) {
+    vkTopology = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+  }
+
   if (!impl->init(device_, renderPass_.renderPass(), vertShader, fragShader,
-                  vertexDesc, desc.depthTestEnable, desc.depthWriteEnable,
-                  depthOp, toVkCullMode(desc.cullMode), sampleCount_,
-                  setLayouts.data(), 3, blendConfig)) {
+                  vertexDesc, vkTopology, desc.depthTestEnable,
+                  desc.depthWriteEnable, depthOp, toVkCullMode(desc.cullMode),
+                  sampleCount_, setLayouts.data(), 3, blendConfig)) {
     s_logger.error("Failed to create pipeline");
     vertShader.shutdown();
     fragShader.shutdown();
@@ -694,6 +701,22 @@ SwapChainSupport VulkanDevice::querySwapChainSupport(VkPhysicalDevice device,
 }
 
 bool VulkanDevice::drawFrame(const RenderCallback &callback) {
+  if (platform_->hasResizePending()) {
+    if (!platform_->isWindowExposed()) {
+      return true;
+    }
+    int w = 0, h = 0;
+    platform_->getWindowSize(w, h);
+    if (w == 0 || h == 0) {
+      return true;
+    }
+    auto ext = swapchain_.extent();
+    if (static_cast<uint32_t>(w) != ext.width ||
+        static_cast<uint32_t>(h) != ext.height) {
+      return recreateSwapchain();
+    }
+  }
+
   uint32_t imageIndex = 0;
   if (!frameContext_.beginFrame(swapchain_, imageIndex)) {
     return recreateSwapchain();
@@ -1036,7 +1059,7 @@ std::shared_ptr<IMaterial> VulkanDevice::createMaterial(
 
   auto pipeline = std::make_unique<VulkanPipelineImpl>();
   if (!pipeline->init(device_, renderPass_.renderPass(), vertShader, fragShader,
-                      vertexDesc, desc.depthTest, true, VK_COMPARE_OP_LESS,
+                      vertexDesc, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, desc.depthTest, true, VK_COMPARE_OP_LESS,
                       VK_CULL_MODE_BACK_BIT, sampleCount_, setLayouts.data(),
                       4)) {
     s_logger.error("createMaterial: failed to create pipeline");
@@ -1153,6 +1176,8 @@ bool VulkanDevice::recreateSwapchain() {
   }
 
   vkDeviceWaitIdle(device_);
+
+  platform_->flushPendingPresentation();
 
   destroyFramebuffers();
   depthImage_.shutdown();

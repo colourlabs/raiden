@@ -17,7 +17,7 @@ constexpr float pi = std::numbers::pi_v<float>;
 
 namespace RaidenUI {
 
-using namespace Raiden::Renderer;
+using namespace ::Raiden::Renderer;
 
 // vertex layout
 

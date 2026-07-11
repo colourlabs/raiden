@@ -16,9 +16,6 @@ bool VulkanSwapchain::init(VkPhysicalDevice physicalDevice, VkDevice device,
                            VkSwapchainKHR oldSwapchain) {
   device_ = device;
 
-  // TODO: maybe use vulkan-hpp instead
-  // Never mind
-
   VkSurfaceCapabilitiesKHR caps;
   if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface,
                                                 &caps) != VK_SUCCESS) {

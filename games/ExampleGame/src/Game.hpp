@@ -12,6 +12,8 @@
 #include <Raiden/Renderer/Model.hpp>
 
 #include <memory>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 class ExampleGame : public Raiden::Engine::IGamePlugin {
@@ -37,33 +39,39 @@ private:
   Raiden::Input::ActionMap actions_;
   Raiden::Assets::IAssetManager *assets_ = nullptr;
   Raiden::Platform::IPlatform *platform_ = nullptr;
+  Raiden::Renderer::IRenderDevice *device_ = nullptr;
 
-  struct PbrObject {
-    glm::vec3 position;
-    float rotation;
+  // main pipeline + resources
+  std::unique_ptr<Raiden::Renderer::IPipeline> pipeline_;
+
+  // resource caches (loaded from MeshRenderer paths)
+  struct MeshCache {
+    std::shared_ptr<Raiden::Renderer::Model> model;
+    std::shared_ptr<Raiden::Renderer::ITexture> texture;
     std::shared_ptr<Raiden::Renderer::IMaterial> material;
   };
+  std::unordered_map<std::string, MeshCache> meshCaches_;
 
-  std::unique_ptr<Raiden::Renderer::IPipeline> pipeline_;
-  std::shared_ptr<Raiden::Renderer::ITexture> texture_;
-  std::shared_ptr<Raiden::Renderer::Model> model_;
-
-  // skybox
+  // skybox (special-cased, not ECS)
   std::unique_ptr<Raiden::Renderer::IPipeline> skyboxPipeline_;
   std::shared_ptr<Raiden::Renderer::ITexture> skyboxTexture_;
   std::unique_ptr<Raiden::Renderer::IBuffer> skyboxVertexBuffer_;
   std::unique_ptr<Raiden::Renderer::IBuffer> skyboxIndexBuffer_;
   uint32_t skyboxIndexCount_ = 0;
 
-  std::vector<PbrObject> pbrObjects_;
-
-  float rotation_ = 0.0f;
   bool quitRequested_ = false;
 
   // camera controls
   Raiden::ECS::Entity camEntity_;
   glm::vec3 position_ = {0.0f, 0.0f, 3.0f};
-  float yaw_ = -1.5707963f; // -90 degrees, looking along -Z
+  float yaw_ = -1.5707963f;
   float pitch_ = 0.0f;
   bool mouseCaptured_ = false;
+
+  float rotation_ = 0.0f;
+
+  MeshCache &getOrCreateCache(const std::string &meshPath,
+                              const std::string &texturePath,
+                              const std::string &shader, float metallic,
+                              float roughness, const glm::vec4 &baseColorFactor);
 };

@@ -27,7 +27,7 @@ public:
   bool init(const ::Raiden::Core::AudioConfig &config, ::Raiden::Core::IVirtualFileSystem &vfs) override;
   void shutdown() override;
 
-  void setJobSystem(::Raiden::Jobs::JobSystem &js) { jobSystem_ = &js; }
+  void setJobSystem(::Raiden::Jobs::JobSystem &js) override { jobSystem_ = &js; }
 
   SoundId load(std::string_view path) override;
   void unload(SoundId sound) override;

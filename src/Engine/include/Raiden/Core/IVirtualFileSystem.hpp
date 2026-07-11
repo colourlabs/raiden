@@ -25,6 +25,10 @@ public:
   [[nodiscard]] virtual bool exists(std::string_view path) const = 0;
   virtual std::string readAll(std::string_view path) = 0;
   virtual std::vector<std::byte> readBytes(std::string_view path) = 0;
+
+  virtual bool write(std::string_view path, std::string_view data) = 0;
+  virtual bool writeBytes(std::string_view path,
+                          const std::vector<std::byte> &data) = 0;
 };
 
 // factory – the implementation lives in a platform-specific source file

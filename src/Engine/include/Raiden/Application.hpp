@@ -11,6 +11,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <functional>
 #include <memory>
 
 namespace Raiden::Engine {
@@ -39,6 +40,16 @@ public:
   [[nodiscard]] ::Raiden::Renderer::IRenderDevice &getDevice() const { return *device_; }
   [[nodiscard]] ::Raiden::Core::IVirtualFileSystem &getVFS() const { return *vfs_; }
   [[nodiscard]] ::Raiden::Jobs::JobSystem &getJobSystem() { return jobSystem_; }
+  [[nodiscard]] ImGuiOverlay *getOverlay() const { return overlay_.get(); }
+
+  [[nodiscard]] ::Raiden::ECS::World *getWorld() {
+    if (!pluginLoader_.isLoaded()) return nullptr;
+    return pluginLoader_.plugin().getWorld();
+  }
+
+  using GizmoRenderCallback =
+      std::function<void(::Raiden::Renderer::ICommandBuffer &)>;
+  void setGizmoRenderCallback(GizmoRenderCallback cb) { gizmoRenderCb_ = std::move(cb); }
 
 private:
   std::unique_ptr<::Raiden::Platform::IPlatform> platform_;
@@ -54,6 +65,7 @@ private:
 
   std::atomic<bool> running_{false};
   std::chrono::steady_clock::time_point lastFrameTime_;
+  GizmoRenderCallback gizmoRenderCb_;
 };
 
 } // namespace Raiden::Engine

@@ -3,6 +3,8 @@
 #include <Raiden/Assets/IAssetManager.hpp>
 #include <Raiden/Core/PluginABI.hpp>
 #include <Raiden/ECS/Camera.hpp>
+#include <Raiden/ECS/MeshRenderer.hpp>
+#include <Raiden/ECS/Name.hpp>
 #include <Raiden/ECS/Transform.hpp>
 #include <Raiden/ECS/World.hpp>
 #include <Raiden/Logger.hpp>
@@ -11,9 +13,6 @@
 #include <Raiden/Renderer/IRenderDevice.hpp>
 #include <Raiden/Renderer/RenderTypes.hpp>
 
-// simple demo with PBR lighting, KTX2 textures and a glTF cube model + example
-// first person camera + movement
-
 static const Raiden::Core::Logger s_logger("ExampleGame");
 
 bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
@@ -21,10 +20,11 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
                        Raiden::Assets::IAssetManager &assets,
                        Raiden::Platform::IPlatform *platform,
                        Raiden::Audio::IAudioDevice *audio) {
-  // unsed for now
   (void)audio;
 
   platform_ = platform;
+  device_ = &device;
+  assets_ = &assets;
   s_logger.info("Initializing example game...");
 
   if (!actions_.loadFromFile(vfs, "game://config/actions.toml")) {
@@ -33,14 +33,18 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
 
   // camera
   camEntity_ = world_.create();
+  
+  world_.assign<Raiden::ECS::Name>(camEntity_, "Main Camera");
   world_.assign<Raiden::ECS::Camera>(camEntity_);
+  world_.assign<Raiden::ECS::Transform>(camEntity_, Raiden::ECS::Transform{
+    .translation = {0.0F, 0.0F, 3.0F},
+  });
 
   auto &cam = world_.get<Raiden::ECS::Camera>(camEntity_);
-
   cam.setLookAt({0.0F, 0.0F, 3.0F}, {0.0F, 0.0F, 0.0F});
   cam.setPerspective(45.0F, 1.0F, 0.1F, 100.0F);
 
-  // pipeline
+  // main pipeline
   Raiden::Renderer::PipelineDesc pipelineDesc{
       .shader = {"shaders/triangle.slang"},
       .vertexLayout =
@@ -71,80 +75,71 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
     return false;
   }
 
-  // load KTX2 texture through asset manager (synchronous for boot assets)
-  texture_ = assets.loadTextureSync("game://textures/checkerboard.ktx2");
-  if (!texture_) {
-    s_logger.error("Failed to load checkerboard texture");
-    return false;
+  // create ECS entities for the scene
+  // rotating checkerboard cube
+  {
+    auto e = world_.create();
+    world_.assign<Raiden::ECS::Name>(e, "Checkerboard Cube");
+    world_.assign<Raiden::ECS::Transform>(e, Raiden::ECS::Transform{
+      .translation = {0.0F, 0.0F, 0.0F},
+      .scale = {0.5F, 0.5F, 0.5F},
+    });
+    world_.assign<Raiden::ECS::MeshRenderer>(e, Raiden::ECS::MeshRenderer{
+      .meshPath = "game://meshes/cube.glb",
+      .texturePath = "game://textures/checkerboard.ktx2",
+    });
   }
 
-  // load glTF cube model
-  model_ = assets.loadMesh("game://meshes/cube.glb");
-
-  if (!model_) {
-    s_logger.error("Failed to load cube model");
-    return false;
-  }
-
-  s_logger.info("Cube model loaded: {} meshes", model_->meshes.size());
-
-  // PBR test objects
-
+  // PBR cubes
   struct PbrPreset {
+    const char *name;
     glm::vec3 position;
     glm::vec4 color;
     float metallic;
     float roughness;
-    const char *label;
   };
 
   std::array<PbrPreset, 4> presets = {{
-      {.position = {1.0F, 0.0F, 0.0F},
+      {.name = "Rough Cube",
+       .position = {1.0F, 0.0F, 0.0F},
        .color = {1.0F, 0.2F, 0.2F, 1.0F},
        .metallic = 0.0F,
-       .roughness = 0.8F,
-       .label = "rough dielectric"},
-      {.position = {-1.0F, 0.0F, 0.0F},
+       .roughness = 0.8F},
+      {.name = "Smooth Cube",
+       .position = {-1.0F, 0.0F, 0.0F},
        .color = {0.2F, 0.4F, 1.0F, 1.0F},
        .metallic = 0.0F,
-       .roughness = 0.2F,
-       .label = "smooth dielectric"},
-      {.position = {0.0F, 0.8F, 0.0F},
+       .roughness = 0.2F},
+      {.name = "Brushed Metal",
+       .position = {0.0F, 0.8F, 0.0F},
        .color = {0.8F, 0.8F, 0.8F, 1.0F},
        .metallic = 0.9F,
-       .roughness = 0.4F,
-       .label = "brushed metal"},
-      {.position = {0.0F, -0.8F, 0.0F},
+       .roughness = 0.4F},
+      {.name = "Polished Metal",
+       .position = {0.0F, -0.8F, 0.0F},
        .color = {1.0F, 0.8F, 0.2F, 1.0F},
        .metallic = 0.9F,
-       .roughness = 0.1F,
-       .label = "polished metal"},
+       .roughness = 0.1F},
   }};
 
   for (auto &p : presets) {
-    Raiden::Renderer::MaterialDesc matDesc;
-    matDesc.shader = "builtin://pbr";
-    matDesc.baseColorFactor = p.color;
-    matDesc.metallicFactor = p.metallic;
-    matDesc.roughnessFactor = p.roughness;
-
-    // no texture paths -> uses white fallback texture, visible color comes from
-    // baseColorFactor
-    auto mat = device.createMaterial(matDesc, nullptr, nullptr, nullptr,
-                                     nullptr, nullptr);
-    if (mat) {
-      pbrObjects_.push_back({p.position, 0.0F, std::move(mat)});
-    } else {
-      s_logger.error("Failed to create PBR material for '{}'", p.label);
-    }
+    auto e = world_.create();
+    world_.assign<Raiden::ECS::Name>(e, p.name);
+    world_.assign<Raiden::ECS::Transform>(e, Raiden::ECS::Transform{
+      .translation = p.position,
+      .scale = {0.5F, 0.5F, 0.5F},
+    });
+    world_.assign<Raiden::ECS::MeshRenderer>(e, Raiden::ECS::MeshRenderer{
+      .meshPath = "game://meshes/cube.glb",
+      .texturePath = "",
+      .shader = "builtin://pbr",
+      .baseColorFactor = p.color,
+      .metallic = p.metallic,
+      .roughness = p.roughness,
+    });
   }
 
-  s_logger.info("Example game initialized ({} PBR objects).",
-                pbrObjects_.size());
-
   // skybox
-
-  // unit cube vertices (just position, 36 vertices for indexed drawing)
   struct Pos {
     float x, y, z;
   };
@@ -161,12 +156,12 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
   }};
 
   std::array<uint32_t, 36> cubeIndices = {{
-      0, 1, 2, 0, 2, 3,       // back
-      4, 6, 5, 4, 7, 6,     // front
-      3, 7, 4, 3, 4, 0, // left
-      1, 5, 6, 1, 6, 2, // right
-      3, 2, 6, 3, 6, 7, // top
-      0, 4, 5, 0, 5, 1, // bottom
+      0, 1, 2, 0, 2, 3,
+      4, 6, 5, 4, 7, 6,
+      3, 7, 4, 3, 4, 0,
+      1, 5, 6, 1, 6, 2,
+      3, 2, 6, 3, 6, 7,
+      0, 4, 5, 0, 5, 1,
   }};
 
   skyboxIndexCount_ = 36;
@@ -192,14 +187,11 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
     skyboxIndexBuffer_->upload(cubeIndices.data(), sizeof(cubeIndices));
   }
 
-  // load real skybox texture
   skyboxTexture_ = assets.loadTextureSync("game://textures/skybox.ktx2");
   if (!skyboxTexture_) {
-    s_logger.warn("Failed to load skybox cubemap texture, continuing without");
+    s_logger.warn("Failed to load skybox cubemap texture");
   }
 
-  // skybox pipeline: position-only vertex, depth test LEQUAL, no depth write,
-  // no culling
   skyboxPipeline_ = device.createPipeline({
       .shader = {"shaders/skybox.slang"},
       .vertexLayout =
@@ -218,7 +210,46 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
       .depthCompareOp = Raiden::Renderer::CompareOp::LessOrEqual,
   });
 
+  s_logger.info("Example game initialized.");
   return true;
+}
+
+ExampleGame::MeshCache &ExampleGame::getOrCreateCache(
+    const std::string &meshPath, const std::string &texturePath,
+    const std::string &shader, float metallic, float roughness,
+    const glm::vec4 &baseColorFactor) {
+  auto key = meshPath + ":" + shader + ":" + texturePath;
+  auto it = meshCaches_.find(key);
+  if (it != meshCaches_.end()) {
+    return it->second;
+  }
+
+  MeshCache cache;
+  cache.model = assets_->loadMesh(meshPath);
+  if (!cache.model) {
+    s_logger.error("Failed to load mesh '{}'", meshPath);
+  }
+
+  if (!texturePath.empty()) {
+    cache.texture = assets_->loadTextureSync(texturePath);
+    if (!cache.texture) {
+      s_logger.error("Failed to load texture '{}'", texturePath);
+    }
+  }
+
+  Raiden::Renderer::MaterialDesc matDesc;
+  matDesc.shader = shader;
+  matDesc.baseColorFactor = baseColorFactor;
+  matDesc.metallicFactor = metallic;
+  matDesc.roughnessFactor = roughness;
+  cache.material = device_->createMaterial(matDesc, cache.texture, nullptr,
+                                           nullptr, nullptr, nullptr);
+  if (!cache.material) {
+    s_logger.error("Failed to create material for '{}'", meshPath);
+  }
+
+  auto [inserted, _] = meshCaches_.emplace(key, std::move(cache));
+  return inserted->second;
 }
 
 void ExampleGame::update(float deltaTime,
@@ -230,11 +261,9 @@ void ExampleGame::update(float deltaTime,
     quitRequested_ = true;
   }
 
-  // toggle mouse capture on right-click
   static bool prevRmb = false;
   if (input.mouseButtons[2] && !prevRmb) {
-    bool wasCaptured = mouseCaptured_;
-    mouseCaptured_ = !wasCaptured;
+    mouseCaptured_ = !mouseCaptured_;
     platform_->setRelativeMouseMode(mouseCaptured_);
   }
   prevRmb = input.mouseButtons[2];
@@ -246,11 +275,10 @@ void ExampleGame::update(float deltaTime,
     pitch_ = glm::clamp(pitch_, glm::radians(-89.0F), glm::radians(89.0F));
   }
 
-  // movement
   float speed = 3.0F * deltaTime;
   if (const auto *fw = actions_.find("move_forward");
       (fw != nullptr) && fw->pressed) {
-    speed *= 2.0F; // sprint
+    speed *= 2.0F;
   }
 
   glm::vec3 forward(std::cos(yaw_) * std::cos(pitch_), std::sin(pitch_),
@@ -264,27 +292,22 @@ void ExampleGame::update(float deltaTime,
       (mv != nullptr) && mv->pressed) {
     position_ += forward * speed;
   }
-
   if (const auto *mv = actions_.find("move_back");
       (mv != nullptr) && mv->pressed) {
     position_ -= forward * speed;
   }
-
   if (const auto *mv = actions_.find("move_left");
       (mv != nullptr) && mv->pressed) {
     position_ -= right * speed;
   }
-
   if (const auto *mv = actions_.find("move_right");
       (mv != nullptr) && mv->pressed) {
     position_ += right * speed;
   }
-
   if (const auto *mv = actions_.find("move_up");
       (mv != nullptr) && mv->pressed) {
     position_ += up * speed;
   }
-
   if (const auto *mv = actions_.find("move_down");
       (mv != nullptr) && mv->pressed) {
     position_ -= up * speed;
@@ -295,13 +318,20 @@ void ExampleGame::update(float deltaTime,
 
   rotation_ += deltaTime * 45.0F;
 
-  for (auto &obj : pbrObjects_) {
-    obj.rotation += deltaTime * 45.0F;
-  }
+  // update rotating objects
+  world_.view<Raiden::ECS::Name, Raiden::ECS::Transform>().each(
+      [&](Raiden::ECS::Entity, Raiden::ECS::Name &n, Raiden::ECS::Transform &t) {
+        if (n.value == "Checkerboard Cube") {
+          t.rotation = glm::angleAxis(glm::radians(rotation_),
+                                      glm::vec3(0.0F, 1.0F, 0.0F));
+        }
+      });
+
+  Raiden::ECS::updateTransforms(world_);
 }
 
 void ExampleGame::render(Raiden::Renderer::ICommandBuffer &cmd) {
-  // skybox (rendered first with depth test LEQUAL, no depth write)
+  // skybox
   if (skyboxPipeline_ && skyboxTexture_ && skyboxVertexBuffer_ &&
       skyboxIndexBuffer_) {
     cmd.bindPipeline(*skyboxPipeline_);
@@ -311,61 +341,45 @@ void ExampleGame::render(Raiden::Renderer::ICommandBuffer &cmd) {
     cmd.drawIndexed(skyboxIndexCount_);
   }
 
-  // simple pipeline cube (rotating, checkerboard)
-  cmd.bindPipeline(*pipeline_);
+  // render all MeshRenderer entities
+  world_.view<Raiden::ECS::Transform, Raiden::ECS::MeshRenderer>().each(
+      [&](Raiden::ECS::Entity, Raiden::ECS::Transform &t,
+          Raiden::ECS::MeshRenderer &mr) {
+        auto &cache = getOrCreateCache(mr.meshPath, mr.texturePath, mr.shader,
+                                       mr.metallic, mr.roughness,
+                                       mr.baseColorFactor);
 
-  float const s = 0.5F;
-  glm::mat4 simpleModel = glm::scale(glm::mat4(1.0F), glm::vec3(s)) *
-                          glm::rotate(glm::mat4(1.0F), glm::radians(rotation_),
-                                      glm::vec3(0.0F, 1.0F, 0.0F));
+        if (cache.material) {
+          cache.material->bind(cmd);
+        }
 
-  cmd.pushConstants(0, sizeof(glm::mat4), &simpleModel);
-  cmd.bindTexture(0, *texture_);
+        cmd.pushConstants(0, sizeof(glm::mat4), &t.worldMatrix);
 
-  for (auto &mesh : model_->meshes) {
-    if (!mesh.isValid()) {
-      continue;
-    }
+        if (cache.texture) {
+          cmd.bindTexture(0, *cache.texture);
+        }
 
-    cmd.bindVertexBuffer(*mesh.vertexBuffer);
-    cmd.bindIndexBuffer(*mesh.indexBuffer);
-    cmd.drawIndexed(mesh.indexCount);
-  }
-
-  // PBR material cubes
-  for (auto &obj : pbrObjects_) {
-    obj.material->bind(cmd);
-
-    glm::mat4 m = glm::translate(glm::mat4(1.0F), obj.position) *
-                  glm::scale(glm::mat4(1.0F), glm::vec3(0.5F)) *
-                  glm::rotate(glm::mat4(1.0F), glm::radians(obj.rotation),
-                              glm::vec3(0.0F, 1.0F, 0.0F));
-
-    cmd.pushConstants(0, sizeof(glm::mat4), &m);
-
-    for (auto &mesh : model_->meshes) {
-      if (!mesh.isValid()) {
-        continue;
-      }
-
-      cmd.bindVertexBuffer(*mesh.vertexBuffer);
-      cmd.bindIndexBuffer(*mesh.indexBuffer);
-      cmd.drawIndexed(mesh.indexCount);
-    }
-  }
+        if (cache.model) {
+          for (auto &mesh : cache.model->meshes) {
+            if (!mesh.isValid()) {
+              continue;
+            }
+            cmd.bindVertexBuffer(*mesh.vertexBuffer);
+            cmd.bindIndexBuffer(*mesh.indexBuffer);
+            cmd.drawIndexed(mesh.indexCount);
+          }
+        }
+      });
 }
 
 void ExampleGame::shutdown() {
   s_logger.info("Shutting down example game...");
-
-  pbrObjects_.clear();
+  meshCaches_.clear();
   skyboxPipeline_.reset();
   skyboxTexture_.reset();
   skyboxVertexBuffer_.reset();
   skyboxIndexBuffer_.reset();
   pipeline_.reset();
-  texture_.reset();
-  model_.reset();
 }
 
 extern "C" {

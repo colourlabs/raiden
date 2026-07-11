@@ -52,4 +52,4 @@ private:
                           uint32_t height);
 };
 
-}; // namespace Raiden::Renderer
+} // namespace Raiden::Renderer

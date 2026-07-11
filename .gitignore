@@ -5,3 +5,6 @@ personal_TODO.md
 
 # downloaded tool binaries
 tools/
+
+__pycache__/
+*.egg-info/

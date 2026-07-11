@@ -4,13 +4,14 @@ project(raiden)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-option(RAIDEN_USE_QT "Build with Qt6 support (editor)" ON)
+option(RAIDEN_USE_QT "Build with Qt5 support (editor)" ON)
 
 if(WIN32)
   add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
 endif()
 
 include(cmake/CPM.cmake)
+include(cmake/RaidenAddGame.cmake)
 
 CPMAddPackage(
   NAME imgui
@@ -22,6 +23,12 @@ CPMAddPackage(
   NAME implot
   GITHUB_REPOSITORY epezent/implot
   GIT_TAG v0.17
+)
+
+CPMAddPackage(
+  NAME nlohmann_json
+  GITHUB_REPOSITORY nlohmann/json
+  GIT_TAG v3.11.3
 )
 
 function(raiden_set_compile_options target)

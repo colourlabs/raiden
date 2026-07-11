@@ -18,6 +18,9 @@ public:
   virtual void *getNativeWindowHandle() = 0;
 
   virtual void getWindowSize(int &width, int &height) const = 0;
+  virtual bool hasResizePending() { return false; }
+  virtual bool isWindowExposed() { return true; }
+  virtual void flushPendingPresentation() {}
 
   virtual const InputState &getInputState() const = 0;
   virtual void setRelativeMouseMode(bool enabled) = 0;

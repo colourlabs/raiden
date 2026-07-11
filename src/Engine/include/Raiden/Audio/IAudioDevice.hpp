@@ -6,6 +6,10 @@
 #include <cstdint>
 #include <string_view>
 
+namespace Raiden::Jobs {
+class JobSystem;
+}
+
 namespace Raiden::Audio {
 
 class IAudioDevice {
@@ -17,6 +21,7 @@ public:
   IAudioDevice& operator=(IAudioDevice&&) = delete;
   virtual ~IAudioDevice() = default;
 
+  virtual void setJobSystem(::Raiden::Jobs::JobSystem & /*js*/) {}
   virtual bool init(const ::Raiden::Core::AudioConfig &config, ::Raiden::Core::IVirtualFileSystem &vfs) = 0;
   virtual void shutdown() = 0;
 

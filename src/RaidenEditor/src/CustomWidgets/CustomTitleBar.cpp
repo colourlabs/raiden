@@ -1,6 +1,7 @@
 #include <RaidenEditor/CustomWidgets/CustomTitleBar.hpp>
 #include <RaidenEditor/Icons/FluentIcons.hpp>
 
+#include <QEvent>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMainWindow>
@@ -59,6 +60,8 @@ CustomTitleBar::CustomTitleBar(QMainWindow *window, QWidget *parent)
     updateMaximizeGlyph();
   });
   connect(closeButton_, &QPushButton::clicked, window_, &QMainWindow::close);
+
+  window_->installEventFilter(this);
 }
 
 void CustomTitleBar::setTitleText(const QString &text) {
@@ -70,6 +73,13 @@ void CustomTitleBar::updateMaximizeGlyph() {
       window_->isMaximized()
           ? FluentIcon::load("SquareMultiple")
           : FluentIcon::load("Square"));
+}
+
+bool CustomTitleBar::eventFilter(QObject *obj, QEvent *event) {
+  if (obj == window_ && event->type() == QEvent::WindowStateChange) {
+    updateMaximizeGlyph();
+  }
+  return QWidget::eventFilter(obj, event);
 }
 
 void CustomTitleBar::mousePressEvent(QMouseEvent *event) {

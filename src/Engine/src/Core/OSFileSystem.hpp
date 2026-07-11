@@ -61,6 +61,10 @@ public:
   std::string readAll(std::string_view path) override;
   std::vector<std::byte> readBytes(std::string_view path) override;
 
+  bool write(std::string_view path, std::string_view data) override;
+  bool writeBytes(std::string_view path,
+                  const std::vector<std::byte> &data) override;
+
   std::string resolveToRealPath(std::string_view virtualPath) const;
 
 private:

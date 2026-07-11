@@ -14,6 +14,7 @@ bool VulkanPipeline::initDynamic(VkDevice device, VkRenderPass renderPass,
                                  const VulkanShader &vertexShader,
                                  const VulkanShader &fragmentShader,
                                  const VertexInputDescription &vertexDesc,
+                                 VkPrimitiveTopology topology,
                                  bool depthTestEnable, bool depthWriteEnable,
                                  VkCompareOp depthCompareOp,
                                  VkCullModeFlags cullMode,
@@ -38,7 +39,7 @@ bool VulkanPipeline::initDynamic(VkDevice device, VkRenderPass renderPass,
 
   VkPipelineInputAssemblyStateCreateInfo inputAssembly{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-      .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+      .topology = topology,
   };
 
   VkPipelineViewportStateCreateInfo viewportState{

@@ -1,4 +1,5 @@
 #include <Raiden/Engine/GamePluginLoader.hpp>
+#include <Raiden/Core/PluginABI.hpp>
 #include <Raiden/Logger.hpp>
 
 namespace Raiden::Engine {
@@ -26,6 +27,8 @@ bool GamePluginLoader::load(std::string_view path) {
     return false;
   }
 
+  auto *versionFn = reinterpret_cast<int (*)()>(
+      GetProcAddress(reinterpret_cast<HMODULE>(handle_), "raiden_abi_version"));
   auto *create = reinterpret_cast<IGamePlugin *(*)()>(
       GetProcAddress(reinterpret_cast<HMODULE>(handle_), "raiden_create_plugin"));
   destroy_ = reinterpret_cast<void (*)(IGamePlugin *)>(
@@ -39,14 +42,24 @@ bool GamePluginLoader::load(std::string_view path) {
     return false;
   }
 
+  auto *versionFn = reinterpret_cast<int (*)()>(
+      dlsym(handle_, "raiden_abi_version"));
   auto *create = reinterpret_cast<IGamePlugin *(*)()>(
       dlsym(handle_, "raiden_create_plugin"));
   destroy_ = reinterpret_cast<void (*)(IGamePlugin *)>(
       dlsym(handle_, "raiden_destroy_plugin"));
 #endif
 
-  if ((create == nullptr) || (destroy_ == nullptr)) {
-    s_logger.error("Plugin '{}' missing create/destroy symbols", path);
+  if ((versionFn == nullptr) || (create == nullptr) || (destroy_ == nullptr)) {
+    s_logger.error("Plugin '{}' missing required symbols (abi_version, create, destroy)", path);
+    unload();
+    return false;
+  }
+
+  int pluginVersion = versionFn();
+  if (pluginVersion != RAIDEN_ABI_VERSION) {
+    s_logger.error("Plugin '{}' ABI version mismatch: engine={}, plugin={}",
+                   path, RAIDEN_ABI_VERSION, pluginVersion);
     unload();
     return false;
   }

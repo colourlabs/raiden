@@ -170,6 +170,10 @@ bool EngineWindow::event(QEvent *event) {
     closeRequested_ = true;
     return true;
 
+  case QEvent::Resize:
+    resized_ = true;
+    return QWindow::event(event);
+
   default:
     break;
   }
@@ -215,6 +219,27 @@ void QtPlatform::getWindowSize(int &width, int &height) const {
   if (window_ != nullptr) {
     width = window_->width();
     height = window_->height();
+  }
+}
+
+bool QtPlatform::hasResizePending() {
+  if (window_ != nullptr) {
+    auto *ew = qobject_cast<EngineWindow *>(window_);
+    if (ew != nullptr && ew->wasResized()) {
+      ew->clearResizeFlag();
+      return true;
+    }
+  }
+  return false;
+}
+
+bool QtPlatform::isWindowExposed() {
+  return window_ != nullptr && window_->isExposed();
+}
+
+void QtPlatform::flushPendingPresentation() {
+  if (wlDisplay_ != nullptr) {
+    wl_display_roundtrip(wlDisplay_);
   }
 }
 

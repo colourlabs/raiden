@@ -15,22 +15,22 @@ struct InputState {
   int mouseDeltaX = 0;
   int mouseDeltaY = 0;
   bool mouseButtons[3]{};
-  float scrollY = 0.0f;
+  float scrollY = 0.0F;
 
   // gamepad
   bool gamepadConnected = false;
-  float leftStickX = 0.0f;
-  float leftStickY = 0.0f;
-  float rightStickX = 0.0f;
-  float rightStickY = 0.0f;
-  float leftTrigger = 0.0f;
-  float rightTrigger = 0.0f;
+  float leftStickX = 0.0F;
+  float leftStickY = 0.0F;
+  float rightStickX = 0.0F;
+  float rightStickY = 0.0F;
+  float leftTrigger = 0.0F;
+  float rightTrigger = 0.0F;
   bool gamepadButtons[kMaxGamepadButtons]{};
 
   void endFrame() {
     mouseDeltaX = 0;
     mouseDeltaY = 0;
-    scrollY = 0.0f;
+    scrollY = 0.0F;
   }
 };
 

@@ -2,6 +2,7 @@
 
 #include <array>
 #include <format>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <algorithm>
@@ -86,6 +87,9 @@ public:
 
   static void setMinLogLevel(LogLevel level);
   static LogLevel getMinLogLevel();
+
+  using LogSink = std::function<void(LogLevel, std::string_view, std::string_view, std::string_view)>;
+  static void setLogSink(LogSink sink);
 
 private:
   template <typename... Args>

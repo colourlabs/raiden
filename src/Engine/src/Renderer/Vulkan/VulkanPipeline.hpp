@@ -36,6 +36,7 @@ public:
                    const VulkanShader &vertexShader,
                    const VulkanShader &fragmentShader,
                    const VertexInputDescription &vertexDesc,
+                   VkPrimitiveTopology topology,
                    bool depthTestEnable, bool depthWriteEnable,
                    VkCompareOp depthCompareOp, VkCullModeFlags cullMode,
                    VkSampleCountFlagBits sampleCount,

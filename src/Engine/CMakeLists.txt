@@ -92,6 +92,7 @@ endif()
 add_library(EngineCore STATIC
   src/Engine/Application.cpp
   src/Core/Logger.cpp
+  src/Core/ConfigLoader.cpp
 
   src/Jobs/JobSystem.cpp
 
@@ -103,6 +104,8 @@ add_library(EngineCore STATIC
   src/Engine/ImGuiOverlay.cpp
   src/Engine/VulkanImGuiBackend.cpp
 
+  src/Editor/GizmoRenderer.cpp
+
   src/Platform/SDL3/SDL3Platform.cpp
 
   src/Input/ActionMap.cpp
@@ -113,6 +116,8 @@ add_library(EngineCore STATIC
   src/Assets/KtxLoader.cpp
   src/Assets/GltfLoader.cpp
   src/Assets/StbImageLoader.cpp
+
+  src/Scene/SceneSerializer.cpp
 
   src/Renderer/Vulkan/VulkanAllocator.cpp
   src/Renderer/Vulkan/VulkanDevice.cpp
@@ -195,6 +200,7 @@ target_link_libraries(EngineCore PUBLIC
   glm::glm
   VulkanMemoryAllocator
   tomlplusplus::tomlplusplus
+  nlohmann_json::nlohmann_json
   ktx
   fastgltf::fastgltf
   OpenAL::OpenAL
@@ -214,8 +220,8 @@ endif()
 
 # mark external dependency headers as SYSTEM (skipping ALIAS/IMPORTED targets with ::)
 foreach(dep IN ITEMS volk VulkanMemoryAllocator SDL3::SDL3 glm::glm
-                     tomlplusplus::tomlplusplus ktx fastgltf::fastgltf
-                     OpenAL::OpenAL miniaudio)
+                     tomlplusplus::tomlplusplus nlohmann_json::nlohmann_json
+                     ktx fastgltf::fastgltf OpenAL::OpenAL miniaudio)
   if(TARGET ${dep} AND NOT ${dep} MATCHES "::")
     set_target_properties(${dep} PROPERTIES SYSTEM ON)
   endif()
@@ -229,3 +235,16 @@ if(TARGET opus AND TARGET opusfile)
 endif()
 
 target_compile_definitions(EngineCore PRIVATE _CRT_SECURE_NO_WARNINGS)
+
+# OBJECT library for plugin ABI exports.  Linked with --whole-archive into every
+# game plugin so raiden_abi_version() survives --gc-sections and is always in the
+# dynamic symbol table for dlsym() lookup.
+add_library(RaidenPluginABI OBJECT src/Core/PluginABI.cpp)
+set_target_properties(RaidenPluginABI PROPERTIES
+  POSITION_INDEPENDENT_CODE ON
+)
+target_include_directories(RaidenPluginABI PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+target_link_libraries(RaidenPluginABI PRIVATE glm::glm)
+raiden_set_compile_options(RaidenPluginABI)

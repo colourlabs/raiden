@@ -1,10 +1,19 @@
 add_library(RaidenEditor STATIC
   src/EditorMainWindow.cpp
+  src/Core/EditorContext.cpp
+  src/Core/ProjectDiscovery.cpp
   src/CustomWidgets/CustomTitleBar.cpp
   src/Helpers/FramelessResizeHelper.cpp
+  src/Widgets/ProjectLauncherDialog.cpp
+  src/Widgets/NewProjectDialog.cpp
   include/RaidenEditor/EditorMainWindow.hpp
+  include/RaidenEditor/GizmoMode.hpp
+  include/RaidenEditor/Core/EditorContext.hpp
+  include/RaidenEditor/Core/ProjectDiscovery.hpp
   include/RaidenEditor/CustomWidgets/CustomTitleBar.hpp
   include/RaidenEditor/Helpers/FramelessResizeHelper.hpp
+  include/RaidenEditor/Widgets/ProjectLauncherDialog.hpp
+  include/RaidenEditor/Widgets/NewProjectDialog.hpp
   src/Icons/FluentIcons.cpp
   include/RaidenEditor/Icons/FluentIcons.hpp
   editor_resources.qrc
@@ -15,6 +24,7 @@ raiden_set_compile_options(RaidenEditor)
 target_include_directories(RaidenEditor PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
+  ${imgui_SOURCE_DIR}
 )
 
 target_link_libraries(RaidenEditor PUBLIC

@@ -11,6 +11,7 @@ namespace {
 
 LogLevel g_minLogLevel = LogLevel::Info; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 std::mutex g_logMutex; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+Logger::LogSink g_logSink; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 const char *get_level_color(LogLevel level) {
   switch (level) {
@@ -76,6 +77,11 @@ LogLevel Logger::getMinLogLevel() {
   return g_minLogLevel;
 }
 
+void Logger::setLogSink(LogSink sink) {
+  std::scoped_lock lock(g_logMutex);
+  g_logSink = std::move(sink);
+}
+
 bool Logger::should_log(LogLevel level) {
   std::scoped_lock lock(g_logMutex);
   return level >= g_minLogLevel;
@@ -83,7 +89,7 @@ bool Logger::should_log(LogLevel level) {
 
 void Logger::log_internal(LogLevel level, std::string_view tag,
                           std::string_view message) {
-  static bool ansiInitialized = (enableWindowsAnsi(), true);
+  enableWindowsAnsi();
   std::scoped_lock lock(g_logMutex);
 
   std::string timeStr = get_current_time_string();
@@ -96,6 +102,10 @@ void Logger::log_internal(LogLevel level, std::string_view tag,
     std::cerr << logLine << std::flush;
   } else {
     std::cout << logLine << std::flush;
+  }
+
+  if (g_logSink) {
+    g_logSink(level, tag, message, timeStr);
   }
 }
 

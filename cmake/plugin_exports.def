@@ -1,3 +1,4 @@
 EXPORTS
+  raiden_abi_version
   raiden_create_plugin
   raiden_destroy_plugin

@@ -2,6 +2,8 @@
 
 #include <Raiden/Engine/IGamePlugin.hpp>
 
+inline const int RAIDEN_ABI_VERSION = 1;
+
 extern "C" {
 
 #ifdef _WIN32
@@ -10,7 +12,9 @@ extern "C" {
 #define RAIDEN_EXPORT __attribute__((visibility("default")))
 #endif
 
-RAIDEN_EXPORT Raiden::Engine::IGamePlugin* raiden_create_plugin();
-RAIDEN_EXPORT void raiden_destroy_plugin(Raiden::Engine::IGamePlugin* plugin);
+RAIDEN_EXPORT Raiden::Engine::IGamePlugin *raiden_create_plugin();
+RAIDEN_EXPORT void raiden_destroy_plugin(Raiden::Engine::IGamePlugin *plugin);
+
+RAIDEN_EXPORT int raiden_abi_version();
 
 }

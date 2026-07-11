@@ -167,4 +167,4 @@ bool VulkanFrameContext::endFrame(VulkanSwapchain &swapchain,
   return true;
 }
 
-}; // namespace Raiden::Renderer
+} // namespace Raiden::Renderer

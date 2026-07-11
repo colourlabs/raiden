@@ -91,9 +91,16 @@ enum class CompareOp : uint8_t {
   LessOrEqual,
 };
 
+enum class Topology : uint8_t {
+  TriangleList,
+  LineList,
+  LineStrip,
+};
+
 struct PipelineDesc {
   ShaderDesc shader;
   VertexLayout vertexLayout;
+  Topology topology = Topology::TriangleList;
   bool depthTestEnable = true;
   bool depthWriteEnable = true;
   bool blendEnable = false;
@@ -168,6 +175,11 @@ struct Vertex {
   glm::vec3 normal;
   glm::vec3 color;
   glm::vec2 uv;
+};
+
+struct LineVertex {
+  glm::vec3 pos;
+  glm::vec4 color;
 };
 
 } // namespace Raiden::Renderer

@@ -73,6 +73,8 @@ OSFile::OSFile(const std::string &path) : fp_(std::fopen(path.c_str(), "rb")) {
   }
 
   fileSize_ = static_cast<size_t>(pos);
+
+  std::fseek(fp_, 0, SEEK_SET);
 }
 
 OSFile::~OSFile() { close(); }
@@ -191,6 +193,47 @@ std::vector<std::byte> OSFileSystem::readBytes(std::string_view path) {
     file->read(result.data(), sz);
   }
   return result;
+}
+
+bool OSFileSystem::write(std::string_view path, std::string_view data) {
+  std::shared_lock lock(mutex_);
+  std::string realPath = resolveToRealPath(path);
+  lock.unlock();
+
+  auto parent = std::filesystem::path(realPath).parent_path();
+  if (!parent.empty()) {
+    std::error_code ec;
+    std::filesystem::create_directories(parent, ec);
+    if (ec) {
+      s_logger.error("Failed to create directories for '{}': {}",
+                     realPath, ec.message());
+      return false;
+    }
+  }
+
+  auto *fp = std::fopen(realPath.c_str(), "wb");
+  if (fp == nullptr) {
+    s_logger.error("Failed to open for writing: '{}'", realPath);
+    return false;
+  }
+
+  size_t written = std::fwrite(data.data(), 1, data.size(), fp);
+  std::fclose(fp);
+
+  if (written != data.size()) {
+    s_logger.error("Short write to '{}': {} of {} bytes", realPath, written,
+                   data.size());
+    return false;
+  }
+
+  s_logger.info("Wrote {} bytes to '{}'", written, path);
+  return true;
+}
+
+bool OSFileSystem::writeBytes(std::string_view path,
+                              const std::vector<std::byte> &data) {
+  return write(path, std::string_view(reinterpret_cast<const char *>(data.data()),
+                                      data.size()));
 }
 
 bool OSFileSystem::mount(std::string_view virtualPath,

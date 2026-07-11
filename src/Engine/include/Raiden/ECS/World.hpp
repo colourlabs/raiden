@@ -43,9 +43,9 @@ template <typename T> void componentMove(void *dst, void *src) {
     T *s = static_cast<T *>(src);
     T *d = static_cast<T *>(dst);
     if constexpr (std::is_move_constructible_v<T>) {
-      *d = std::move(*s);
+      new (d) T(std::move(*s));
     } else {
-      *d = *s;
+      new (d) T(*s);
     }
   }
 }

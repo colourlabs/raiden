@@ -15,11 +15,6 @@ public:
   [[nodiscard]] VkCommandBuffer handle() const { return cmd_; }
   [[nodiscard]] uint32_t drawCalls() const { return drawCalls_; }
   [[nodiscard]] uint32_t triangles() const { return triangles_; }
-  
-  void resetCounters() {
-    drawCalls_ = 0;
-    triangles_ = 0;
-  }
 
   void bindPipeline(const IPipeline &pipeline) override;
   void bindVertexBuffer(const IBuffer &buffer) override;

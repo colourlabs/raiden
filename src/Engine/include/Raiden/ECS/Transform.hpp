@@ -13,15 +13,15 @@
 namespace Raiden::ECS {
 
 struct Transform {
-  glm::vec3 translation{0.f};
-  glm::quat rotation{1.f, 0.f, 0.f, 0.f};
-  glm::vec3 scale{1.f};
-  glm::mat4 worldMatrix{1.f};
+  glm::vec3 translation{0.0F};
+  glm::quat rotation{1.0F, 0.0F, 0.0F, 0.0F};
+  glm::vec3 scale{1.0F};
+  glm::mat4 worldMatrix{1.0F};
   Entity parent = NullEntity;
 
   glm::mat4 localMatrix() const {
-    return glm::translate(glm::mat4{1.f}, translation) *
-           glm::mat4_cast(rotation) * glm::scale(glm::mat4{1.f}, scale);
+    return glm::translate(glm::mat4{1.0F}, translation) *
+           glm::mat4_cast(rotation) * glm::scale(glm::mat4{1.0F}, scale);
   }
 };
 

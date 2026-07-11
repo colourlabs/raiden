@@ -102,7 +102,7 @@ void applyRaidenTheme() {
   style.IndentSpacing = 12.0F;
 }
 
-void statItem(const char *label, const char *fmt, ...) {
+IM_FMTARGS(2) void statItem(const char *label, const char *fmt, ...) {
   ImGui::TextDisabled("%s", label);
   ImGui::SameLine();
 
@@ -350,6 +350,10 @@ void ImGuiOverlay::shutdown() {
 
   ImPlot::DestroyContext();
   ImGui::DestroyContext();
+}
+
+bool ImGuiOverlay::wantsCaptureMouse()  {
+  return ImGui::GetIO().WantCaptureMouse;
 }
 
 } // namespace Raiden::Engine

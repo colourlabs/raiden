@@ -38,4 +38,4 @@ public:
   virtual void processLoadQueue() = 0;
 };
 
-}; // namespace Raiden::Assets
+} // namespace Raiden::Assets

@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "entities": [
+    {
+      "name": "Main Camera",
+      "transform": {
+        "translation": [0.0, 0.0, 3.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0],
+        "parent": -1
+      },
+      "camera": {
+        "active": true,
+        "fov": 45.0,
+        "zNear": 0.1,
+        "zFar": 100.0
+      }
+    },
+    {
+      "name": "Checkerboard Cube",
+      "transform": {
+        "translation": [0.0, 0.0, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [0.5, 0.5, 0.5],
+        "parent": -1
+      },
+      "meshRenderer": {
+        "mesh": "game://meshes/cube.glb",
+        "texture": "game://textures/checkerboard.ktx2",
+        "shader": "builtin://pbr",
+        "metallic": 0.0,
+        "roughness": 0.8
+      }
+    },
+    {
+      "name": "Rough Cube",
+      "transform": {
+        "translation": [1.0, 0.0, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [0.5, 0.5, 0.5],
+        "parent": -1
+      },
+      "meshRenderer": {
+        "mesh": "game://meshes/cube.glb",
+        "texture": "",
+        "shader": "builtin://pbr",
+        "metallic": 0.0,
+        "roughness": 0.8
+      }
+    },
+    {
+      "name": "Smooth Cube",
+      "transform": {
+        "translation": [-1.0, 0.0, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [0.5, 0.5, 0.5],
+        "parent": -1
+      },
+      "meshRenderer": {
+        "mesh": "game://meshes/cube.glb",
+        "texture": "",
+        "shader": "builtin://pbr",
+        "metallic": 0.0,
+        "roughness": 0.2
+      }
+    },
+    {
+      "name": "Brushed Metal",
+      "transform": {
+        "translation": [0.0, 0.8, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [0.5, 0.5, 0.5],
+        "parent": -1
+      },
+      "meshRenderer": {
+        "mesh": "game://meshes/cube.glb",
+        "texture": "",
+        "shader": "builtin://pbr",
+        "metallic": 0.9,
+        "roughness": 0.4
+      }
+    },
+    {
+      "name": "Polished Metal",
+      "transform": {
+        "translation": [0.0, -0.8, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [0.5, 0.5, 0.5],
+        "parent": -1
+      },
+      "meshRenderer": {
+        "mesh": "game://meshes/cube.glb",
+        "texture": "",
+        "shader": "builtin://pbr",
+        "metallic": 0.9,
+        "roughness": 0.1
+      }
+    }
+  ]
+}

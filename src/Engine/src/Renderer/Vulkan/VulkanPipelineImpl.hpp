@@ -17,7 +17,8 @@ public:
 
   bool init(VkDevice device, VkRenderPass renderPass,
             const VulkanShader &vertShader, const VulkanShader &fragShader,
-            const VertexInputDescription &vertexDesc, bool depthTestEnable,
+            const VertexInputDescription &vertexDesc,
+            VkPrimitiveTopology topology, bool depthTestEnable,
             bool depthWriteEnable = true,
             VkCompareOp depthCompareOp = VK_COMPARE_OP_LESS,
             VkCullModeFlags cullMode = VK_CULL_MODE_BACK_BIT,

@@ -35,6 +35,31 @@ public:
   void renderDrawData(::Raiden::Renderer::ICommandBuffer &cmd);
   void shutdown();
 
+  void setCameraMatrices(const float *view, const float *proj, int vpW,
+                         int vpH) {
+    if (view != nullptr) {
+      std::copy(view, view + cameraViewMatrix_.size(), cameraViewMatrix_.begin());
+    }
+    if (proj != nullptr) {
+      std::copy(proj, proj + cameraProjMatrix_.size(), cameraProjMatrix_.begin());
+    }
+    cameraViewportW_ = vpW;
+    cameraViewportH_ = vpH;
+  }
+
+  [[nodiscard]] const float *cameraViewMatrix() const {
+    return cameraViewMatrix_.data();
+  }
+
+  [[nodiscard]] const float *cameraProjMatrix() const {
+    return cameraProjMatrix_.data();
+  }
+
+  [[nodiscard]] int cameraViewportW() const { return cameraViewportW_; }
+  [[nodiscard]] int cameraViewportH() const { return cameraViewportH_; }
+
+  [[nodiscard]] static bool wantsCaptureMouse();
+
 private:
   void pushPerfData(const ProfilerFrameData &profiler, float dt);
 
@@ -62,6 +87,11 @@ private:
   int perfAccumFrames_ = 0;
   float avgCpuMs_ = 0.0F;
   float avgGpuMs_ = 0.0F;
+
+  std::array<float, 16> cameraViewMatrix_{};
+  std::array<float, 16> cameraProjMatrix_{};
+  int cameraViewportW_ = 0;
+  int cameraViewportH_ = 0;
 };
 
 } // namespace Raiden::Engine

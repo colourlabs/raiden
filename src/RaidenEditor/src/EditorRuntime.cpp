@@ -1,16 +1,21 @@
 #include <Raiden/Application.hpp>
+#include <Raiden/Core/ConfigLoader.hpp>
 #include <Raiden/Core/IVirtualFileSystem.hpp>
+#include <Raiden/ECS/Name.hpp>
+#include <Raiden/ECS/World.hpp>
 #include <Raiden/Logger.hpp>
-
-#include <toml++/toml.hpp>
+#include <Raiden/Renderer/ICommandBuffer.hpp>
 
 #include <Raiden/Platform/Qt/QtPlatform.hpp>
 #include <Renderer/Vulkan/VulkanDevice.hpp>
 
 #include <RaidenEditor/EditorMainWindow.hpp>
+#include <RaidenEditor/Core/EditorContext.hpp>
+#include <RaidenEditor/Widgets/ProjectLauncherDialog.hpp>
 
 #include <QApplication>
 #include <QFile>
+#include <QFileSystemWatcher>
 #include <QFont>
 #include <QFontDatabase>
 #include <QPalette>
@@ -24,53 +29,6 @@
 #include <memory>
 
 static const Raiden::Core::Logger s_logger("EditorRuntime");
-
-static bool loadConfig(Raiden::Core::IVirtualFileSystem &vfs,
-                       Raiden::Core::EngineConfig &outConfig) {
-  try {
-    std::string content = vfs.readAll("game://engine.toml");
-    if (content.empty()) {
-      s_logger.warn("engine.toml not found in datapack.");
-      return false;
-    }
-
-    auto table = toml::parse(content);
-
-    if (auto *win = table["window"].as_table()) {
-      outConfig.window.title =
-          (*win)["title"].value_or(std::string("Raiden Editor"));
-      outConfig.window.width = (*win)["width"].value_or(1280);
-      outConfig.window.height = (*win)["height"].value_or(720);
-      outConfig.window.resizable = (*win)["resizable"].value_or(true);
-      outConfig.window.fullscreen = (*win)["fullscreen"].value_or(false);
-      outConfig.window.vsync = (*win)["vsync"].value_or(true);
-    }
-
-    if (auto *rend = table["render"].as_table()) {
-      outConfig.enableValidation = (*rend)["validation"].value_or(false);
-
-      auto aa = (*rend)["antialiasing"].value_or(std::string("none"));
-      if (aa == "msaa_x2") {
-        outConfig.antialiasing = Raiden::Core::Antialiasing::MSAAx2;
-      } else if (aa == "msaa_x4") {
-        outConfig.antialiasing = Raiden::Core::Antialiasing::MSAAx4;
-      } else if (aa == "msaa_x8") {
-        outConfig.antialiasing = Raiden::Core::Antialiasing::MSAAx8;
-      } else {
-        outConfig.antialiasing = Raiden::Core::Antialiasing::None;
-      }
-    }
-
-    return true;
-  } catch (const toml::parse_error &err) {
-    s_logger.error("Failed to parse engine.toml: {}", err.description());
-    return false;
-  }
-}
-
-static void printUsage(const char *argv0) {
-  s_logger.info("Usage: {} --datapack <path>", argv0);
-}
 
 static void loadInterFont() {
   auto loadFont = [](const QString &path, int pointSize) -> bool {
@@ -108,7 +66,9 @@ public:
   int styleHint(StyleHint hint, const QStyleOption *option,
                 const QWidget *widget,
                 QStyleHintReturn *returnData) const override {
-    if (hint == SH_UnderlineShortcut) return 0;
+    if (hint == SH_UnderlineShortcut) {
+      return 0;
+    }
     return QProxyStyle::styleHint(hint, option, widget, returnData);
   }
 };
@@ -147,59 +107,100 @@ static constexpr const char *kFallbackStyleSheet = R"(
   }
 )";
 
-static void loadStyleSheet(QApplication &qtApp) {
+static void loadStyleSheet(QApplication &qtApp,
+                           const std::string &datapackPath) {
+  auto fsPath = datapackPath + "/theme/styles.qss";
+  QFile fsFile(QString::fromStdString(fsPath));
+
+  if (fsFile.open(QFile::ReadOnly | QFile::Text)) {
+    QTextStream stream(&fsFile);
+    qtApp.setStyleSheet(stream.readAll());
+    s_logger.info("Loaded stylesheet from datapack: {}", fsPath);
+
+    auto *watcher = new QFileSystemWatcher(&qtApp);
+    watcher->addPath(QString::fromStdString(fsPath));
+    QObject::connect(watcher, &QFileSystemWatcher::fileChanged,
+                     [watcher, &qtApp, fsPath](const QString &path) {
+                       // re-add path in case editor replaced the file
+                       watcher->addPath(path);
+                       QFile f(path);
+                       if (f.open(QFile::ReadOnly | QFile::Text)) {
+                         QTextStream s(&f);
+                         qtApp.setStyleSheet(s.readAll());
+                         s_logger.info("Stylesheet reloaded: {}", fsPath);
+                       }
+                     });
+    return;
+  }
+
+  // fallback to built-in QRC resources
   QFile file(QStringLiteral(":/editor/theme/styles.qss"));
   if (file.open(QFile::ReadOnly | QFile::Text)) {
     QTextStream stream(&file);
     qtApp.setStyleSheet(stream.readAll());
     s_logger.info("Loaded stylesheet from built-in resources");
   } else {
-    s_logger.warn("styles.qss not found in resources, using fallback theme");
+    s_logger.warn("styles.qss not found, using fallback theme");
     qtApp.setStyleSheet(QString::fromLatin1(kFallbackStyleSheet));
   }
 }
 
 int main(int argc, char *argv[]) {
   std::string datapackPath;
+  bool standalone = false;
 
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--datapack") == 0 && i + 1 < argc) {
       datapackPath = argv[++i];
+    } else if (std::strcmp(argv[i], "--standalone") == 0) {
+      standalone = true;
     }
-  }
-
-  if (datapackPath.empty()) {
-    s_logger.error("No datapack specified.");
-    printUsage(argv[0]);
-    return 1;
-  }
-
-  std::filesystem::path dp = std::filesystem::absolute(datapackPath);
-  if (!std::filesystem::is_directory(dp)) {
-    s_logger.error("Datapack directory not found: '{}'", dp.string());
-    return 1;
-  }
-
-  auto vfs = Raiden::Core::createOSFileSystem();
-  if (!vfs->mount("game://", dp.string())) {
-    s_logger.error("Failed to mount datapack.");
-    return 1;
   }
 
   QApplication qtApp(argc, argv);
   applyDarkPalette();
   loadInterFont();
-  loadStyleSheet(qtApp);
+
+  // if no --datapack, show the project launcher (unless --standalone)
+  if (datapackPath.empty() && !standalone) {
+    RaidenEditor::ProjectLauncherDialog launcher;
+    if (launcher.exec() != QDialog::Accepted) {
+      return 0;
+    }
+    datapackPath = launcher.selectedProjectPath();
+  }
+
+  // if still empty after launcher, run standalone with defaults
+  std::filesystem::path dp;
+  auto vfs = Raiden::Core::createOSFileSystem();
+  bool hasDatapack = false;
+
+  if (!datapackPath.empty()) {
+    dp = std::filesystem::absolute(datapackPath);
+    if (!std::filesystem::is_directory(dp)) {
+      s_logger.error("Datapack directory not found: '{}'", dp.string());
+      return 1;
+    }
+    if (!vfs->mount("game://", dp.string())) {
+      s_logger.error("Failed to mount datapack.");
+      return 1;
+    }
+    hasDatapack = true;
+  } else {
+    s_logger.info("No datapack, running editor standalone with defaults.");
+  }
+
+  loadStyleSheet(qtApp, hasDatapack ? dp.string() : std::string());
 
   auto platform = std::make_unique<Raiden::Platform::QtPlatform>();
   auto device = std::make_unique<Raiden::Renderer::VulkanDevice>();
 
-  RaidenEditor::EditorMainWindow mainWindow(*platform);
+  RaidenEditor::EditorMainWindow mainWindow(*platform, hasDatapack ? dp.string() : std::string(), *vfs);
   mainWindow.show();
 
   Raiden::Core::EngineConfig config;
 
-  if (!loadConfig(*vfs, config)) {
+  if (!Raiden::Core::loadConfig(*vfs, config, "Raiden Editor")) {
     s_logger.warn("Falling back to defaults.");
   }
 
@@ -208,6 +209,28 @@ int main(int argc, char *argv[]) {
 
   if (!app.init(config)) {
     return 1;
+  }
+
+  std::string pluginPath = Raiden::Core::resolvePluginPath(config.plugin);
+  if (!pluginPath.empty()) {
+    std::string resolvedPluginPath =
+        (dp / pluginPath).lexically_normal().string();
+    if (!app.loadGamePlugin(resolvedPluginPath)) {
+      s_logger.warn("Game plugin not loaded, running without game.");
+    } else {
+      mainWindow.context()->setWorld(app.getWorld());
+    }
+  } else {
+    s_logger.info("No game plugin configured, running without game.");
+  }
+
+  // wire gizmo renderer
+  mainWindow.context()->setOverlay(app.getOverlay());
+  if (mainWindow.context()->initGizmoRenderer(app.getDevice())) {
+    app.setGizmoRenderCallback(
+        [ctx = mainWindow.context()](::Raiden::Renderer::ICommandBuffer &cmd) {
+          ctx->renderGizmoGeometry(cmd);
+        });
   }
 
   app.run();

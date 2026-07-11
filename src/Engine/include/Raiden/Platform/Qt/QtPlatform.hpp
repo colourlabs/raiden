@@ -28,12 +28,16 @@ public:
   [[nodiscard]] bool shouldClose() const { return closeRequested_; }
   void resetCloseFlag() { closeRequested_ = false; }
 
+  [[nodiscard]] bool wasResized() const { return resized_; }
+  void clearResizeFlag() { resized_ = false; }
+
 protected:
   bool event(QEvent *event) override;
 
 private:
   InputState &inputState_;
   bool closeRequested_ = false;
+  bool resized_ = false;
 
   static int qtKeyToScanCode(int qtKey);
 };
@@ -55,6 +59,9 @@ public:
 
   void *getNativeWindowHandle() override;
   void getWindowSize(int &width, int &height) const override;
+  bool hasResizePending() override;
+  bool isWindowExposed() override;
+  void flushPendingPresentation() override;
   void setRelativeMouseMode(bool enabled) override;
   void endInputFrame() override;
 

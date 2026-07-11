@@ -45,5 +45,8 @@
     <file alias="icons/Square/ic_fluent_square_20_filled.svg">editor/icons/Square/ic_fluent_square_20_filled.svg</file>
     <file alias="icons/SquareMultiple/ic_fluent_square_multiple_20_filled.svg">editor/icons/SquareMultiple/ic_fluent_square_multiple_20_filled.svg</file>
     <file alias="icons/Dismiss/ic_fluent_dismiss_20_filled.svg">editor/icons/Dismiss/ic_fluent_dismiss_20_filled.svg</file>
+    <file alias="icons/Move/ic_fluent_move_20_regular.svg">editor/icons/Move/ic_fluent_move_20_regular.svg</file>
+    <file alias="icons/Rotate/ic_fluent_rotate_20_regular.svg">editor/icons/Rotate/ic_fluent_rotate_20_regular.svg</file>
+    <file alias="icons/Scale/ic_fluent_scale_20_regular.svg">editor/icons/Scale/ic_fluent_scale_20_regular.svg</file>
   </qresource>
 </RCC>

@@ -1,12 +1,16 @@
 #include <Raiden/Application.hpp>
 #include <Raiden/Assets/AssetManager.hpp>
 #include <Raiden/Audio/OpenALDevice.hpp>
+#include <Raiden/ECS/Camera.hpp>
 #include <Raiden/Engine/VulkanImGuiBackend.hpp>
 #include <Raiden/Logger.hpp>
 #include <Raiden/Renderer/Vulkan/IVulkanRenderDevice.hpp>
 #include <Renderer/Vulkan/VulkanDevice.hpp>
 
+#include <cstring>
 #include <functional>
+
+#include <glm/gtc/matrix_transform.hpp>
 
 namespace Raiden::Engine {
 
@@ -51,8 +55,7 @@ bool Application::init(const EngineConfig &config) {
   assetManager_->setJobSystem(jobSystem_);
 
   audioDevice_ = std::make_unique<OpenALDevice>();
-  auto *audioDev = static_cast<OpenALDevice *>(audioDevice_.get());
-  audioDev->setJobSystem(jobSystem_);
+  audioDevice_->setJobSystem(jobSystem_);
   if (!audioDevice_->init(config_.audio, *vfs_)) {
     s_logger.warn("Failed to initialize audio device.");
     audioDevice_.reset();
@@ -176,6 +179,28 @@ void Application::run() {
         pluginUI = [&]() { pluginLoader_.plugin().onDebugUI(); };
       }
 
+      // pass active camera matrices to overlay for ImGui
+      if (auto *world = getWorld()) {
+        float viewMat[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+        float projMat[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+        world->view<Raiden::ECS::Camera>().each(
+            [&](Raiden::ECS::Entity, Raiden::ECS::Camera &cam) {
+              if (cam.active) {
+                std::memcpy(viewMat, &cam.view, sizeof(float) * 16);
+                float aspect = static_cast<float>(w) /
+                               static_cast<float>(h > 1 ? h : 1);
+                auto proj = glm::perspective(glm::radians(cam.fov), aspect,
+                                             cam.zNear, cam.zFar);
+                proj[1][1] *= -1.0F;
+                // Vulkan depth remap
+                proj[2][2] = 0.5F * proj[2][2] + 0.5F * proj[2][3];
+                proj[3][2] = 0.5F * proj[3][2] + 0.5F * proj[3][3];
+                std::memcpy(projMat, &proj, sizeof(float) * 16);
+              }
+            });
+        overlay_->setCameraMatrices(viewMat, projMat, w, h);
+      }
+
       overlay_->newFrame(platform_->getInputState(), w, h, deltaTime, profiler,
                          pluginUI);
       Raiden::Engine::ImGuiOverlay::endFrame();
@@ -185,6 +210,11 @@ void Application::run() {
       // worker 0 handles game rendering
       if (wi == 0 && pluginLoader_.isLoaded()) {
         pluginLoader_.plugin().render(cmd);
+      }
+
+      // gizmo rendering (between game and overlay)
+      if (wi == 0 && gizmoRenderCb_) {
+        gizmoRenderCb_(cmd);
       }
 
       // worker n-1 handles overlay (if any workers remain)
