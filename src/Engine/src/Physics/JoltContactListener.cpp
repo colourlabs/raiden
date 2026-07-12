@@ -7,7 +7,7 @@ namespace Raiden::Physics {
 void JoltContactListener::OnContactAdded(const JPH::Body &body1,
                                            const JPH::Body &body2,
                                            const JPH::ContactManifold &manifold,
-                                           JPH::ContactSettings &) {
+                                           JPH::ContactSettings & /*ioSettings*/) {
   std::lock_guard lock(mutex_);
   events_.emplace_back(RawContactEvent::Type::Added, body1.GetID(),
                        body2.GetID(), manifold.mWorldSpaceNormal);
@@ -15,7 +15,7 @@ void JoltContactListener::OnContactAdded(const JPH::Body &body1,
 
 void JoltContactListener::OnContactPersisted(
     const JPH::Body &body1, const JPH::Body &body2,
-    const JPH::ContactManifold &manifold, JPH::ContactSettings &) {
+    const JPH::ContactManifold &manifold, JPH::ContactSettings & /*ioSettings*/) {
   std::lock_guard lock(mutex_);
   events_.emplace_back(RawContactEvent::Type::Persisted, body1.GetID(),
                        body2.GetID(), manifold.mWorldSpaceNormal);

@@ -22,6 +22,8 @@ VkFormat toVkFormat(Format format) {
     return VK_FORMAT_R8G8B8A8_UNORM;
   case Format::R8G8B8A8_SRGB:
     return VK_FORMAT_R8G8B8A8_SRGB;
+  case Format::R16G16B16A16_Float:
+    return VK_FORMAT_R16G16B16A16_SFLOAT;
   }
   return VK_FORMAT_UNDEFINED;
 }

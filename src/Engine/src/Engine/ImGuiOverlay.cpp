@@ -1,9 +1,12 @@
 #include "ImGuiFonts/InterFont.hpp"
 
+#include <Raiden/Core/ConVar.hpp>
 #include <Raiden/Engine/ImGuiOverlay.hpp>
 #include <Raiden/Logger.hpp>
 
 #include <SDL3/SDL_scancode.h>
+#include <algorithm>
+#include <cstring>
 #include <imgui.h>
 #include <implot.h>
 
@@ -224,9 +227,21 @@ void ImGuiOverlay::newFrame(const InputState &input, int displayW, int displayH,
 
   ImGui::Separator();
 
-  ImGui::Checkbox("Frame time", &showFrameTime_);
-  ImGui::Checkbox("FPS", &showFps_);
-  ImGui::Checkbox("Draw calls & Triangles", &showDrawCalls_);
+  // convar-driven toggles
+  auto &cv = ::Raiden::Core::convars();
+  showFrameTime_ = cv.getBool("show_frame_time");
+  showFps_ = cv.getBool("show_fps");
+  showDrawCalls_ = cv.getBool("show_draw_calls");
+
+  if (ImGui::Checkbox("Frame time", &showFrameTime_)) {
+    cv.setBool("show_frame_time", showFrameTime_);
+  }
+  if (ImGui::Checkbox("FPS", &showFps_)) {
+    cv.setBool("show_fps", showFps_);
+  }
+  if (ImGui::Checkbox("Draw calls & Triangles", &showDrawCalls_)) {
+    cv.setBool("show_draw_calls", showDrawCalls_);
+  }
 
   ImGui::End();
 
@@ -297,6 +312,105 @@ void ImGuiOverlay::newFrame(const InputState &input, int displayW, int displayH,
   // plugin debug UI
   if (pluginDebugUI) {
     pluginDebugUI();
+  }
+
+  // convars debug window
+  if (showConVars_) {
+    ImGui::Begin("ConVars", &showConVars_);
+
+    ImGui::InputText("Filter", conVarFilter_, sizeof(conVarFilter_));
+
+    ImGui::Separator();
+
+    auto all = ::Raiden::Core::convars().getAll();
+    if (ImGui::BeginTable("##convars", 4,
+                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                              ImGuiTableFlags_ScrollY)) {
+      ImGui::TableSetupColumn("Name");
+      ImGui::TableSetupColumn("Value");
+      ImGui::TableSetupColumn("Default");
+      ImGui::TableSetupColumn("Flags");
+      ImGui::TableSetupScrollFreeze(0, 1);
+      ImGui::TableHeadersRow();
+
+      for (auto &entry : all) {
+        if (entry.flags & ::Raiden::Core::ConVarHidden) {
+          continue;
+        }
+
+        // filter
+        if (conVarFilter_[0] != '\0') {
+          std::string lower = entry.name;
+          std::transform(lower.begin(), lower.end(), lower.begin(),
+                         [](unsigned char c) { return std::tolower(c); });
+          std::string filter(conVarFilter_);
+          std::transform(filter.begin(), filter.end(), filter.begin(),
+                         [](unsigned char c) { return std::tolower(c); });
+          if (lower.find(filter) == std::string::npos) {
+            continue;
+          }
+        }
+
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted(entry.name.c_str());
+
+        ImGui::TableNextColumn();
+        // editable value
+        if (std::holds_alternative<int>(entry.value)) {
+          int v = std::get<int>(entry.value);
+          std::string id = "##" + entry.name;
+          if (ImGui::InputInt(id.c_str(), &v, 0, 0)) {
+            ::Raiden::Core::convars().setInt(entry.name, v);
+          }
+        } else if (std::holds_alternative<float>(entry.value)) {
+          float v = std::get<float>(entry.value);
+          std::string id = "##" + entry.name;
+          if (ImGui::InputFloat(id.c_str(), &v, 0.0F, 0.0F, "%.3f")) {
+            ::Raiden::Core::convars().setFloat(entry.name, v);
+          }
+        } else if (std::holds_alternative<bool>(entry.value)) {
+          bool v = std::get<bool>(entry.value);
+          std::string id = "##" + entry.name;
+          if (ImGui::Checkbox(id.c_str(), &v)) {
+            ::Raiden::Core::convars().setBool(entry.name, v);
+          }
+        } else if (std::holds_alternative<std::string>(entry.value)) {
+          std::string v = std::get<std::string>(entry.value);
+          std::string id = "##" + entry.name;
+          char buf[256] = {};
+          std::strncpy(buf, v.c_str(), sizeof(buf) - 1);
+          if (ImGui::InputText(id.c_str(), buf, sizeof(buf))) {
+            ::Raiden::Core::convars().setString(entry.name, buf);
+          }
+        }
+
+        ImGui::TableNextColumn();
+        if (std::holds_alternative<int>(entry.defaultValue)) {
+          ImGui::Text("%d", std::get<int>(entry.defaultValue));
+        } else if (std::holds_alternative<float>(entry.defaultValue)) {
+          ImGui::Text("%.3f", std::get<float>(entry.defaultValue));
+        } else if (std::holds_alternative<bool>(entry.defaultValue)) {
+          ImGui::Text("%s",
+                      std::get<bool>(entry.defaultValue) ? "true" : "false");
+        } else if (std::holds_alternative<std::string>(entry.defaultValue)) {
+          ImGui::TextUnformatted(
+              std::get<std::string>(entry.defaultValue).c_str());
+        }
+
+        ImGui::TableNextColumn();
+        std::string flags;
+        if (entry.flags & ::Raiden::Core::ConVarArchive) flags += "A ";
+        if (entry.flags & ::Raiden::Core::ConVarRestart) flags += "R ";
+        if (entry.flags & ::Raiden::Core::ConVarCheat) flags += "C ";
+        if (entry.flags & ::Raiden::Core::ConVarReadOnly) flags += "RO ";
+        ImGui::TextUnformatted(flags.c_str());
+      }
+
+      ImGui::EndTable();
+    }
+
+    ImGui::End();
   }
 }
 

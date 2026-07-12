@@ -1,10 +1,13 @@
 #include <Raiden/ECS/Camera.hpp>
+#include <Raiden/ECS/Light.hpp>
+#include <Raiden/ECS/Transform.hpp>
 #include <Raiden/Logger.hpp>
 #include <Raiden/Platform/IPlatform.hpp>
 #include <Renderer/Vulkan/VulkanBufferImpl.hpp>
 #include <Renderer/Vulkan/VulkanDevice.hpp>
 #include <Renderer/Vulkan/VulkanSampler.hpp>
 #include <Renderer/Vulkan/VulkanMaterial.hpp>
+#include <Renderer/Vulkan/VulkanShader.hpp>
 
 #include <array>
 #include <chrono>
@@ -105,7 +108,16 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
     return false;
   }
 
-  enableValidation_ = config.enableValidation && checkValidationSupport();
+  if (config.enableValidation) {
+    if (checkValidationSupport()) {
+      enableValidation_ = true;
+    } else {
+      s_logger.warn("Validation layers requested, but 'VK_LAYER_KHRONOS_validation' was not found on the system. Validation is disabled.");
+      enableValidation_ = false;
+    }
+  } else {
+    enableValidation_ = false;
+  }
 
   std::vector<const char *> extensions =
       platform->getRequiredInstanceExtensions();
@@ -214,8 +226,14 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
       .samplerAnisotropy = VK_TRUE,
   };
 
+  VkPhysicalDeviceVulkan11Features vulkan11Features{
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+      .shaderDrawParameters = VK_TRUE,
+  };
+
   VkDeviceCreateInfo deviceCreateInfo{
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+      .pNext = &vulkan11Features,
       .queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size()),
       .pQueueCreateInfos = queueCreateInfos.data(),
       .enabledExtensionCount = static_cast<uint32_t>(deviceExtensions_.size()),
@@ -319,6 +337,41 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
     return false;
   }
 
+  // initialize IBL set with fallback white texture (will be replaced when IBL is generated)
+  {
+    auto fbCube = descriptorPool_.fallbackCubeImageInfo();
+    auto fb2d = descriptorPool_.fallbackImageInfo();
+    VkWriteDescriptorSet writes[3]{};
+    // binding 0: irradiance cubemap
+    writes[0] = {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = descriptorPool_.iblSet(),
+        .dstBinding = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+        .pImageInfo = &fbCube,
+    };
+    // binding 1: prefiltered cubemap
+    writes[1] = {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = descriptorPool_.iblSet(),
+        .dstBinding = 1,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+        .pImageInfo = &fbCube,
+    };
+    // binding 2: BRDF LUT (2D texture)
+    writes[2] = {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = descriptorPool_.iblSet(),
+        .dstBinding = 2,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+        .pImageInfo = &fb2d,
+    };
+    vkUpdateDescriptorSets(device_, 3, writes, 0, nullptr);
+  }
+
   for (auto &[uniformBuffer, uniformSet] : perFrame_) {
     uniformBuffer.init(allocator_.handle(), sizeof(FrameUniforms),
                        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -369,6 +422,456 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
     b = false;
   }
 
+  if (!initShadowResources()) {
+    s_logger.warn("Failed to init shadow resources, shadows disabled");
+  }
+
+  // --- HDR offscreen render pass (R16G16B16A16_SFLOAT) ---
+  {
+    // Create the HDR render pass: color (HDR, MSAA) + depth (MSAA) + resolve (HDR, 1x)
+    VkFormat hdrFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+    bool msaa = sampleCount_ != VK_SAMPLE_COUNT_1_BIT;
+    uint32_t attachmentCount = msaa ? 3U : 2U;
+
+    std::array<VkAttachmentDescription, 3> attachments{};
+    // [0] MSAA color
+    attachments[0] = {
+        .format = hdrFormat,
+        .samples = sampleCount_,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    };
+    // [1] depth
+    attachments[1] = {
+        .format = depthFormat_,
+        .samples = sampleCount_,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+    };
+    // [2] resolve
+    attachments[2] = {
+        .format = hdrFormat,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+
+    VkAttachmentReference colorRef{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference depthRef{1,
+                                  VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference resolveRef{2,
+                                    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+
+    VkSubpassDescription subpass{
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colorRef,
+        .pResolveAttachments = msaa ? &resolveRef : nullptr,
+        .pDepthStencilAttachment = &depthRef,
+    };
+
+    std::array<VkSubpassDependency, 2> deps{};
+    deps[0] = {
+        .srcSubpass = VK_SUBPASS_EXTERNAL,
+        .dstSubpass = 0,
+        .srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+        .srcAccessMask = VK_ACCESS_MEMORY_READ_BIT,
+        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
+    };
+    deps[1] = {
+        .srcSubpass = 0,
+        .dstSubpass = VK_SUBPASS_EXTERNAL,
+        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                        VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+        .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
+    };
+
+    VkRenderPassCreateInfo rpInfo{
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = attachmentCount,
+        .pAttachments = attachments.data(),
+        .subpassCount = 1,
+        .pSubpasses = &subpass,
+        .dependencyCount = static_cast<uint32_t>(deps.size()),
+        .pDependencies = deps.data(),
+    };
+
+    if (vkCreateRenderPass(device_, &rpInfo, nullptr, &hdrRenderPass_) !=
+        VK_SUCCESS) {
+      s_logger.error("Failed to create HDR render pass");
+      return false;
+    }
+
+    // Create HDR resolve image
+    VulkanImageInfo resolveInfo{
+        .width = swapchain_.extent().width,
+        .height = swapchain_.extent().height,
+        .format = hdrFormat,
+        .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                 VK_IMAGE_USAGE_SAMPLED_BIT,
+        .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+        .aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT,
+    };
+    if (!hdrResolveImage_.init(device_, allocator_.handle(), resolveInfo)) {
+      s_logger.error("Failed to create HDR resolve image");
+      return false;
+    }
+
+    // Create HDR MSAA image (if MSAA enabled)
+    if (msaa) {
+      VulkanImageInfo msaaInfo{
+          .width = swapchain_.extent().width,
+          .height = swapchain_.extent().height,
+          .format = hdrFormat,
+          .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                   VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
+          .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+          .aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT,
+          .sampleCount = sampleCount_,
+      };
+      if (!hdrMsaaImage_.init(device_, allocator_.handle(), msaaInfo)) {
+        s_logger.error("Failed to create HDR MSAA image");
+        return false;
+      }
+    }
+
+    // Create HDR framebuffer
+    std::array<VkImageView, 3> fbAttachments{};
+    uint32_t fbCount = 1;
+    if (msaa) {
+      fbAttachments[0] = hdrMsaaImage_.view();
+      fbAttachments[1] = depthImage_.view();
+      fbAttachments[2] = hdrResolveImage_.view();
+      fbCount = 3;
+    } else {
+      fbAttachments[0] = hdrResolveImage_.view();
+      fbAttachments[1] = depthImage_.view();
+      fbCount = 2;
+    }
+
+    VkFramebufferCreateInfo fbInfo{
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = hdrRenderPass_,
+        .attachmentCount = fbCount,
+        .pAttachments = fbAttachments.data(),
+        .width = swapchain_.extent().width,
+        .height = swapchain_.extent().height,
+        .layers = 1,
+    };
+
+    if (vkCreateFramebuffer(device_, &fbInfo, nullptr, &hdrFramebuffer_) !=
+        VK_SUCCESS) {
+      s_logger.error("Failed to create HDR framebuffer");
+      return false;
+    }
+
+    s_logger.info("HDR offscreen target created ({}x{}, MSAA: {}).",
+                  swapchain_.extent().width, swapchain_.extent().height,
+                  msaa ? "yes" : "no");
+  }
+
+  // --- Tone mapping resources ---
+  {
+    // Simple render pass: single color attachment (swapchain format)
+    VkAttachmentDescription colorAtt{
+        .format = swapchain_.imageFormat(),
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+    };
+
+    VkAttachmentReference colorRef{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+
+    VkSubpassDescription subpass{
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colorRef,
+    };
+
+    std::array<VkSubpassDependency, 2> deps{};
+    deps[0] = {
+        .srcSubpass = VK_SUBPASS_EXTERNAL,
+        .dstSubpass = 0,
+        .srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .srcAccessMask = VK_ACCESS_MEMORY_READ_BIT,
+        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
+    };
+    deps[1] = {
+        .srcSubpass = 0,
+        .dstSubpass = VK_SUBPASS_EXTERNAL,
+        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT,
+        .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
+    };
+
+    VkRenderPassCreateInfo rpInfo{
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &colorAtt,
+        .subpassCount = 1,
+        .pSubpasses = &subpass,
+        .dependencyCount = static_cast<uint32_t>(deps.size()),
+        .pDependencies = deps.data(),
+    };
+
+    if (vkCreateRenderPass(device_, &rpInfo, nullptr, &tonemapRenderPass_) !=
+        VK_SUCCESS) {
+      s_logger.error("Failed to create tone mapping render pass");
+      return false;
+    }
+
+    // Create tone mapping framebuffers (one per swapchain image)
+    {
+      tonemapFramebuffers_.resize(swapchain_.imageViews().size());
+      for (size_t i = 0; i < swapchain_.imageViews().size(); ++i) {
+        VkImageView swapView = swapchain_.imageViews()[i];
+        VkFramebufferCreateInfo fbInfo{
+            .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+            .renderPass = tonemapRenderPass_,
+            .attachmentCount = 1,
+            .pAttachments = &swapView,
+            .width = swapchain_.extent().width,
+            .height = swapchain_.extent().height,
+            .layers = 1,
+        };
+
+        if (vkCreateFramebuffer(device_, &fbInfo, nullptr,
+                                &tonemapFramebuffers_[i]) != VK_SUCCESS) {
+          s_logger.error("Failed to create tone mapping framebuffer");
+          return false;
+        }
+      }
+    }
+
+    // Create tone mapping pipeline
+    std::string shadersDir = SHADERS_DIR;
+    VulkanShader tonemapVert, tonemapFrag;
+    if (!tonemapVert.init(device_, ShaderStage::Vertex,
+                          shadersDir + "/tonemap.vert.spv")) {
+      s_logger.error("Failed to load tonemap vertex shader");
+      return false;
+    }
+    if (!tonemapFrag.init(device_, ShaderStage::Fragment,
+                          shadersDir + "/tonemap.frag.spv")) {
+      s_logger.error("Failed to load tonemap fragment shader");
+      tonemapVert.shutdown();
+      return false;
+    }
+
+    // Tone mapping uses separate texture + sampler descriptor set
+    // binding 0 = sampled image, binding 1 = sampler
+    std::array<VkDescriptorSetLayoutBinding, 2> tonemapBindings{};
+    tonemapBindings[0] = {
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+    };
+    tonemapBindings[1] = {
+        .binding = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+    };
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = static_cast<uint32_t>(tonemapBindings.size()),
+        .pBindings = tonemapBindings.data(),
+    };
+
+    tonemapSetLayout_ = VK_NULL_HANDLE;
+
+    if (vkCreateDescriptorSetLayout(device_, &layoutInfo, nullptr,
+                                    &tonemapSetLayout_) != VK_SUCCESS) {
+      s_logger.error("Failed to create tonemap descriptor set layout");
+      tonemapVert.shutdown();
+      tonemapFrag.shutdown();
+      return false;
+    }
+
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1,
+        .pSetLayouts = &tonemapSetLayout_,
+    };
+
+    if (vkCreatePipelineLayout(device_, &pipelineLayoutInfo, nullptr,
+                               &tonemapPipelineLayout_) != VK_SUCCESS) {
+      s_logger.error("Failed to create tonemap pipeline layout");
+      vkDestroyDescriptorSetLayout(device_, tonemapSetLayout_, nullptr);
+      tonemapVert.shutdown();
+      tonemapFrag.shutdown();
+      return false;
+    }
+
+    // Fullscreen triangle pipeline (no vertex input)
+    VkPipelineVertexInputStateCreateInfo vertexInput{
+        .sType =
+            VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+    };
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+    };
+
+    VkPipelineViewportStateCreateInfo viewportState{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount = 1,
+        .scissorCount = 1,
+    };
+
+    VkPipelineRasterizationStateCreateInfo rasterizer{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .polygonMode = VK_POLYGON_MODE_FILL,
+        .cullMode = VK_CULL_MODE_NONE,
+        .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+        .lineWidth = 1.0F,
+    };
+
+    VkPipelineMultisampleStateCreateInfo multisampling{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+    };
+
+    VkPipelineColorBlendAttachmentState blendAttachment{
+        .blendEnable = VK_FALSE,
+        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
+                          VK_COLOR_COMPONENT_G_BIT |
+                          VK_COLOR_COMPONENT_B_BIT |
+                          VK_COLOR_COMPONENT_A_BIT,
+    };
+
+    VkPipelineColorBlendStateCreateInfo colorBlending{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &blendAttachment,
+    };
+
+    VkPipelineDepthStencilStateCreateInfo depthStencil{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .depthTestEnable = VK_FALSE,
+        .depthWriteEnable = VK_FALSE,
+    };
+
+    std::array<VkDynamicState, 2> dynamicStates = {
+        VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    VkPipelineDynamicStateCreateInfo dynamicState{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount = 2,
+        .pDynamicStates = dynamicStates.data(),
+    };
+
+    std::array<VkPipelineShaderStageCreateInfo, 2> stages = {
+        tonemapVert.stageCreateInfo(), tonemapFrag.stageCreateInfo()};
+
+    VkGraphicsPipelineCreateInfo pipelineInfo{
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .stageCount = 2,
+        .pStages = stages.data(),
+        .pVertexInputState = &vertexInput,
+        .pInputAssemblyState = &inputAssembly,
+        .pViewportState = &viewportState,
+        .pRasterizationState = &rasterizer,
+        .pMultisampleState = &multisampling,
+        .pDepthStencilState = &depthStencil,
+        .pColorBlendState = &colorBlending,
+        .pDynamicState = &dynamicState,
+        .layout = tonemapPipelineLayout_,
+        .renderPass = tonemapRenderPass_,
+        .subpass = 0,
+    };
+
+    if (vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo,
+                                  nullptr, &tonemapPipeline_) != VK_SUCCESS) {
+      s_logger.error("Failed to create tonemap pipeline");
+      vkDestroyPipelineLayout(device_, tonemapPipelineLayout_, nullptr);
+      vkDestroyDescriptorSetLayout(device_, tonemapSetLayout_, nullptr);
+      tonemapVert.shutdown();
+      tonemapFrag.shutdown();
+      return false;
+    }
+
+    tonemapVert.shutdown();
+    tonemapFrag.shutdown();
+
+    // Create and write the tonemap descriptor set
+    {
+      VkDescriptorSetAllocateInfo allocInfo{
+          .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+          .descriptorPool = descriptorPool_.handle(),
+          .descriptorSetCount = 1,
+          .pSetLayouts = &tonemapSetLayout_,
+      };
+      if (vkAllocateDescriptorSets(device_, &allocInfo, &tonemapSet_) !=
+          VK_SUCCESS) {
+        s_logger.error("Failed to allocate tonemap descriptor set");
+        return false;
+      }
+
+      VkDescriptorImageInfo imageInfo{
+          .sampler = descriptorPool_.clampSampler(),
+          .imageView = hdrResolveImage_.view(),
+          .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+      };
+
+      VkDescriptorImageInfo samplerInfo{
+          .sampler = descriptorPool_.clampSampler(),
+      };
+
+      std::array<VkWriteDescriptorSet, 2> writes{};
+      writes[0] = {
+          .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+          .dstSet = tonemapSet_,
+          .dstBinding = 0,
+          .descriptorCount = 1,
+          .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+          .pImageInfo = &imageInfo,
+      };
+      writes[1] = {
+          .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+          .dstSet = tonemapSet_,
+          .dstBinding = 1,
+          .descriptorCount = 1,
+          .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+          .pImageInfo = &samplerInfo,
+      };
+      vkUpdateDescriptorSets(device_, static_cast<uint32_t>(writes.size()),
+                             writes.data(), 0, nullptr);
+    }
+
+    s_logger.info("Tone mapping resources created.");
+  }
+
   s_logger.info("Vulkan device initialized.");
   return true;
 }
@@ -416,10 +919,12 @@ VulkanDevice::createPipeline(const PipelineDesc &desc) {
     vertexDesc.attributes.push_back(vkAttr);
   }
 
-  std::array<VkDescriptorSetLayout, 3> setLayouts{
-      descriptorPool_.uboSetLayout(),     // set 0
-      descriptorPool_.samplerSetLayout(), // set 1
-      descriptorPool_.textureSetLayout(), // set 2
+  std::array<VkDescriptorSetLayout, 5> setLayouts{
+      descriptorPool_.uboSetLayout(),       // set 0
+      descriptorPool_.samplerSetLayout(),   // set 1
+      descriptorPool_.textureSetLayout(),   // set 2
+      descriptorPool_.materialParamsSetLayout(), // set 3
+      descriptorPool_.iblSetLayout(),       // set 4
   };
 
   auto impl = std::make_unique<VulkanPipelineImpl>();
@@ -445,10 +950,10 @@ VulkanDevice::createPipeline(const PipelineDesc &desc) {
     vkTopology = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
   }
 
-  if (!impl->init(device_, renderPass_.renderPass(), vertShader, fragShader,
+  if (!impl->init(device_, getRenderPass(), vertShader, fragShader,
                   vertexDesc, vkTopology, desc.depthTestEnable,
                   desc.depthWriteEnable, depthOp, toVkCullMode(desc.cullMode),
-                  sampleCount_, setLayouts.data(), 3, blendConfig)) {
+                  sampleCount_, setLayouts.data(), 5, blendConfig)) {
     s_logger.error("Failed to create pipeline");
     vertShader.shutdown();
     fragShader.shutdown();
@@ -485,6 +990,45 @@ void VulkanDevice::shutdown() {
   if (device_ != VK_NULL_HANDLE) {
     vkDeviceWaitIdle(
         device_); // wait for in-flight work before destroying anything
+  }
+
+  destroyShadowResources();
+  destroyIBLResources();
+
+  // clean up HDR resources
+  if (hdrFramebuffer_ != VK_NULL_HANDLE) {
+    vkDestroyFramebuffer(device_, hdrFramebuffer_, nullptr);
+    hdrFramebuffer_ = VK_NULL_HANDLE;
+  }
+  if (hdrRenderPass_ != VK_NULL_HANDLE) {
+    vkDestroyRenderPass(device_, hdrRenderPass_, nullptr);
+    hdrRenderPass_ = VK_NULL_HANDLE;
+  }
+  hdrMsaaImage_.shutdown();
+  hdrResolveImage_.shutdown();
+
+  // clean up tone mapping resources
+  if (tonemapPipeline_ != VK_NULL_HANDLE) {
+    vkDestroyPipeline(device_, tonemapPipeline_, nullptr);
+    tonemapPipeline_ = VK_NULL_HANDLE;
+  }
+  if (tonemapPipelineLayout_ != VK_NULL_HANDLE) {
+    vkDestroyPipelineLayout(device_, tonemapPipelineLayout_, nullptr);
+    tonemapPipelineLayout_ = VK_NULL_HANDLE;
+  }
+  for (auto fb : tonemapFramebuffers_) {
+    if (fb != VK_NULL_HANDLE) {
+      vkDestroyFramebuffer(device_, fb, nullptr);
+    }
+  }
+  tonemapFramebuffers_.clear();
+  if (tonemapRenderPass_ != VK_NULL_HANDLE) {
+    vkDestroyRenderPass(device_, tonemapRenderPass_, nullptr);
+    tonemapRenderPass_ = VK_NULL_HANDLE;
+  }
+  if (tonemapSetLayout_ != VK_NULL_HANDLE) {
+    vkDestroyDescriptorSetLayout(device_, tonemapSetLayout_, nullptr);
+    tonemapSetLayout_ = VK_NULL_HANDLE;
   }
 
   frameContext_.shutdown();
@@ -750,50 +1294,7 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
   vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, queryPool_,
                       idx * 2);
 
-  std::array<VkClearValue, 2> clearValues{};
-
-  clearValues[0].color.float32[0] = 0.05F;
-  clearValues[0].color.float32[1] = 0.05F;
-  clearValues[0].color.float32[2] = 0.2F;
-  clearValues[0].color.float32[3] = 1.0F;
-  clearValues[1].depthStencil.depth = 1.0F;
-
-  VkRenderPassBeginInfo renderPassInfo{
-      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-      .renderPass = renderPass_.renderPass(),
-      .framebuffer = framebuffers_[imageIndex],
-      .renderArea = {{0, 0}, swapchain_.extent()},
-      .clearValueCount = 2,
-      .pClearValues = clearValues.data(),
-  };
-
-  VkViewport viewport{
-      .x = 0.0F,
-      .y = 0.0F,
-      .width = static_cast<float>(swapchain_.extent().width),
-      .height = static_cast<float>(swapchain_.extent().height),
-      .minDepth = 0.0F,
-      .maxDepth = 1.0F,
-  };
-
-  VkRect2D scissor{
-      .offset = {0, 0},
-      .extent = swapchain_.extent(),
-  };
-
-  bool useMT = (jobSystem_ != nullptr) && (jobSystem_->workerCount() > 1) &&
-               (lastDrawCalls_ >= kMinDrawCallsForMT);
-
-  if (!useMT) {
-    vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdSetViewport(cmd, 0, 1, &viewport);
-    vkCmdSetScissor(cmd, 0, 1, &scissor);
-  } else {
-    vkCmdBeginRenderPass(cmd, &renderPassInfo,
-                         VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
-  }
-
-  // delta time
+  // --- delta time ---
   auto now = std::chrono::steady_clock::now();
   float dt = std::chrono::duration<float>(now - lastFrameTime_).count();
   lastFrameTime_ = now;
@@ -804,7 +1305,7 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
   float aspect = static_cast<float>(swapchain_.extent().width) /
                  static_cast<float>(swapchain_.extent().height);
 
-  // default camera, overridden by Camera component if world is set
+  // --- compute frame uniforms ---
   FrameUniforms uniforms{};
   uniforms.model = glm::mat4(1.0F);
   uniforms.view = glm::lookAt(glm::vec3(0.0F, 0.0F, 3.0F), glm::vec3(0.0F),
@@ -812,7 +1313,6 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
   uniforms.projection =
       glm::perspective(glm::radians(45.0F), aspect, 0.1F, 100.0F);
   uniforms.projection[1][1] *= -1.0F;
-  // convert from OpenGL [-1,1] to Vulkan [0,1] depth range
   uniforms.projection[2][2] =
       (0.5F * uniforms.projection[2][2]) + (0.5F * uniforms.projection[2][3]);
   uniforms.projection[3][2] =
@@ -844,13 +1344,174 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
   auto camPos = glm::vec3(invView[3]);
 
   uniforms.cameraPos = glm::vec4(camPos, 0.0F);
-  uniforms.lightDir =
-      glm::vec4(glm::normalize(glm::vec3(1.0F, 2.0F, 1.0F)), 2.0F);
-  uniforms.lightColor = glm::vec4(1.0F, 1.0F, 1.0F, 0.0F);
+
+  // read directional light from ECS, or use default
+  bool hasShadows = false;
+  float shadowNear = 0.1F;
+  float shadowFar = 50.0F;
+  float shadowSize = 20.0F;
+
+  if (world_ != nullptr) {
+    world_->view<DirectionalLight>().each([&](Entity, DirectionalLight &light) {
+      uniforms.lightDir =
+          glm::vec4(-glm::normalize(light.direction), light.intensity);
+      uniforms.lightColor =
+          glm::vec4(light.color, light.castShadows ? 1.0F : 0.0F);
+      hasShadows = light.castShadows && shadowPipeline_ != VK_NULL_HANDLE;
+      shadowNear = light.shadowNear;
+      shadowFar = light.shadowFar;
+      shadowSize = light.shadowSize;
+    });
+  }
+
+  if (uniforms.lightDir.w == 0.0F) {
+    uniforms.lightDir =
+        glm::vec4(glm::normalize(glm::vec3(1.0F, 2.0F, 1.0F)), 2.0F);
+    uniforms.lightColor = glm::vec4(1.0F, 1.0F, 1.0F, 0.0F);
+  }
+
   uniforms.ambientSky = glm::vec4(0.1F, 0.15F, 0.3F, 1.0F);
   uniforms.ambientGround = glm::vec4(0.02F, 0.01F, 0.01F, 0.0F);
 
+  // compute light VP for shadow mapping
+  if (hasShadows) {
+    glm::vec3 towardLight = glm::normalize(glm::vec3(uniforms.lightDir));
+    glm::vec3 lightPos = camPos + towardLight * shadowFar * 0.5F;
+    glm::mat4 lightView =
+        glm::lookAt(lightPos, lightPos - towardLight, glm::vec3(0.0F, 1.0F, 0.0F));
+    glm::mat4 lightProj =
+        glm::ortho(-shadowSize, shadowSize, -shadowSize, shadowSize,
+                   shadowNear, shadowFar);
+    uniforms.lightViewProj = lightProj * lightView;
+  } else {
+    uniforms.lightViewProj = glm::mat4(1.0F);
+  }
+
   perFrame.uniformBuffer.upload(&uniforms, sizeof(uniforms));
+
+  // shadow pass (depth-only, single-threaded)
+  if (hasShadows) {
+    // transition shadow map to depth attachment
+    VkImageMemoryBarrier shadowBarrier{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = 0,
+        .dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = shadowMapImage_.image(),
+        .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1},
+    };
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                         VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0,
+                         0, nullptr, 0, nullptr, 1, &shadowBarrier);
+
+    VkClearValue shadowClear{};
+    shadowClear.depthStencil.depth = 1.0F;
+
+    VkRenderPassBeginInfo shadowPassInfo{
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = shadowRenderPass_,
+        .framebuffer = shadowFramebuffer_,
+        .renderArea = {{0, 0}, {kShadowMapResolution, kShadowMapResolution}},
+        .clearValueCount = 1,
+        .pClearValues = &shadowClear,
+    };
+
+    vkCmdBeginRenderPass(cmd, &shadowPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+    VkViewport shadowViewport{
+        .x = 0.0F,
+        .y = 0.0F,
+        .width = static_cast<float>(kShadowMapResolution),
+        .height = static_cast<float>(kShadowMapResolution),
+        .minDepth = 0.0F,
+        .maxDepth = 1.0F,
+    };
+    VkRect2D shadowScissor{
+        .offset = {0, 0},
+        .extent = {kShadowMapResolution, kShadowMapResolution},
+    };
+    vkCmdSetViewport(cmd, 0, 1, &shadowViewport);
+    vkCmdSetScissor(cmd, 0, 1, &shadowScissor);
+
+    // record shadow draw calls using the same callback in shadow mode
+    VulkanCommandBuffer shadowCmd(cmd, descriptorPool_, perFrame.uniformSet);
+    shadowCmd.enableShadowMode(shadowPipeline_, shadowPipelineLayout_);
+
+    // push default identity model matrix so draws without explicit push constants
+    // (e.g. skybox) have valid push constant state
+    glm::mat4 identityModel(1.0F);
+    vkCmdPushConstants(cmd, shadowPipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT,
+                       0, sizeof(glm::mat4), &identityModel);
+
+    // use shadow-only callback (skips overlay/gizmo which bind raw Vulkan pipelines)
+    const auto &shadowCb = shadowCallback_ ? shadowCallback_ : callback;
+    shadowCb(shadowCmd, 0, 1);
+
+    vkCmdEndRenderPass(cmd);
+
+    // transition shadow map to shader-readable
+    VkImageMemoryBarrier shadowReadBarrier{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = shadowMapImage_.image(),
+        .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1},
+    };
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                         0, nullptr, 0, nullptr, 1, &shadowReadBarrier);
+  }
+
+  // main render pass (HDR offscreen)
+  std::array<VkClearValue, 2> clearValues{};
+
+  clearValues[0].color.float32[0] = 0.05F;
+  clearValues[0].color.float32[1] = 0.05F;
+  clearValues[0].color.float32[2] = 0.2F;
+  clearValues[0].color.float32[3] = 1.0F;
+  clearValues[1].depthStencil.depth = 1.0F;
+
+  VkRenderPassBeginInfo renderPassInfo{
+      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+      .renderPass = hdrRenderPass_,
+      .framebuffer = hdrFramebuffer_,
+      .renderArea = {{0, 0}, swapchain_.extent()},
+      .clearValueCount = 2,
+      .pClearValues = clearValues.data(),
+  };
+
+  VkViewport viewport{
+      .x = 0.0F,
+      .y = 0.0F,
+      .width = static_cast<float>(swapchain_.extent().width),
+      .height = static_cast<float>(swapchain_.extent().height),
+      .minDepth = 0.0F,
+      .maxDepth = 1.0F,
+  };
+
+  VkRect2D scissor{
+      .offset = {0, 0},
+      .extent = swapchain_.extent(),
+  };
+
+  bool useMT = (jobSystem_ != nullptr) && (jobSystem_->workerCount() > 1) &&
+               (lastDrawCalls_ >= kMinDrawCallsForMT);
+
+  if (!useMT) {
+    vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+  } else {
+    vkCmdBeginRenderPass(cmd, &renderPassInfo,
+                         VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+  }
 
   if (useMT) {
     uint32_t frameCtx = frameContext_.currentFrame();
@@ -896,9 +1557,9 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
     // inheritance info for secondary CBs
     VkCommandBufferInheritanceInfo inheritance{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
-        .renderPass = renderPass_.renderPass(),
+        .renderPass = hdrRenderPass_,
         .subpass = 0,
-        .framebuffer = framebuffers_[imageIndex],
+        .framebuffer = hdrFramebuffer_,
     };
 
     std::atomic<uint32_t> readyCount{0};
@@ -970,6 +1631,66 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
   }
 
   vkCmdEndRenderPass(cmd);
+
+  // execution barrier: ensure scene pass writes are visible to tonemap reads
+  {
+    VkImageMemoryBarrier hdrBarrier{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = hdrResolveImage_.image(),
+        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+    };
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                         0, nullptr, 0, nullptr, 1, &hdrBarrier);
+  }
+
+  // tone mapping pass (fullscreen triangle, HDR → LDR)
+  {
+    VkClearValue tonemapClear{};
+    tonemapClear.color.float32[0] = 0.0F;
+    tonemapClear.color.float32[1] = 0.0F;
+    tonemapClear.color.float32[2] = 0.0F;
+    tonemapClear.color.float32[3] = 1.0F;
+
+    VkRenderPassBeginInfo tonemapBegin{
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = tonemapRenderPass_,
+        .framebuffer = tonemapFramebuffers_[imageIndex],
+        .renderArea = {{0, 0}, swapchain_.extent()},
+        .clearValueCount = 1,
+        .pClearValues = &tonemapClear,
+    };
+    vkCmdBeginRenderPass(cmd, &tonemapBegin, VK_SUBPASS_CONTENTS_INLINE);
+
+    VkViewport tonemapViewport{
+        .x = 0.0F,
+        .y = 0.0F,
+        .width = static_cast<float>(swapchain_.extent().width),
+        .height = static_cast<float>(swapchain_.extent().height),
+        .minDepth = 0.0F,
+        .maxDepth = 1.0F,
+    };
+    VkRect2D tonemapScissor{
+        .offset = {0, 0},
+        .extent = swapchain_.extent(),
+    };
+    vkCmdSetViewport(cmd, 0, 1, &tonemapViewport);
+    vkCmdSetScissor(cmd, 0, 1, &tonemapScissor);
+
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, tonemapPipeline_);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            tonemapPipelineLayout_, 0, 1, &tonemapSet_, 0,
+                            nullptr);
+    vkCmdDraw(cmd, 3, 1, 0, 0); // fullscreen triangle
+
+    vkCmdEndRenderPass(cmd);
+  }
 
   vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queryPool_,
                       (idx * 2) + 1);
@@ -1050,18 +1771,19 @@ std::shared_ptr<IMaterial> VulkanDevice::createMaterial(
        .offset = offsetof(Vertex, uv)},
   };
 
-  std::array<VkDescriptorSetLayout, 4> setLayouts{
+  std::array<VkDescriptorSetLayout, 5> setLayouts{
       descriptorPool_.uboSetLayout(),            // set 0
       descriptorPool_.samplerSetLayout(),        // set 1
       descriptorPool_.materialSetLayout(),       // set 2
       descriptorPool_.materialParamsSetLayout(), // set 3
+      descriptorPool_.iblSetLayout(),            // set 4
   };
 
   auto pipeline = std::make_unique<VulkanPipelineImpl>();
-  if (!pipeline->init(device_, renderPass_.renderPass(), vertShader, fragShader,
+  if (!pipeline->init(device_, getRenderPass(), vertShader, fragShader,
                       vertexDesc, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, desc.depthTest, true, VK_COMPARE_OP_LESS,
                       VK_CULL_MODE_BACK_BIT, sampleCount_, setLayouts.data(),
-                      4)) {
+                      5)) {
     s_logger.error("createMaterial: failed to create pipeline");
 
     vertShader.shutdown();
@@ -1082,12 +1804,40 @@ std::shared_ptr<IMaterial> VulkanDevice::createMaterial(
     return nullptr;
   }
 
+  // track for shadow map descriptor updates
+  shadowMaterials_.push_back(mat.get());
+  if (shadowMapImage_.view() != VK_NULL_HANDLE) {
+    mat->updateShadowMap(shadowMapImage_.view(), descriptorPool_.shadowSampler());
+  }
+
   // keep pipeline alive as long as the material is alive
   // store in a device-level cache keyed by the raw pointer
   pipelineOwnership_.push_back(std::move(pipeline));
 
   s_logger.info("Material created.");
   return mat;
+}
+
+bool VulkanDevice::initIBLResources(const VulkanImage & /*sourceCubemap*/) {
+  // TODO: Implement IBL generation (irradiance convolution, prefilter specular,
+  // BRDF LUT). This requires:
+  // 1. Create iblRenderPass_ (color-only R16G16B16A16_SFLOAT, 1 sample)
+  // 2. For each pass (irradiance, prefilter, BRDF LUT):
+  //    a. Create framebuffer targeting the output image
+  //    b. Record fullscreen triangle with push constants (face VP matrix)
+  //    c. Submit and wait
+  s_logger.info("IBL resource generation not yet implemented");
+  return true;
+}
+
+void VulkanDevice::destroyIBLResources() {
+  if (iblRenderPass_ != VK_NULL_HANDLE) {
+    vkDestroyRenderPass(device_, iblRenderPass_, nullptr);
+    iblRenderPass_ = VK_NULL_HANDLE;
+  }
+  irradianceImage_.shutdown();
+  prefilterImage_.shutdown();
+  brdfLUTImage_.shutdown();
 }
 
 bool VulkanDevice::createFramebuffers() {
@@ -1146,6 +1896,125 @@ bool VulkanDevice::createFramebuffers() {
   }
 
   s_logger.info("Framebuffers created (MSAA: {}).", msaa ? "yes" : "no");
+
+  // recreate HDR resolve/msaa images and framebuffer
+  if (hdrRenderPass_ != VK_NULL_HANDLE) {
+    VkFormat hdrFormat =
+        VK_FORMAT_R16G16B16A16_SFLOAT;
+
+    VulkanImageInfo resolveInfo{
+        .width = swapchain_.extent().width,
+        .height = swapchain_.extent().height,
+        .format = hdrFormat,
+        .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                 VK_IMAGE_USAGE_SAMPLED_BIT,
+        .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+        .aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT,
+    };
+    if (!hdrResolveImage_.init(device_, allocator_.handle(), resolveInfo)) {
+      s_logger.error("Failed to recreate HDR resolve image");
+      return false;
+    }
+
+    if (msaa) {
+      VulkanImageInfo msaaInfo{
+          .width = swapchain_.extent().width,
+          .height = swapchain_.extent().height,
+          .format = hdrFormat,
+          .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                   VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
+          .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+          .aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT,
+          .sampleCount = sampleCount_,
+      };
+      if (!hdrMsaaImage_.init(device_, allocator_.handle(), msaaInfo)) {
+        s_logger.error("Failed to recreate HDR MSAA image");
+        return false;
+      }
+    }
+
+    std::array<VkImageView, 3> fbAttachments{};
+    uint32_t fbCount = 1;
+    if (msaa) {
+      fbAttachments[0] = hdrMsaaImage_.view();
+      fbAttachments[1] = depthImage_.view();
+      fbAttachments[2] = hdrResolveImage_.view();
+      fbCount = 3;
+    } else {
+      fbAttachments[0] = hdrResolveImage_.view();
+      fbAttachments[1] = depthImage_.view();
+      fbCount = 2;
+    }
+
+    VkFramebufferCreateInfo fbInfo{
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = hdrRenderPass_,
+        .attachmentCount = fbCount,
+        .pAttachments = fbAttachments.data(),
+        .width = swapchain_.extent().width,
+        .height = swapchain_.extent().height,
+        .layers = 1,
+    };
+
+    if (vkCreateFramebuffer(device_, &fbInfo, nullptr, &hdrFramebuffer_) !=
+        VK_SUCCESS) {
+      s_logger.error("Failed to recreate HDR framebuffer");
+      return false;
+    }
+
+    // recreate tonemap framebuffers
+    tonemapFramebuffers_.resize(swapchain_.imageViews().size());
+    for (size_t i = 0; i < swapchain_.imageViews().size(); ++i) {
+      VkImageView swapView = swapchain_.imageViews()[i];
+      VkFramebufferCreateInfo tonemapFbInfo{
+          .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+          .renderPass = tonemapRenderPass_,
+          .attachmentCount = 1,
+          .pAttachments = &swapView,
+          .width = swapchain_.extent().width,
+          .height = swapchain_.extent().height,
+          .layers = 1,
+      };
+
+      if (vkCreateFramebuffer(device_, &tonemapFbInfo, nullptr,
+                              &tonemapFramebuffers_[i]) != VK_SUCCESS) {
+        s_logger.error("Failed to recreate tonemap framebuffer");
+        return false;
+      }
+    }
+
+    // update tonemap descriptor set to point to new HDR resolve image
+    if (tonemapSet_ != VK_NULL_HANDLE) {
+      VkDescriptorImageInfo imageInfo{
+          .sampler = descriptorPool_.clampSampler(),
+          .imageView = hdrResolveImage_.view(),
+          .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+      };
+      VkDescriptorImageInfo samplerInfo{
+          .sampler = descriptorPool_.clampSampler(),
+      };
+      std::array<VkWriteDescriptorSet, 2> writes{};
+      writes[0] = {
+          .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+          .dstSet = tonemapSet_,
+          .dstBinding = 0,
+          .descriptorCount = 1,
+          .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+          .pImageInfo = &imageInfo,
+      };
+      writes[1] = {
+          .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+          .dstSet = tonemapSet_,
+          .dstBinding = 1,
+          .descriptorCount = 1,
+          .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+          .pImageInfo = &samplerInfo,
+      };
+      vkUpdateDescriptorSets(device_, static_cast<uint32_t>(writes.size()),
+                             writes.data(), 0, nullptr);
+    }
+  }
+
   return true;
 }
 
@@ -1161,6 +2030,20 @@ void VulkanDevice::destroyFramebuffers() {
   }
 
   msaaColorImages_.clear();
+
+  if (hdrFramebuffer_ != VK_NULL_HANDLE) {
+    vkDestroyFramebuffer(device_, hdrFramebuffer_, nullptr);
+    hdrFramebuffer_ = VK_NULL_HANDLE;
+  }
+  hdrMsaaImage_.shutdown();
+  hdrResolveImage_.shutdown();
+
+  for (auto fb : tonemapFramebuffers_) {
+    if (fb != VK_NULL_HANDLE) {
+      vkDestroyFramebuffer(device_, fb, nullptr);
+    }
+  }
+  tonemapFramebuffers_.clear();
 }
 
 bool VulkanDevice::recreateSwapchain() {
@@ -1208,6 +2091,257 @@ bool VulkanDevice::recreateSwapchain() {
 
   s_logger.info("Swapchain recreated.");
   return true;
+}
+
+bool VulkanDevice::initShadowResources() {
+  // shadow render pass (depth-only, no color attachment)
+  VkAttachmentDescription depthAttachment{
+      .format = depthFormat_,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+      .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+      .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+  };
+
+  VkAttachmentReference depthRef{
+      .attachment = 0,
+      .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+  };
+
+  VkSubpassDescription subpass{
+      .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+      .colorAttachmentCount = 0,
+      .pDepthStencilAttachment = &depthRef,
+  };
+
+  VkSubpassDependency dependency{
+      .srcSubpass = VK_SUBPASS_EXTERNAL,
+      .dstSubpass = 0,
+      .srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+      .dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+      .srcAccessMask = VK_ACCESS_SHADER_READ_BIT,
+      .dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+  };
+
+  VkRenderPassCreateInfo rpInfo{
+      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+      .attachmentCount = 1,
+      .pAttachments = &depthAttachment,
+      .subpassCount = 1,
+      .pSubpasses = &subpass,
+      .dependencyCount = 1,
+      .pDependencies = &dependency,
+  };
+
+  if (vkCreateRenderPass(device_, &rpInfo, nullptr, &shadowRenderPass_) !=
+      VK_SUCCESS) {
+    s_logger.error("Failed to create shadow render pass");
+    return false;
+  }
+
+  // shadow map depth image
+  if (!shadowMapImage_.init(device_, allocator_.handle(), kShadowMapResolution,
+                            kShadowMapResolution, depthFormat_,
+                            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+                                VK_IMAGE_USAGE_SAMPLED_BIT,
+                            VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+                            VK_IMAGE_ASPECT_DEPTH_BIT)) {
+    s_logger.error("Failed to create shadow map image");
+    return false;
+  }
+
+  // shadow framebuffer
+  VkImageView shadowView = shadowMapImage_.view();
+  VkFramebufferCreateInfo fbInfo{
+      .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+      .renderPass = shadowRenderPass_,
+      .attachmentCount = 1,
+      .pAttachments = &shadowView,
+      .width = kShadowMapResolution,
+      .height = kShadowMapResolution,
+      .layers = 1,
+  };
+
+  if (vkCreateFramebuffer(device_, &fbInfo, nullptr, &shadowFramebuffer_) !=
+      VK_SUCCESS) {
+    s_logger.error("Failed to create shadow framebuffer");
+    return false;
+  }
+
+  // shadow pipeline (vertex-only, depth-only)
+  std::string shadersDir = SHADERS_DIR;
+  std::string vertPath = shadersDir + "/shadow.vert.spv";
+
+  VulkanShader vertShader;
+  if (!vertShader.init(device_, ShaderStage::Vertex, vertPath)) {
+    s_logger.error("Failed to load shadow vertex shader");
+    return false;
+  }
+
+  // vertex input: only position (location 0) from Vertex struct
+  VertexInputDescription vertexDesc;
+  vertexDesc.bindings.push_back({
+      .binding = 0,
+      .stride = sizeof(Vertex),
+      .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+  });
+  vertexDesc.attributes.push_back({
+      .location = 0,
+      .binding = 0,
+      .format = VK_FORMAT_R32G32B32_SFLOAT,
+      .offset = offsetof(Vertex, pos),
+  });
+
+  VkDescriptorSetLayout setLayout = descriptorPool_.uboSetLayout();
+
+  VkPipelineLayoutCreateInfo layoutInfo{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+      .setLayoutCount = 1,
+      .pSetLayouts = &setLayout,
+  };
+
+  VkPushConstantRange pushRange{
+      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+      .offset = 0,
+      .size = sizeof(glm::mat4),
+  };
+  layoutInfo.pushConstantRangeCount = 1;
+  layoutInfo.pPushConstantRanges = &pushRange;
+
+  if (vkCreatePipelineLayout(device_, &layoutInfo, nullptr,
+                             &shadowPipelineLayout_) != VK_SUCCESS) {
+    s_logger.error("Failed to create shadow pipeline layout");
+    vertShader.shutdown();
+    return false;
+  }
+
+  VkPipelineVertexInputStateCreateInfo vertexInput{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+      .vertexBindingDescriptionCount =
+          static_cast<uint32_t>(vertexDesc.bindings.size()),
+      .pVertexBindingDescriptions = vertexDesc.bindings.data(),
+      .vertexAttributeDescriptionCount =
+          static_cast<uint32_t>(vertexDesc.attributes.size()),
+      .pVertexAttributeDescriptions = vertexDesc.attributes.data(),
+  };
+
+  VkPipelineInputAssemblyStateCreateInfo inputAssembly{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+      .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+  };
+
+  VkPipelineViewportStateCreateInfo viewportState{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+      .viewportCount = 1,
+      .scissorCount = 1,
+  };
+
+  VkPipelineRasterizationStateCreateInfo rasterizer{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+      .polygonMode = VK_POLYGON_MODE_FILL,
+      .cullMode = VK_CULL_MODE_FRONT_BIT,
+      .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+      .depthBiasEnable = VK_TRUE,
+      .depthBiasConstantFactor = 1.25F,
+      .depthBiasSlopeFactor = 1.75F,
+      .lineWidth = 1.0F,
+  };
+
+  VkPipelineMultisampleStateCreateInfo multisampling{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+      .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+  };
+
+  VkPipelineDepthStencilStateCreateInfo depthStencil{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+      .depthTestEnable = VK_TRUE,
+      .depthWriteEnable = VK_TRUE,
+      .depthCompareOp = VK_COMPARE_OP_LESS,
+      .depthBoundsTestEnable = VK_FALSE,
+      .stencilTestEnable = VK_FALSE,
+  };
+
+  // no color blend state (depth-only pass)
+  VkPipelineColorBlendStateCreateInfo colorBlending{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+      .attachmentCount = 0,
+  };
+
+  std::array<VkDynamicState, 2> dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT,
+                                                  VK_DYNAMIC_STATE_SCISSOR};
+  VkPipelineDynamicStateCreateInfo dynamicState{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+      .dynamicStateCount = 2,
+      .pDynamicStates = dynamicStates.data(),
+  };
+
+  VkPipelineShaderStageCreateInfo vertStage = vertShader.stageCreateInfo();
+
+  VkGraphicsPipelineCreateInfo pipelineInfo{
+      .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+      .stageCount = 1,
+      .pStages = &vertStage,
+      .pVertexInputState = &vertexInput,
+      .pInputAssemblyState = &inputAssembly,
+      .pViewportState = &viewportState,
+      .pRasterizationState = &rasterizer,
+      .pMultisampleState = &multisampling,
+      .pDepthStencilState = &depthStencil,
+      .pColorBlendState = &colorBlending,
+      .pDynamicState = &dynamicState,
+      .layout = shadowPipelineLayout_,
+      .renderPass = shadowRenderPass_,
+      .subpass = 0,
+  };
+
+  if (vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo,
+                                nullptr, &shadowPipeline_) != VK_SUCCESS) {
+    s_logger.error("Failed to create shadow pipeline");
+    vertShader.shutdown();
+    return false;
+  }
+
+  vertShader.shutdown();
+
+  s_logger.info("Shadow resources initialized ({}x{}).",
+                kShadowMapResolution, kShadowMapResolution);
+  return true;
+}
+
+void VulkanDevice::updateShadowMapDescriptors() {
+  VkImageView shadowView = shadowMapImage_.view();
+  if (shadowView == VK_NULL_HANDLE) {
+    return;
+  }
+  VkSampler sampler = descriptorPool_.shadowSampler();
+  for (auto *mat : shadowMaterials_) {
+    if (mat != nullptr) {
+      mat->updateShadowMap(shadowView, sampler);
+    }
+  }
+}
+
+void VulkanDevice::destroyShadowResources() {
+  if (shadowPipeline_ != VK_NULL_HANDLE) {
+    vkDestroyPipeline(device_, shadowPipeline_, nullptr);
+    shadowPipeline_ = VK_NULL_HANDLE;
+  }
+  if (shadowPipelineLayout_ != VK_NULL_HANDLE) {
+    vkDestroyPipelineLayout(device_, shadowPipelineLayout_, nullptr);
+    shadowPipelineLayout_ = VK_NULL_HANDLE;
+  }
+  if (shadowFramebuffer_ != VK_NULL_HANDLE) {
+    vkDestroyFramebuffer(device_, shadowFramebuffer_, nullptr);
+    shadowFramebuffer_ = VK_NULL_HANDLE;
+  }
+  shadowMapImage_.shutdown();
+  if (shadowRenderPass_ != VK_NULL_HANDLE) {
+    vkDestroyRenderPass(device_, shadowRenderPass_, nullptr);
+    shadowRenderPass_ = VK_NULL_HANDLE;
+  }
 }
 
 std::unique_ptr<IBuffer> VulkanDevice::createBuffer(const BufferDesc &desc) {

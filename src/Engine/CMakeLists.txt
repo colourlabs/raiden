@@ -113,6 +113,7 @@ add_library(EngineCore STATIC
   src/Engine/Application.cpp
   src/Core/Logger.cpp
   src/Core/ConfigLoader.cpp
+  src/Core/ConVar.cpp
 
   src/Jobs/JobSystem.cpp
 

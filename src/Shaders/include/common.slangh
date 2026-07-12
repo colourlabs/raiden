@@ -8,9 +8,10 @@ struct FrameUniforms
   float4 extra;         // x=time, y=deltaTime, z=resX, w=resY
   float4 cameraPos;     // xyz=camera world position, w unused
   float4 lightDir;      // xyz=direction toward light, w=intensity
-  float4 lightColor;    // rgb=color, w=unused
+  float4 lightColor;    // rgb=color, w=shadowEnabled
   float4 ambientSky;    // rgb=hemispheric sky color, w=intensity
   float4 ambientGround; // rgb=hemispheric ground color, w=unused
+  float4x4 lightViewProj; // light space VP matrix for shadow mapping
 };
 
 struct MaterialParams
@@ -48,10 +49,20 @@ Texture2D<float4> metallicRoughnessMap;
 Texture2D<float4> emissiveMap;
 [[vk::binding(4, 2)]]
 Texture2D<float4> occlusionMap;
+[[vk::binding(5, 2)]]
+Texture2D<float4> shadowMap;
 
 // set 3, material params
 [[vk::binding(0, 3)]]
 ConstantBuffer<MaterialParams> material;
+
+// set 4, IBL resources (diffuse irradiance, pre-filtered specular, BRDF LUT)
+[[vk::binding(0, 4)]]
+TextureCube<float4> irradianceMap;
+[[vk::binding(1, 4)]]
+TextureCube<float4> prefilteredMap;
+[[vk::binding(2, 4)]]
+Texture2D<float4> brdfLUT;
 
 float3 fresnelSchlick(float cosTheta, float3 F0)
 {

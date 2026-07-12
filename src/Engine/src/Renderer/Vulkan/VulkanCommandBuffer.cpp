@@ -6,6 +6,16 @@
 namespace Raiden::Renderer {
 
 void VulkanCommandBuffer::bindPipeline(const IPipeline &pipeline) {
+  if (shadowMode_) {
+    vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, shadowPipeline_);
+    currentLayout_ = shadowLayout_;
+    if (uboSet_ != VK_NULL_HANDLE) {
+      vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              currentLayout_, 0, 1, &uboSet_, 0, nullptr);
+    }
+    return;
+  }
+
   const auto &vkPipeline = static_cast<const VulkanPipelineImpl &>(pipeline);
   
   vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipeline.handle());
@@ -33,6 +43,10 @@ void VulkanCommandBuffer::bindIndexBuffer(const IBuffer &buffer) {
 }
 
 void VulkanCommandBuffer::bindTexture(uint32_t slot, const ITexture &texture) {
+  if (shadowMode_) {
+    return; // no textures needed for depth-only shadow pass
+  }
+
   (void)slot; // slot is not used in Vulkan, as we bind textures via descriptor sets
   
   if (currentLayout_ == VK_NULL_HANDLE) {

@@ -146,8 +146,11 @@ void VulkanMaterial::writeDescriptors(VulkanDescriptorPool &pool) {
   VkDescriptorImageInfo emissiveInfo = getImageInfo(emissive_);
   VkDescriptorImageInfo occlusionInfo = getImageInfo(occlusion_);
 
+  // shadow map starts as fallback (will be updated per-frame)
+  VkDescriptorImageInfo shadowMapInfo = pool.fallbackImageInfo();
+
   // texture descriptor writes, binding slots match the shader layout
-  std::array<VkWriteDescriptorSet, 5> writes{{
+  std::array<VkWriteDescriptorSet, 6> writes{{
       {
           .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
           .dstSet = materialSet_,
@@ -188,6 +191,14 @@ void VulkanMaterial::writeDescriptors(VulkanDescriptorPool &pool) {
           .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
           .pImageInfo = &occlusionInfo,
       },
+      {
+          .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+          .dstSet = materialSet_,
+          .dstBinding = 5, // shadow map
+          .descriptorCount = 1,
+          .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+          .pImageInfo = &shadowMapInfo,
+      },
   }};
 
   vkUpdateDescriptorSets(device_, static_cast<uint32_t>(writes.size()),
@@ -214,6 +225,13 @@ void VulkanMaterial::writeDescriptors(VulkanDescriptorPool &pool) {
 
 void VulkanMaterial::bind(ICommandBuffer &cmd) {
   auto *vkCmd = static_cast<VulkanCommandBuffer *>(&cmd);
+
+  // In shadow mode, skip material pipeline and descriptor binding entirely.
+  // The shadow pipeline was already bound by enableShadowMode().
+  if (vkCmd->isShadowMode()) {
+    return;
+  }
+
   VkCommandBuffer raw = vkCmd->handle();
 
   VulkanPipelineImpl *vkPipeline = nullptr;
@@ -228,12 +246,33 @@ void VulkanMaterial::bind(ICommandBuffer &cmd) {
     vkCmd->setPipelineLayout(vkPipeline->layout());
 
     VkDescriptorSet samplerSet = pool_->samplerSet();
-    std::array<VkDescriptorSet, 3> sets = {samplerSet, materialSet_, paramsSet_};
+    VkDescriptorSet iblSet = pool_->iblSet();
+    std::array<VkDescriptorSet, 4> sets = {samplerSet, materialSet_, paramsSet_, iblSet};
     vkCmdBindDescriptorSets(raw, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             vkPipeline->layout(),
                             1, static_cast<uint32_t>(sets.size()), sets.data(),
                             0, nullptr);
   }
+}
+
+void VulkanMaterial::updateShadowMap(VkImageView shadowMapView,
+                                     VkSampler shadowSampler) {
+  VkDescriptorImageInfo shadowInfo{
+      .sampler = shadowSampler,
+      .imageView = shadowMapView,
+      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+  };
+
+  VkWriteDescriptorSet shadowWrite{
+      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+      .dstSet = materialSet_,
+      .dstBinding = 5, // shadow map
+      .descriptorCount = 1,
+      .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+      .pImageInfo = &shadowInfo,
+  };
+
+  vkUpdateDescriptorSets(device_, 1, &shadowWrite, 0, nullptr);
 }
 
 void VulkanMaterial::shutdown() {

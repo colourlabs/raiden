@@ -1,9 +1,11 @@
 #include "Game.hpp"
 
 #include <Raiden/Assets/IAssetManager.hpp>
+#include <Raiden/Core/ConVar.hpp>
 #include <Raiden/Core/PluginABI.hpp>
 #include <Raiden/ECS/Camera.hpp>
 #include <Raiden/ECS/Collider.hpp>
+#include <Raiden/ECS/Light.hpp>
 #include <Raiden/ECS/MeshRenderer.hpp>
 #include <Raiden/ECS/Name.hpp>
 #include <Raiden/ECS/Rigidbody.hpp>
@@ -50,6 +52,22 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
   auto &cam = world_.get<Raiden::ECS::Camera>(camEntity_);
   cam.setLookAt({0.0F, 0.0F, 3.0F}, {0.0F, 0.0F, 0.0F});
   cam.setPerspective(45.0F, 1.0F, 0.1F, 100.0F);
+
+  // directional light with shadows
+  {
+    auto e = world_.create();
+    world_.assign<Raiden::ECS::Name>(e, "Sun");
+    world_.assign<Raiden::ECS::DirectionalLight>(
+        e, Raiden::ECS::DirectionalLight{
+               .direction = {0.3F, -1.0F, 0.5F},
+               .color = {1.0F, 0.98F, 0.92F},
+               .intensity = 2.0F,
+               .castShadows = true,
+               .shadowNear = 0.1F,
+               .shadowFar = 50.0F,
+               .shadowSize = 20.0F,
+           });
+  }
 
   // main pipeline
   Raiden::Renderer::PipelineDesc pipelineDesc{
@@ -363,13 +381,15 @@ void ExampleGame::update(float deltaTime,
   prevRmb = input.mouseButtons[2];
 
   if (mouseCaptured_) {
-    float const sensitivity = 0.002F;
+    float const sensitivity =
+        Raiden::Core::convars().getFloat("mouse_sensitivity", 0.002F);
     yaw_ += static_cast<float>(input.mouseDeltaX) * sensitivity;
     pitch_ -= static_cast<float>(input.mouseDeltaY) * sensitivity;
     pitch_ = glm::clamp(pitch_, glm::radians(-89.0F), glm::radians(89.0F));
   }
 
-  float speed = 3.0F * deltaTime;
+  float speed =
+      Raiden::Core::convars().getFloat("camera_speed", 3.0F) * deltaTime;
   if (const auto *fw = actions_.find("move_forward");
       (fw != nullptr) && fw->pressed) {
     speed *= 2.0F;

@@ -31,6 +31,11 @@ public:
   [[nodiscard]] VkDescriptorSetLayout samplerSetLayout() const { return samplerSetLayout_; }
   [[nodiscard]] VkDescriptorSet samplerSet() const { return samplerSet_; }
 
+  // set 1b, sampler + shadow map (used by PBR material path)
+  [[nodiscard]] VkDescriptorSetLayout samplerWithShadowSetLayout() const { return samplerWithShadowSetLayout_; }
+  [[nodiscard]] VkDescriptorSet samplerWithShadowSet() const { return samplerWithShadowSet_; }
+  void updateShadowMapDescriptor(VkImageView shadowMapView);
+
   // set 2, simple single texture (VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, binding 0)
   [[nodiscard]] VkDescriptorSetLayout textureSetLayout() const { return textureSetLayout_; }
 
@@ -49,16 +54,25 @@ public:
     return &materialParamsSetLayout_;
   }
 
+  // set 4, IBL resources (irradiance cubemap, pre-filtered cubemap, BRDF LUT)
+  [[nodiscard]] VkDescriptorSetLayout iblSetLayout() const { return iblSetLayout_; }
+  [[nodiscard]] VkDescriptorSet iblSet() const { return iblSet_; }
+  void updateIBLDescriptors(VkImageView irradianceView, VkImageView prefilterView,
+                            VkImageView brdfView, VkSampler sampler);
+
   [[nodiscard]] VkSampler sampler() const { return sampler_; }
   [[nodiscard]] VkSampler clampSampler() const { return clampSampler_; }
+  [[nodiscard]] VkSampler shadowSampler() const { return shadowSampler_; }
   [[nodiscard]] VkDescriptorSet clampSamplerSet() const { return clampSamplerSet_; }
   [[nodiscard]] VkDevice device() const { return device_; }
 
   VkDescriptorSet allocSamplerSet();
   [[nodiscard]] VkDescriptorImageInfo fallbackImageInfo() const;
+  [[nodiscard]] VkDescriptorImageInfo fallbackCubeImageInfo() const;
 
 private:
   bool createFallbackTexture();
+  bool createFallbackCubeTexture();
 
   VkDevice device_ = VK_NULL_HANDLE;
   VkPhysicalDevice physDev_ = VK_NULL_HANDLE;
@@ -69,19 +83,33 @@ private:
   VmaAllocator allocator_ = VK_NULL_HANDLE;
 
   VkDescriptorSetLayout samplerSetLayout_ = VK_NULL_HANDLE;
+  VkDescriptorSetLayout samplerWithShadowSetLayout_ = VK_NULL_HANDLE;
   VkDescriptorSetLayout textureSetLayout_ = VK_NULL_HANDLE;
   VkDescriptorSetLayout materialSetLayout_ = VK_NULL_HANDLE;
   VkDescriptorSetLayout materialParamsSetLayout_ = VK_NULL_HANDLE;
   VkSampler sampler_ = VK_NULL_HANDLE;
   VkDescriptorSet samplerSet_ = VK_NULL_HANDLE;
+  VkDescriptorSet samplerWithShadowSet_ = VK_NULL_HANDLE;
 
   VkSampler clampSampler_ = VK_NULL_HANDLE;
   VkDescriptorSet clampSamplerSet_ = VK_NULL_HANDLE;
+
+  // shadow map sampler (comparison for PCF)
+  VkSampler shadowSampler_ = VK_NULL_HANDLE;
+
+  // IBL (set 4: irradiance, prefiltered, BRDF LUT)
+  VkDescriptorSetLayout iblSetLayout_ = VK_NULL_HANDLE;
+  VkDescriptorSet iblSet_ = VK_NULL_HANDLE;
 
   // 1x1 white fallback for unbound material texture slots
   VkImage fallbackImage_ = VK_NULL_HANDLE;
   VkImageView fallbackImageView_ = VK_NULL_HANDLE;
   VmaAllocation fallbackAllocation_ = VK_NULL_HANDLE;
+
+  // 1x1 white cubemap fallback for unbound IBL cubemap slots
+  VkImage fallbackCubeImage_ = VK_NULL_HANDLE;
+  VkImageView fallbackCubeImageView_ = VK_NULL_HANDLE;
+  VmaAllocation fallbackCubeAllocation_ = VK_NULL_HANDLE;
 };
 
 } // namespace Raiden::Renderer

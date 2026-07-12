@@ -33,15 +33,27 @@ foreach(SHADER ${SHADER_SOURCES})
   set(VERT_SPV ${SHADER_OUTPUT_DIR}/${SHADER_NAME}.vert.spv)
   set(FRAG_SPV ${SHADER_OUTPUT_DIR}/${SHADER_NAME}.frag.spv)
 
+  # compile vertex stage
   add_custom_command(
-    OUTPUT ${VERT_SPV} ${FRAG_SPV}
+    OUTPUT ${VERT_SPV}
     COMMAND ${SLANGC_WRAPPER} ${SLANGC} -I ${CMAKE_CURRENT_SOURCE_DIR} -I ${CMAKE_CURRENT_SOURCE_DIR}/include -entry vertexMain -stage vertex -target spirv ${SHADER} -o ${VERT_SPV}
-    COMMAND ${SLANGC_WRAPPER} ${SLANGC} -I ${CMAKE_CURRENT_SOURCE_DIR} -I ${CMAKE_CURRENT_SOURCE_DIR}/include -entry fragmentMain -stage fragment -target spirv ${SHADER} -o ${FRAG_SPV}
     DEPENDS ${SHADER} ${SHADER_INCLUDES}
-    COMMENT "Compiling ${SHADER_NAME}.slang -> SPIR-V"
+    COMMENT "Compiling ${SHADER_NAME}.slang -> vertex SPIR-V"
   )
+  list(APPEND SHADER_SPVS ${VERT_SPV})
 
-  list(APPEND SHADER_SPVS ${VERT_SPV} ${FRAG_SPV})
+  # compile fragment stage (skip if no fragmentMain entry point)
+  file(READ ${SHADER} SHADER_CONTENTS)
+  string(FIND "${SHADER_CONTENTS}" "fragmentMain" _FRAG_FOUND)
+  if(NOT _FRAG_FOUND EQUAL -1)
+    add_custom_command(
+      OUTPUT ${FRAG_SPV}
+      COMMAND ${SLANGC_WRAPPER} ${SLANGC} -I ${CMAKE_CURRENT_SOURCE_DIR} -I ${CMAKE_CURRENT_SOURCE_DIR}/include -entry fragmentMain -stage fragment -target spirv ${SHADER} -o ${FRAG_SPV}
+      DEPENDS ${SHADER} ${SHADER_INCLUDES}
+      COMMENT "Compiling ${SHADER_NAME}.slang -> fragment SPIR-V"
+    )
+    list(APPEND SHADER_SPVS ${FRAG_SPV})
+  endif()
 endforeach()
 
 add_custom_target(raiden_shaders ALL DEPENDS ${SHADER_SPVS})

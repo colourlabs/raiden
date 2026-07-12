@@ -33,6 +33,15 @@ public:
 
   void setPipelineLayout(VkPipelineLayout layout) { currentLayout_ = layout; }
 
+  void enableShadowMode(VkPipeline shadowPipeline,
+                        VkPipelineLayout shadowLayout) {
+    shadowMode_ = true;
+    shadowPipeline_ = shadowPipeline;
+    shadowLayout_ = shadowLayout;
+  }
+
+  [[nodiscard]] bool isShadowMode() const { return shadowMode_; }
+
 private:
   VkCommandBuffer cmd_ = VK_NULL_HANDLE;
   VulkanDescriptorPool *pool_ = nullptr;
@@ -40,6 +49,10 @@ private:
   VkDescriptorSet uboSet_ = VK_NULL_HANDLE;
   uint32_t drawCalls_ = 0;
   uint32_t triangles_ = 0;
+
+  bool shadowMode_ = false;
+  VkPipeline shadowPipeline_ = VK_NULL_HANDLE;
+  VkPipelineLayout shadowLayout_ = VK_NULL_HANDLE;
 };
 
 } // namespace Raiden::Renderer

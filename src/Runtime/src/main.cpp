@@ -1,5 +1,6 @@
 #include <Raiden/Application.hpp>
 #include <Raiden/Core/ConfigLoader.hpp>
+#include <Raiden/Core/ConVar.hpp>
 #include <Raiden/Core/IVirtualFileSystem.hpp>
 #include <Raiden/Logger.hpp>
 
@@ -14,7 +15,7 @@
 static const Raiden::Core::Logger s_logger("main");
 
 static void printUsage(const char *argv0) {
-  s_logger.info("Usage: {} --datapack <path>", argv0);
+  s_logger.info("Usage: {} --datapack <path> [+convar value ...]", argv0);
 }
 
 int main(int argc, char *argv[]) {
@@ -69,6 +70,9 @@ int main(int argc, char *argv[]) {
   if (!app.init(config)) {
     return 1;
   }
+
+  // apply CLI convar overrides after init (autoexec already loaded)
+  Raiden::Core::convars().applyCLIOverrides(argc, argv);
 
   if (!resolvedPluginPath.empty()) {
     if (!app.loadGamePlugin(resolvedPluginPath)) {

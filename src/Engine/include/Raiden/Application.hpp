@@ -60,6 +60,9 @@ public:
     return pluginLoader_.plugin().getWorld();
   }
 
+  [[nodiscard]] float getTickRate() const { return tickRate_; }
+  [[nodiscard]] float getAccumulator() const { return accumulator_; }
+
   using GizmoRenderCallback =
       std::function<void(::Raiden::Renderer::ICommandBuffer &)>;
   void setGizmoRenderCallback(GizmoRenderCallback cb) {
@@ -83,6 +86,10 @@ private:
   std::atomic<bool> running_{false};
   std::chrono::steady_clock::time_point lastFrameTime_;
   GizmoRenderCallback gizmoRenderCb_;
+
+  float tickRate_ = 1.0F / 60.0F;
+  float accumulator_ = 0.0F;
+  float physicsSystemLastGravity_ = -9.81F;
 };
 
 } // namespace Raiden::Engine

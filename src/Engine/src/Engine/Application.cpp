@@ -1,6 +1,7 @@
 #include <Raiden/Application.hpp>
 #include <Raiden/Assets/AssetManager.hpp>
 #include <Raiden/Audio/OpenALDevice.hpp>
+#include <Raiden/Core/ConVar.hpp>
 #include <Raiden/ECS/Camera.hpp>
 #include <Raiden/Engine/VulkanImGuiBackend.hpp>
 #include <Raiden/Logger.hpp>
@@ -41,6 +42,49 @@ bool Application::init(const EngineConfig &config) {
   config_ = config;
 
   s_logger.info("Initializing application...");
+
+  // register core convars with sane defaults
+  auto &cv = Core::convars();
+  cv.registerInt("tick_rate", 60, Core::ConVarNone, "Fixed tick rate in Hz");
+  cv.registerBool("show_fps", false, Core::ConVarArchive, "Show FPS counter");
+  cv.registerBool("show_frame_time", false, Core::ConVarArchive,
+                  "Show frame time graph");
+  cv.registerBool("show_draw_calls", false, Core::ConVarArchive,
+                  "Show draw calls & triangles");
+  cv.registerBool("show_gpu_stats", false, Core::ConVarArchive,
+                  "Show GPU profiler");
+  cv.registerBool("show_convars", false, Core::ConVarNone,
+                  "Show ConVars debug window");
+  cv.registerFloat("mouse_sensitivity", 0.002F, Core::ConVarArchive,
+                   "Mouse look sensitivity");
+  cv.registerFloat("camera_speed", 3.0F, Core::ConVarArchive,
+                   "Camera movement speed");
+  cv.registerBool("vsync", config.window.vsync, Core::ConVarArchive,
+                  "Vertical sync");
+  cv.registerInt("window_width", config.window.width, Core::ConVarArchive,
+                 "Window width");
+  cv.registerInt("window_height", config.window.height, Core::ConVarArchive,
+                 "Window height");
+  cv.registerBool("fullscreen", config.window.fullscreen, Core::ConVarArchive,
+                  "Fullscreen mode");
+  cv.registerBool("validation", config.enableValidation,
+                  Core::ConVarRestart, "Vulkan validation layers");
+  cv.registerString("scene", "default.scene.json", Core::ConVarArchive,
+                    "Scene file to load");
+  cv.registerFloat("master_volume", config.audio.masterVolume,
+                   Core::ConVarArchive, "Master audio volume (0-1)");
+  cv.registerFloat("physics_gravity", -9.81F, Core::ConVarArchive,
+                   "Physics gravity Y");
+  cv.registerBool("physics_enabled", true, Core::ConVarArchive,
+                  "Enable physics simulation");
+
+  // load autoexec.cfg (overrides defaults)
+  if (vfs_) {
+    cv.loadAutoExec(*vfs_);
+  }
+
+  // CLI overrides (+convarname value) override everything
+  // (applied later in main.cpp after argc/argv are available)
 
   jobSystem_.init();
 
@@ -140,6 +184,11 @@ void Application::shutdown() {
 
   s_logger.info("Shutting down application...");
 
+  // save archived convars to autoexec.cfg
+  if (vfs_) {
+    Core::convars().saveAutoExec(*vfs_);
+  }
+
   overlay_.reset();
   pluginLoader_.unload();
   assetManager_.reset();
@@ -158,30 +207,68 @@ void Application::run() {
     s_logger.warn("No game plugin loaded, running with default scene.");
   }
 
+  // shadow callback: only game geometry, no overlay/gizmo (they use raw Vulkan
+  // pipeline binds that bypass the command buffer shadow mode interception)
+  device_->setShadowCallback(
+      [this](ICommandBuffer &cmd, uint32_t wi, uint32_t) {
+        if (wi == 0 && pluginLoader_.isLoaded()) {
+          pluginLoader_.plugin().render(cmd);
+        }
+      });
+
   while (running_) {
     auto now = std::chrono::steady_clock::now();
-    float deltaTime =
+    float frameDelta =
         std::chrono::duration<float>(now - lastFrameTime_).count();
     lastFrameTime_ = now;
+
+    // clamp to avoid spiral of death
+    if (frameDelta > 0.25F) {
+      frameDelta = 0.25F;
+    }
+
+    // read tick rate from convar (can be changed at runtime)
+    int tickRateHz = Core::convars().getInt("tick_rate", 60);
+    tickRate_ = 1.0F / static_cast<float>(tickRateHz);
 
     if (!platform_->pollEvents()) {
       break;
     }
 
-    if (pluginLoader_.isLoaded()) {
-      pluginLoader_.plugin().update(deltaTime, platform_->getInputState());
+    // fixed timestep accumulator for game logic and physics
+    accumulator_ += frameDelta;
+
+    // apply gravity from convar if changed
+    if (physicsSystem_ && physicsSystemLastGravity_ !=
+                             Core::convars().getFloat("physics_gravity", -9.81F)) {
+      physicsSystemLastGravity_ =
+          Core::convars().getFloat("physics_gravity", -9.81F);
+      physicsSystem_->setGravity({0.0F, physicsSystemLastGravity_, 0.0F});
     }
 
-    if (physicsSync_) {
-      auto *world = getWorld();
-      if (world) {
-        physicsSync_->update(*world, deltaTime);
+    while (accumulator_ >= tickRate_) {
+      if (pluginLoader_.isLoaded()) {
+        pluginLoader_.plugin().update(tickRate_, platform_->getInputState());
       }
+
+      if (Core::convars().getBool("physics_enabled", true)) {
+        if (physicsSync_) {
+          auto *world = getWorld();
+          if (world != nullptr) {
+            physicsSync_->update(*world, tickRate_);
+          }
+        }
+
+        if (physicsSystem_) {
+          physicsSystem_->step(tickRate_);
+        }
+      }
+
+      accumulator_ -= tickRate_;
     }
 
-    if (physicsSystem_) {
-      physicsSystem_->step(deltaTime);
-    }
+    // interpolation alpha for rendering (0..1 between ticks)
+    // float alpha = accumulator_ / tickRate_;
 
     if (audioDevice_) {
       audioDevice_->processPendingLoads();
@@ -193,8 +280,14 @@ void Application::run() {
       int w = 0, h = 0;
       platform_->getWindowSize(w, h);
 
+      // sync convar state to overlay
+      if (Core::convars().getBool("show_convars")) {
+        overlay_->toggleConVarsWindow();
+        Core::convars().setBool("show_convars", false);
+      }
+
       ProfilerFrameData profiler{};
-      profiler.cpuFrameTimeMs = deltaTime * 1000.0F;
+      profiler.cpuFrameTimeMs = frameDelta * 1000.0F;
 
       if (auto *vkDev = dynamic_cast<IVulkanRenderDevice *>(device_.get())) {
         const auto &d = dynamic_cast<const VulkanDevice &>(*vkDev);
@@ -230,8 +323,8 @@ void Application::run() {
         overlay_->setCameraMatrices(viewMat.data(), projMat.data(), w, h);
       }
 
-      overlay_->newFrame(platform_->getInputState(), w, h, deltaTime, profiler,
-                         pluginUI);
+      overlay_->newFrame(platform_->getInputState(), w, h, frameDelta,
+                         profiler, pluginUI);
       Raiden::Engine::ImGuiOverlay::endFrame();
     }
 

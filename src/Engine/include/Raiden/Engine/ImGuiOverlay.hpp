@@ -60,6 +60,8 @@ public:
 
   [[nodiscard]] static bool wantsCaptureMouse();
 
+  void toggleConVarsWindow() { showConVars_ = !showConVars_; }
+
 private:
   void pushPerfData(const ProfilerFrameData &profiler, float dt);
 
@@ -92,6 +94,9 @@ private:
   std::array<float, 16> cameraProjMatrix_{};
   int cameraViewportW_ = 0;
   int cameraViewportH_ = 0;
+
+  bool showConVars_ = false;
+  char conVarFilter_[128] = {};
 };
 
 } // namespace Raiden::Engine

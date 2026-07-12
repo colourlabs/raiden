@@ -14,6 +14,7 @@ struct VulkanImageInfo {
   VkImageAspectFlags aspectFlags;
   VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT;
   uint32_t arrayLayers = 1;
+  uint32_t mipLevels = 1;
   VkImageCreateFlags createFlags = 0;
   VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D;
 };

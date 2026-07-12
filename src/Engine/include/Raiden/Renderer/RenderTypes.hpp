@@ -63,6 +63,7 @@ enum class Format : uint8_t {
   R32G32B32A32_Float,
   R8G8B8A8_UNORM,
   R8G8B8A8_SRGB,
+  R16G16B16A16_Float,
 };
 
 struct VertexAttribute {
@@ -165,9 +166,10 @@ struct alignas(16) FrameUniforms {
   glm::vec4 extra;         // x=time, y=dt, z=resolutionX, w=resolutionY
   glm::vec4 cameraPos;     // xyz=camera world position, w unused
   glm::vec4 lightDir;      // xyz=direction toward light, w=intensity
-  glm::vec4 lightColor;    // rgb=color, w=unused
+  glm::vec4 lightColor;    // rgb=color, w=shadowEnabled
   glm::vec4 ambientSky;    // rgb=hemispheric sky color, w=intensity
   glm::vec4 ambientGround; // rgb=hemispheric ground color, w=unused
+  glm::mat4 lightViewProj; // light space VP matrix for shadow mapping
 };
 
 struct Vertex {

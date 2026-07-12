@@ -28,6 +28,8 @@
 
 namespace Raiden::Renderer {
 
+class VulkanMaterial;
+
 struct QueueFamilyIndices {
   std::optional<uint32_t> graphicsFamily;
   std::optional<uint32_t> presentFamily;
@@ -83,7 +85,7 @@ public:
   }
 
   [[nodiscard]] VkRenderPass getRenderPass() const override {
-    return renderPass_.renderPass();
+    return hdrRenderPass_ != VK_NULL_HANDLE ? hdrRenderPass_ : renderPass_.renderPass();
   }
 
   [[nodiscard]] uint32_t getSwapchainImageCount() const override {
@@ -122,6 +124,7 @@ public:
     }
   }
 
+  void setShadowCallback(RenderCallback cb) override { shadowCallback_ = std::move(cb); }
   bool drawFrame(const RenderCallback &callback) override;
 
 private:
@@ -223,6 +226,45 @@ private:
   float gpuTimeMs_ = 0.0F;
   uint32_t lastDrawCalls_ = 0;
   uint32_t lastTriangles_ = 0;
+
+  // shadow mapping
+  static constexpr uint32_t kShadowMapResolution = 2048;
+  VkRenderPass shadowRenderPass_ = VK_NULL_HANDLE;
+  VulkanImage shadowMapImage_;
+  VkFramebuffer shadowFramebuffer_ = VK_NULL_HANDLE;
+  VkPipeline shadowPipeline_ = VK_NULL_HANDLE;
+  VkPipelineLayout shadowPipelineLayout_ = VK_NULL_HANDLE;
+  bool initShadowResources();
+  void destroyShadowResources();
+  void updateShadowMapDescriptors();
+  std::vector<VulkanMaterial *> shadowMaterials_;
+
+  // HDR offscreen render target
+  VkRenderPass hdrRenderPass_ = VK_NULL_HANDLE;
+  VulkanImage hdrMsaaImage_;
+  VulkanImage hdrResolveImage_;
+  VkFramebuffer hdrFramebuffer_ = VK_NULL_HANDLE;
+
+  // IBL resources
+  static constexpr uint32_t kIrradianceSize = 64;
+  static constexpr uint32_t kPrefilterSize = 128;
+  static constexpr uint32_t kBRDFSize = 512;
+  static constexpr uint32_t kPrefilterMipLevels = 5;
+  VulkanImage irradianceImage_;
+  VulkanImage prefilterImage_;
+  VulkanImage brdfLUTImage_;
+  VkRenderPass iblRenderPass_ = VK_NULL_HANDLE;
+  bool initIBLResources(const VulkanImage &sourceCubemap);
+  void destroyIBLResources();
+
+  // tone mapping
+  VkPipeline tonemapPipeline_ = VK_NULL_HANDLE;
+  VkPipelineLayout tonemapPipelineLayout_ = VK_NULL_HANDLE;
+  std::vector<VkFramebuffer> tonemapFramebuffers_;
+  VkRenderPass tonemapRenderPass_ = VK_NULL_HANDLE;
+  VkDescriptorSetLayout tonemapSetLayout_ = VK_NULL_HANDLE;
+  VkDescriptorSet tonemapSet_ = VK_NULL_HANDLE;
+  RenderCallback shadowCallback_;
 };
 
 } // namespace Raiden::Renderer

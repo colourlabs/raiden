@@ -34,6 +34,7 @@ public:
             std::shared_ptr<ITexture> occlusion = nullptr);
 
   void bind(ICommandBuffer &cmd) override;
+  void updateShadowMap(VkImageView shadowMapView, VkSampler shadowSampler);
   void shutdown();
 
 private:
