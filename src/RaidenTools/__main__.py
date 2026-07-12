@@ -11,7 +11,6 @@ from RaidenTools.commands.editor import add_arguments as add_editor_args, run_ed
 from RaidenTools.commands.run import add_arguments as add_run_args, run_game
 from RaidenTools.commands.setup import add_arguments as add_setup_args, run_setup
 
-
 def _find_project_root() -> Path:
     """Walk up from CWD to find CMakeLists.txt with the raiden project."""
     d = Path.cwd()
@@ -27,7 +26,6 @@ def _find_project_root() -> Path:
     print("[ERROR] Could not find raiden project root.", file=sys.stderr)
     print("        Run this command from within the raiden repository.", file=sys.stderr)
     sys.exit(1)
-
 
 def main() -> int:
     import argparse
@@ -73,7 +71,6 @@ def main() -> int:
 
     parser.print_help()
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

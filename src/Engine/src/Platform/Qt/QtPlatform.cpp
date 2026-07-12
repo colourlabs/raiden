@@ -1,18 +1,26 @@
-#define VK_USE_PLATFORM_WAYLAND_KHR
-#define VK_USE_PLATFORM_XCB_KHR
+#if defined(_WIN32)
+
+#include <windows.h>
+#include <QtGui/qpa/qplatformnativeinterface.h>
+
+#elif defined(__linux__)
 
 #include <wayland-client-protocol.h>
 #include <wayland-client.h>
 #include <xcb/xcb.h>
 
+#include <QtGui/qpa/qplatformnativeinterface.h>
+
+#endif
+
 #include <Raiden/Platform/Qt/QtPlatform.hpp>
 
 #include <QCoreApplication>
 #include <QGuiApplication>
-#include <QtGui/qpa/qplatformnativeinterface.h>
 
 #include <iostream>
 
+#if defined(__linux__ )
 struct XcbSurfaceCreateInfoKHR {
   VkStructureType sType;
   const void *pNext;
@@ -20,6 +28,7 @@ struct XcbSurfaceCreateInfoKHR {
   xcb_connection_t *connection;
   uint32_t window;
 };
+#endif
 
 namespace Raiden::Platform {
 
@@ -189,11 +198,13 @@ bool QtPlatform::init(const ::Raiden::Core::WindowConfig & /*config*/,
 }
 
 void QtPlatform::shutdown() {
+#if defined(__linux__)
   if (xcbConnection_ != nullptr) {
     xcb_disconnect(xcbConnection_);
     xcbConnection_ = nullptr;
   }
   wlDisplay_ = nullptr;
+#endif
   window_ = nullptr;
   running_ = false;
 }
@@ -238,9 +249,11 @@ bool QtPlatform::isWindowExposed() {
 }
 
 void QtPlatform::flushPendingPresentation() {
+#if defined(__linux__)
   if (wlDisplay_ != nullptr) {
     wl_display_roundtrip(wlDisplay_);
   }
+#endif
 }
 
 void QtPlatform::setRelativeMouseMode(bool enabled) {
@@ -259,11 +272,15 @@ void QtPlatform::setRelativeMouseMode(bool enabled) {
 void QtPlatform::endInputFrame() { inputState_.endFrame(); }
 
 std::vector<const char *> QtPlatform::getRequiredInstanceExtensions() const {
+#if defined(_WIN32)
+  return {"VK_KHR_surface", "VK_KHR_win32_surface"};
+#else
   auto name = qGuiApp->platformName();
   if (name == "wayland") {
     return {"VK_KHR_surface", "VK_KHR_wayland_surface"};
   }
   return {"VK_KHR_surface", "VK_KHR_xcb_surface"};
+#endif
 }
 
 bool QtPlatform::createVulkanSurface(VkInstance instance,
@@ -271,6 +288,29 @@ bool QtPlatform::createVulkanSurface(VkInstance instance,
   if (window_ == nullptr) {
     return false;
   }
+
+#if defined(_WIN32)
+  auto func = reinterpret_cast<PFN_vkCreateWin32SurfaceKHR>(
+      vkGetInstanceProcAddr(instance, "vkCreateWin32SurfaceKHR"));
+  if (func == nullptr) {
+    std::cerr << "QtPlatform: vkCreateWin32SurfaceKHR not found\n";
+    return false;
+  }
+
+  VkWin32SurfaceCreateInfoKHR createInfo{};
+  createInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+  createInfo.hinstance = GetModuleHandle(nullptr);
+  createInfo.hwnd = reinterpret_cast<HWND>(window_->winId());
+
+  VkResult res = func(instance, &createInfo, nullptr, surface);
+  if (res != VK_SUCCESS) {
+    std::cerr << "QtPlatform: vkCreateWin32SurfaceKHR failed: " << res << "\n";
+    return false;
+  }
+
+  return true;
+
+#else  // Linux
 
   auto name = qGuiApp->platformName();
 
@@ -339,6 +379,8 @@ bool QtPlatform::createVulkanSurface(VkInstance instance,
   }
 
   return true;
+
+#endif
 }
 
 } // namespace Raiden::Platform

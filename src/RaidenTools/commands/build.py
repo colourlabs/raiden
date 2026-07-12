@@ -24,7 +24,14 @@ def add_arguments(sub):
         action="store_true",
         help="Remove the build directory before configuring",
     )
-
+    sub.add_argument(
+        "-D",
+        dest="cmake_defines",
+        action="append",
+        default=[],
+        metavar="VAR=VALUE",
+        help="Extra CMake cache variable (repeatable, e.g. -DRAIDEN_USE_QT=ON)",
+    )
 
 def run_build(args, project_root: Path) -> int:
     build_dir = project_root / "build"
@@ -44,10 +51,11 @@ def run_build(args, project_root: Path) -> int:
             shutil.rmtree(preset_dir)
 
     print(f"  Configuring with preset: {configure_preset}")
-    r = subprocess.run(
-        ["cmake", "--preset", configure_preset],
-        cwd=project_root,
-    )
+    configure_cmd = ["cmake", "--preset", configure_preset]
+    for define in args.cmake_defines:
+        configure_cmd.append(f"-D{define}")
+
+    r = subprocess.run(configure_cmd, cwd=project_root)
     if r.returncode != 0:
         return r.returncode
 

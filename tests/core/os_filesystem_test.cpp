@@ -12,16 +12,12 @@ class OSFileSystemTest : public ::testing::Test {
 protected:
   void SetUp() override {
     Logger::setMinLogLevel(LogLevel::Critical);
-    tmpDir = std::filesystem::temp_directory_path() / "raiden_vfs_test_XXXXXX";
 
-    // create a unique temp directory
-    std::array<char, 256> tmpl;
-    std::snprintf(tmpl.data(), tmpl.size(), "%s/raiden_vfs_test_XXXXXX",
-                  std::filesystem::temp_directory_path().c_str());
+    tmpDir = std::filesystem::temp_directory_path() /
+             ("raiden_vfs_test_" +
+              std::to_string(std::rand()));
 
-    char *result = ::mkdtemp(tmpl.data());
-    ASSERT_NE(result, nullptr) << "Failed to create temp dir";
-    tmpDir = result;
+    std::filesystem::create_directories(tmpDir);
 
     vfs = createOSFileSystem();
     ASSERT_TRUE(vfs->mount("game://", tmpDir.string()));

@@ -149,6 +149,7 @@ def run_setup(args, project_root: Path) -> int:
     ok = True
     ok = _check_cmd("cmake", "Install from https://cmake.org/download/") or ok
     ok = _check_cmd("git", "Install from https://git-scm.com/downloads") or ok
+
     if sys.platform != "win32":
         ok = _check_cmd("g++", "Install g++ or clang++ from your package manager") or ok
     if not args.check and not ok:

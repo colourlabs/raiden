@@ -9,7 +9,6 @@ from pathlib import Path
 
 from RaidenTools.preset import detect_build_dir
 
-
 def add_arguments(sub):
     sub.add_argument(
         "mode",
@@ -32,7 +31,6 @@ def add_arguments(sub):
         help="Launch editor standalone without a datapack (skips project launcher)",
     )
 
-
 def _find_editor_binary(build_dir: Path) -> Path | None:
     """Search for EditorRuntime under build_dir."""
     exe_name = "EditorRuntime.exe" if sys.platform == "win32" else "EditorRuntime"
@@ -42,7 +40,6 @@ def _find_editor_binary(build_dir: Path) -> Path | None:
                 continue
             return candidate
     return None
-
 
 def run_editor(args, project_root: Path) -> int:
     if args.preset:

@@ -133,6 +133,7 @@ function(raiden_add_game NAME)
   # raiden_abi_version() survives --gc-sections and is in the dynamic symbol table.
   if(WIN32)
     target_link_libraries(${NAME} PRIVATE
+      RaidenPluginABI
       EngineCore
       glm::glm
       ${GAME_LINK_LIBRARIES}

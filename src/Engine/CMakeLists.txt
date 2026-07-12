@@ -82,11 +82,13 @@ CPMAddPackage(
 )
 
 if(RAIDEN_USE_QT)
-  find_package(PkgConfig REQUIRED)
-  pkg_check_modules(XCB REQUIRED xcb)
-  pkg_check_modules(WAYLAND_CLIENT REQUIRED wayland-client)
-
   find_package(Qt5 REQUIRED COMPONENTS Gui)
+
+  if(UNIX AND NOT APPLE)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(XCB REQUIRED xcb)
+    pkg_check_modules(WAYLAND_CLIENT REQUIRED wayland-client)
+  endif()
 endif()
 
 add_library(EngineCore STATIC
@@ -136,7 +138,7 @@ add_library(EngineCore STATIC
   src/Renderer/Vulkan/VulkanMaterial.cpp
 )
 
-# Suppress Vulkan C struct designated initializer warnings
+# suppress Vulkan C struct designated initializer warnings
 set(VULKAN_SOURCES
   src/Renderer/Vulkan/VulkanAllocator.cpp
   src/Renderer/Vulkan/VulkanDevice.cpp
@@ -154,9 +156,12 @@ set(VULKAN_SOURCES
   src/Renderer/Vulkan/VulkanDescriptorPool.cpp
   src/Renderer/Vulkan/VulkanMaterial.cpp
 )
-set_source_files_properties(${VULKAN_SOURCES} PROPERTIES
-  COMPILE_FLAGS "-Wno-missing-field-initializers -Wno-extra"
-)
+
+if(NOT MSVC)
+  set_source_files_properties(${VULKAN_SOURCES} PROPERTIES
+    COMPILE_FLAGS "-Wno-missing-field-initializers -Wno-extra"
+  )
+endif()
 
 if(RAIDEN_USE_QT)
   target_sources(EngineCore PRIVATE
@@ -231,8 +236,11 @@ target_link_libraries(EngineCore PUBLIC
 
 if(RAIDEN_USE_QT)
   target_link_libraries(EngineCore PUBLIC Qt5::Gui)
-  target_include_directories(EngineCore PRIVATE ${XCB_INCLUDE_DIRS} ${WAYLAND_CLIENT_INCLUDE_DIRS})
-  target_link_libraries(EngineCore PUBLIC ${XCB_LIBRARIES} ${WAYLAND_CLIENT_LIBRARIES})
+
+  if(UNIX AND NOT APPLE)
+    target_include_directories(EngineCore PRIVATE ${XCB_INCLUDE_DIRS} ${WAYLAND_CLIENT_INCLUDE_DIRS})
+    target_link_libraries(EngineCore PUBLIC ${XCB_LIBRARIES} ${WAYLAND_CLIENT_LIBRARIES})
+  endif()
 
   get_target_property(QT5_PRIVATE_INCLUDE_DIRS Qt5::GuiPrivate INTERFACE_INCLUDE_DIRECTORIES)
   if(QT5_PRIVATE_INCLUDE_DIRS)
@@ -256,9 +264,15 @@ if(TARGET opus AND TARGET opusfile)
   target_include_directories(EngineCore PRIVATE ${opus_SOURCE_DIR}/include ${opusfile_SOURCE_DIR}/include)
 endif()
 
+if(WIN32)
+  target_compile_definitions(EngineCore PRIVATE VK_USE_PLATFORM_WIN32_KHR)
+elseif(UNIX AND NOT APPLE)
+  target_compile_definitions(EngineCore PRIVATE VK_USE_PLATFORM_XCB_KHR VK_USE_PLATFORM_WAYLAND_KHR)
+endif()
+
 target_compile_definitions(EngineCore PRIVATE _CRT_SECURE_NO_WARNINGS)
 
-# OBJECT library for plugin ABI exports.  Linked with --whole-archive into every
+# OBJECT library for plugin ABI exports.  linked with --whole-archive into every
 # game plugin so raiden_abi_version() survives --gc-sections and is always in the
 # dynamic symbol table for dlsym() lookup.
 add_library(RaidenPluginABI OBJECT src/Core/PluginABI.cpp)
