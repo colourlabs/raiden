@@ -1,8 +1,10 @@
 #include <Raiden/Scene/SceneSerializer.hpp>
 
 #include <Raiden/ECS/Camera.hpp>
+#include <Raiden/ECS/Collider.hpp>
 #include <Raiden/ECS/MeshRenderer.hpp>
 #include <Raiden/ECS/Name.hpp>
+#include <Raiden/ECS/Rigidbody.hpp>
 #include <Raiden/ECS/Transform.hpp>
 #include <Raiden/ECS/World.hpp>
 #include <Raiden/Logger.hpp>
@@ -70,6 +72,20 @@ bool saveJson(const SerializedScene &scene, Core::IVirtualFileSystem &vfs,
       ej["meshRenderer"]["shader"] = e.shader;
       ej["meshRenderer"]["metallic"] = e.metallic;
       ej["meshRenderer"]["roughness"] = e.roughness;
+    }
+
+    if (e.hasRigidbody) {
+      ej["rigidbody"]["type"] = e.rigidbodyType;
+      ej["rigidbody"]["mass"] = e.rigidbodyMass;
+      ej["rigidbody"]["friction"] = e.rigidbodyFriction;
+      ej["rigidbody"]["restitution"] = e.rigidbodyRestitution;
+    }
+
+    if (e.hasCollider) {
+      ej["collider"]["shape"] = e.colliderShape;
+      ej["collider"]["halfExtents"] = vec3ToJson(e.colliderHalfExtents);
+      ej["collider"]["radius"] = e.colliderRadius;
+      ej["collider"]["height"] = e.colliderHeight;
     }
 
     entities.push_back(std::move(ej));
@@ -145,6 +161,24 @@ bool loadJson(SerializedScene &scene, Core::IVirtualFileSystem &vfs,
         e.roughness = mr.value("roughness", 0.8F);
       }
 
+      if (ej.contains("rigidbody")) {
+        const auto &rb = ej["rigidbody"];
+        e.hasRigidbody = true;
+        e.rigidbodyType = rb.value("type", static_cast<uint8_t>(0));
+        e.rigidbodyMass = rb.value("mass", 1.0F);
+        e.rigidbodyFriction = rb.value("friction", 0.5F);
+        e.rigidbodyRestitution = rb.value("restitution", 0.1F);
+      }
+
+      if (ej.contains("collider")) {
+        const auto &col = ej["collider"];
+        e.hasCollider = true;
+        e.colliderShape = col.value("shape", static_cast<uint8_t>(0));
+        e.colliderHalfExtents = vec3FromJson(col["halfExtents"]);
+        e.colliderRadius = col.value("radius", 0.5F);
+        e.colliderHeight = col.value("height", 1.0F);
+      }
+
       scene.entities.push_back(std::move(e));
     }
   }
@@ -159,6 +193,8 @@ static constexpr uint32_t kBinaryMagic = 0x44494152; // "RAID"
 static constexpr uint32_t kComponentTransform = 1 << 0;
 static constexpr uint32_t kComponentCamera = 1 << 1;
 static constexpr uint32_t kComponentMeshRenderer = 1 << 2;
+static constexpr uint32_t kComponentRigidbody = 1 << 3;
+static constexpr uint32_t kComponentCollider = 1 << 4;
 
 bool saveBinary(const SerializedScene &scene, Core::IVirtualFileSystem &vfs,
                 std::string_view path) {
@@ -190,6 +226,12 @@ bool saveBinary(const SerializedScene &scene, Core::IVirtualFileSystem &vfs,
     }
     if (e.hasMeshRenderer) {
       mask |= kComponentMeshRenderer;
+    }
+    if (e.hasRigidbody) {
+      mask |= kComponentRigidbody;
+    }
+    if (e.hasCollider) {
+      mask |= kComponentCollider;
     }
 
     auto nameLen = static_cast<uint32_t>(e.name.size());
@@ -252,6 +294,30 @@ bool saveBinary(const SerializedScene &scene, Core::IVirtualFileSystem &vfs,
     }
     writeF32(e.metallic);
     writeF32(e.roughness);
+  }
+
+  // rigidbody data
+  for (const auto &e : scene.entities) {
+    if (!e.hasRigidbody) {
+      continue;
+    }
+    writeU8(e.rigidbodyType);
+    writeF32(e.rigidbodyMass);
+    writeF32(e.rigidbodyFriction);
+    writeF32(e.rigidbodyRestitution);
+  }
+
+  // collider data
+  for (const auto &e : scene.entities) {
+    if (!e.hasCollider) {
+      continue;
+    }
+    writeU8(e.colliderShape);
+    writeF32(e.colliderHalfExtents.x);
+    writeF32(e.colliderHalfExtents.y);
+    writeF32(e.colliderHalfExtents.z);
+    writeF32(e.colliderRadius);
+    writeF32(e.colliderHeight);
   }
 
   if (!vfs.writeBytes(path, buf)) {
@@ -422,6 +488,41 @@ bool loadBinary(SerializedScene &scene, Core::IVirtualFileSystem &vfs,
     }
   }
 
+  // rigidbody data
+  for (uint32_t i = 0; i < entityCount; ++i) {
+    if ((masks[i] & kComponentRigidbody) == 0U) {
+      continue;
+    }
+
+    auto &e = scene.entities[i];
+    e.hasRigidbody = true;
+    uint8_t rbType = 0;
+    if (!readU8(rbType) || !readF32(e.rigidbodyMass) ||
+        !readF32(e.rigidbodyFriction) || !readF32(e.rigidbodyRestitution)) {
+      s_logger.error("Failed to read rigidbody for entity {}", i);
+      return false;
+    }
+    e.rigidbodyType = rbType;
+  }
+
+  // collider data
+  for (uint32_t i = 0; i < entityCount; ++i) {
+    if ((masks[i] & kComponentCollider) == 0U) {
+      continue;
+    }
+
+    auto &e = scene.entities[i];
+    e.hasCollider = true;
+    uint8_t colShape = 0;
+    if (!readU8(colShape) || !readF32(e.colliderHalfExtents.x) ||
+        !readF32(e.colliderHalfExtents.y) || !readF32(e.colliderHalfExtents.z) ||
+        !readF32(e.colliderRadius) || !readF32(e.colliderHeight)) {
+      s_logger.error("Failed to read collider for entity {}", i);
+      return false;
+    }
+    e.colliderShape = colShape;
+  }
+
   s_logger.info("Loaded binary scene ({} entities) from '{}'",
                 scene.entities.size(), path);
   return true;
@@ -499,6 +600,36 @@ SerializedScene serializeWorld(ECS::World &world) {
     ed.roughness = mr.roughness;
   });
 
+  // rigidbodies
+  world.view<ECS::Rigidbody>().each([&](ECS::Entity e, ECS::Rigidbody &rb) {
+    auto it = entityToIndex.find(e.index);
+    if (it == entityToIndex.end()) {
+      return;
+    }
+
+    auto &ed = scene.entities[it->second];
+    ed.hasRigidbody = true;
+    ed.rigidbodyType = static_cast<uint8_t>(rb.type);
+    ed.rigidbodyMass = rb.mass;
+    ed.rigidbodyFriction = rb.friction;
+    ed.rigidbodyRestitution = rb.restitution;
+  });
+
+  // colliders
+  world.view<ECS::Collider>().each([&](ECS::Entity e, ECS::Collider &col) {
+    auto it = entityToIndex.find(e.index);
+    if (it == entityToIndex.end()) {
+      return;
+    }
+
+    auto &ed = scene.entities[it->second];
+    ed.hasCollider = true;
+    ed.colliderShape = static_cast<uint8_t>(col.shape);
+    ed.colliderHalfExtents = col.halfExtents;
+    ed.colliderRadius = col.radius;
+    ed.colliderHeight = col.height;
+  });
+
   return scene;
 }
 
@@ -553,6 +684,24 @@ void deserializeWorld(const SerializedScene &scene, ECS::World &world) {
       mr.metallic = ed.metallic;
       mr.roughness = ed.roughness;
       world.assign<ECS::MeshRenderer>(entity, mr);
+    }
+
+    if (ed.hasRigidbody) {
+      ECS::Rigidbody rb;
+      rb.type = static_cast<ECS::Rigidbody::Type>(ed.rigidbodyType);
+      rb.mass = ed.rigidbodyMass;
+      rb.friction = ed.rigidbodyFriction;
+      rb.restitution = ed.rigidbodyRestitution;
+      world.assign<ECS::Rigidbody>(entity, rb);
+    }
+
+    if (ed.hasCollider) {
+      ECS::Collider col;
+      col.shape = static_cast<ECS::Collider::Shape>(ed.colliderShape);
+      col.halfExtents = ed.colliderHalfExtents;
+      col.radius = ed.colliderRadius;
+      col.height = ed.colliderHeight;
+      world.assign<ECS::Collider>(entity, col);
     }
   }
 

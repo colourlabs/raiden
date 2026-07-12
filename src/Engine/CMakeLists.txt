@@ -61,6 +61,24 @@ CPMAddPackage(
   GIT_TAG 0.11.22
 )
 
+# physics
+CPMAddPackage(
+  NAME JoltPhysics
+  GITHUB_REPOSITORY jrouwe/JoltPhysics
+  GIT_TAG v5.3.0
+  SOURCE_SUBDIR Build
+  OPTIONS
+    "TARGET_UNIT_TESTS OFF"
+    "TARGET_HELLO_WORLD OFF"
+    "TARGET_SAMPLES OFF"
+    "TARGET_PERFORMANCE_TEST OFF"
+    "USE_AVX2 OFF"
+    "USE_AVX512 OFF"
+    "USE_SSE4_1 ON"
+    "USE_SSE4_2 ON"
+    "USE_FMA OFF"
+)
+
 CPMAddPackage(
   NAME openal-soft
   GITHUB_REPOSITORY kcat/openal-soft
@@ -118,6 +136,11 @@ add_library(EngineCore STATIC
   src/Assets/KtxLoader.cpp
   src/Assets/GltfLoader.cpp
   src/Assets/StbImageLoader.cpp
+
+  src/Physics/JoltContactListener.cpp
+  src/Physics/JoltPhysicsSystem.cpp
+  src/Physics/RaidenJobSystem.cpp
+  src/Physics/PhysicsSyncSystem.cpp
 
   src/Scene/SceneSerializer.cpp
 
@@ -232,7 +255,15 @@ target_link_libraries(EngineCore PUBLIC
   fastgltf::fastgltf
   OpenAL::OpenAL
   miniaudio
+  Jolt
 )
+
+# Jolt only provides INSTALL_INTERFACE includes, add BUILD_INTERFACE manually
+if(TARGET Jolt)
+  target_include_directories(EngineCore SYSTEM PRIVATE
+    ${CPM_PACKAGE_JoltPhysics_SOURCE_DIR}
+  )
+endif()
 
 if(RAIDEN_USE_QT)
   target_link_libraries(EngineCore PUBLIC Qt5::Gui)
@@ -251,7 +282,7 @@ endif()
 # mark external dependency headers as SYSTEM (skipping ALIAS/IMPORTED targets with ::)
 foreach(dep IN ITEMS volk VulkanMemoryAllocator SDL3::SDL3 glm::glm
                      tomlplusplus::tomlplusplus nlohmann_json::nlohmann_json
-                     ktx fastgltf::fastgltf OpenAL::OpenAL miniaudio)
+                     ktx fastgltf::fastgltf OpenAL::OpenAL miniaudio Jolt)
   if(TARGET ${dep} AND NOT ${dep} MATCHES "::")
     set_target_properties(${dep} PROPERTIES SYSTEM ON)
   endif()

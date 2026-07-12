@@ -3,11 +3,15 @@
 #include <Raiden/Assets/IAssetManager.hpp>
 #include <Raiden/Core/PluginABI.hpp>
 #include <Raiden/ECS/Camera.hpp>
+#include <Raiden/ECS/Collider.hpp>
 #include <Raiden/ECS/MeshRenderer.hpp>
 #include <Raiden/ECS/Name.hpp>
+#include <Raiden/ECS/Rigidbody.hpp>
 #include <Raiden/ECS/Transform.hpp>
 #include <Raiden/ECS/World.hpp>
 #include <Raiden/Logger.hpp>
+#include <Raiden/Physics/ContactEvent.hpp>
+#include <Raiden/Physics/IPhysicsSystem.hpp>
 #include <Raiden/Renderer/IBuffer.hpp>
 #include <Raiden/Renderer/ICommandBuffer.hpp>
 #include <Raiden/Renderer/IRenderDevice.hpp>
@@ -19,12 +23,14 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
                        Raiden::Core::IVirtualFileSystem &vfs,
                        Raiden::Assets::IAssetManager &assets,
                        Raiden::Platform::IPlatform *platform,
-                       Raiden::Audio::IAudioDevice *audio) {
+                       Raiden::Audio::IAudioDevice *audio,
+                       Raiden::Physics::IPhysicsSystem *physics) {
   (void)audio;
 
   platform_ = platform;
   device_ = &device;
   assets_ = &assets;
+  physics_ = physics;
   s_logger.info("Initializing example game...");
 
   if (!actions_.loadFromFile(vfs, "game://config/actions.toml")) {
@@ -33,12 +39,13 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
 
   // camera
   camEntity_ = world_.create();
-  
+
   world_.assign<Raiden::ECS::Name>(camEntity_, "Main Camera");
   world_.assign<Raiden::ECS::Camera>(camEntity_);
-  world_.assign<Raiden::ECS::Transform>(camEntity_, Raiden::ECS::Transform{
-    .translation = {0.0F, 0.0F, 3.0F},
-  });
+  world_.assign<Raiden::ECS::Transform>(camEntity_,
+                                        Raiden::ECS::Transform{
+                                            .translation = {0.0F, 0.0F, 3.0F},
+                                        });
 
   auto &cam = world_.get<Raiden::ECS::Camera>(camEntity_);
   cam.setLookAt({0.0F, 0.0F, 3.0F}, {0.0F, 0.0F, 0.0F});
@@ -80,14 +87,16 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
   {
     auto e = world_.create();
     world_.assign<Raiden::ECS::Name>(e, "Checkerboard Cube");
-    world_.assign<Raiden::ECS::Transform>(e, Raiden::ECS::Transform{
-      .translation = {0.0F, 0.0F, 0.0F},
-      .scale = {0.5F, 0.5F, 0.5F},
-    });
-    world_.assign<Raiden::ECS::MeshRenderer>(e, Raiden::ECS::MeshRenderer{
-      .meshPath = "game://meshes/cube.glb",
-      .texturePath = "game://textures/checkerboard.ktx2",
-    });
+    world_.assign<Raiden::ECS::Transform>(e,
+                                          Raiden::ECS::Transform{
+                                              .translation = {0.0F, 0.0F, 0.0F},
+                                              .scale = {0.5F, 0.5F, 0.5F},
+                                          });
+    world_.assign<Raiden::ECS::MeshRenderer>(
+        e, Raiden::ECS::MeshRenderer{
+               .meshPath = "game://meshes/cube.glb",
+               .texturePath = "game://textures/checkerboard.ktx2",
+           });
   }
 
   // PBR cubes
@@ -124,19 +133,96 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
 
   for (auto &p : presets) {
     auto e = world_.create();
+
     world_.assign<Raiden::ECS::Name>(e, p.name);
     world_.assign<Raiden::ECS::Transform>(e, Raiden::ECS::Transform{
-      .translation = p.position,
-      .scale = {0.5F, 0.5F, 0.5F},
-    });
-    world_.assign<Raiden::ECS::MeshRenderer>(e, Raiden::ECS::MeshRenderer{
-      .meshPath = "game://meshes/cube.glb",
-      .texturePath = "",
-      .shader = "builtin://pbr",
-      .baseColorFactor = p.color,
-      .metallic = p.metallic,
-      .roughness = p.roughness,
-    });
+                                                 .translation = p.position,
+                                                 .scale = {0.5F, 0.5F, 0.5F},
+                                             });
+
+    world_.assign<Raiden::ECS::MeshRenderer>(
+        e, Raiden::ECS::MeshRenderer{
+               .meshPath = "game://meshes/cube.glb",
+               .texturePath = "",
+               .shader = "builtin://pbr",
+               .baseColorFactor = p.color,
+               .metallic = p.metallic,
+               .roughness = p.roughness,
+           });
+  }
+
+  // physics demo: static floor
+  {
+    auto e = world_.create();
+    world_.assign<Raiden::ECS::Name>(e, "Floor");
+    world_.assign<Raiden::ECS::Transform>(
+        e, Raiden::ECS::Transform{
+               .translation = {0.0F, -1.5F, 0.0F},
+               .scale = {10.0F, 0.1F, 10.0F},
+           });
+    world_.assign<Raiden::ECS::MeshRenderer>(
+        e, Raiden::ECS::MeshRenderer{
+               .meshPath = "game://meshes/cube.glb",
+               .texturePath = "game://textures/checkerboard.ktx2",
+           });
+    world_.assign<Raiden::ECS::Rigidbody>(
+        e, Raiden::ECS::Rigidbody{
+               .type = Raiden::ECS::Rigidbody::Type::Static,
+           });
+    world_.assign<Raiden::ECS::Collider>(
+        e, Raiden::ECS::Collider{
+               .shape = Raiden::ECS::Collider::Shape::Box,
+               .halfExtents = {5.0F, 0.05F, 5.0F},
+           });
+  }
+
+  // physics demo: dynamic falling cubes
+  if (physics_ != nullptr) {
+    struct FallPreset {
+      const char *name;
+      glm::vec3 position;
+      float mass;
+    };
+
+    std::array<FallPreset, 3> falls = {{
+        {.name = "Falling Cube 1",
+         .position = {0.0F, 2.0F, 0.0F},
+         .mass = 1.0F},
+        {.name = "Falling Cube 2",
+         .position = {0.5F, 3.0F, 0.0F},
+         .mass = 2.0F},
+        {.name = "Falling Cube 3",
+         .position = {-0.5F, 4.0F, 0.0F},
+         .mass = 0.5F},
+    }};
+
+    for (auto &f : falls) {
+      auto e = world_.create();
+      world_.assign<Raiden::ECS::Name>(e, f.name);
+      world_.assign<Raiden::ECS::Transform>(e, Raiden::ECS::Transform{
+                                                   .translation = f.position,
+                                                   .scale = {0.3F, 0.3F, 0.3F},
+                                               });
+      world_.assign<Raiden::ECS::MeshRenderer>(
+          e, Raiden::ECS::MeshRenderer{
+                 .meshPath = "game://meshes/cube.glb",
+                 .texturePath = "",
+                 .shader = "builtin://pbr",
+                 .baseColorFactor = {0.9F, 0.4F, 0.2F, 1.0F},
+                 .metallic = 0.0F,
+                 .roughness = 0.6F,
+             });
+      world_.assign<Raiden::ECS::Rigidbody>(
+          e, Raiden::ECS::Rigidbody{
+                 .type = Raiden::ECS::Rigidbody::Type::Dynamic,
+                 .mass = f.mass,
+             });
+      world_.assign<Raiden::ECS::Collider>(
+          e, Raiden::ECS::Collider{
+                 .shape = Raiden::ECS::Collider::Shape::Box,
+                 .halfExtents = {0.15F, 0.15F, 0.15F},
+             });
+    }
   }
 
   // skybox
@@ -156,12 +242,8 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
   }};
 
   std::array<uint32_t, 36> cubeIndices = {{
-      0, 1, 2, 0, 2, 3,
-      4, 6, 5, 4, 7, 6,
-      3, 7, 4, 3, 4, 0,
-      1, 5, 6, 1, 6, 2,
-      3, 2, 6, 3, 6, 7,
-      0, 4, 5, 0, 5, 1,
+      0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6, 3, 7, 4, 3, 4, 0,
+      1, 5, 6, 1, 6, 2, 3, 2, 6, 3, 6, 7, 0, 4, 5, 0, 5, 1,
   }};
 
   skyboxIndexCount_ = 36;
@@ -252,6 +334,18 @@ ExampleGame::MeshCache &ExampleGame::getOrCreateCache(
   return inserted->second;
 }
 
+const char *ExampleGame::findName(uint32_t bodyId) {
+  const char *result = "Unknown";
+  world_.view<Raiden::ECS::Name, Raiden::ECS::Rigidbody>().each(
+      [&](Raiden::ECS::Entity, Raiden::ECS::Name &n,
+          Raiden::ECS::Rigidbody &rb) {
+        if (rb.bodyId == bodyId) {
+          result = n.value.c_str();
+        }
+      });
+  return result;
+}
+
 void ExampleGame::update(float deltaTime,
                          const Raiden::Platform::InputState &input) {
   actions_.evaluate(input);
@@ -316,11 +410,24 @@ void ExampleGame::update(float deltaTime,
   auto &cam = world_.get<Raiden::ECS::Camera>(camEntity_);
   cam.view = glm::lookAt(position_, position_ + forward, {0.0F, 1.0F, 0.0F});
 
+  // log collisions
+  if (physics_ != nullptr) {
+    for (const auto &contact : physics_->contacts()) {
+      const auto *nameA = findName(contact.bodyIdA);
+      const auto *nameB = findName(contact.bodyIdB);
+
+      if (contact.type == Raiden::Physics::ContactEvent::Type::Added) {
+        s_logger.info("Collision: {} hit {}", nameA, nameB);
+      }
+    }
+  }
+
   rotation_ += deltaTime * 45.0F;
 
   // update rotating objects
   world_.view<Raiden::ECS::Name, Raiden::ECS::Transform>().each(
-      [&](Raiden::ECS::Entity, Raiden::ECS::Name &n, Raiden::ECS::Transform &t) {
+      [&](Raiden::ECS::Entity, Raiden::ECS::Name &n,
+          Raiden::ECS::Transform &t) {
         if (n.value == "Checkerboard Cube") {
           t.rotation = glm::angleAxis(glm::radians(rotation_),
                                       glm::vec3(0.0F, 1.0F, 0.0F));
@@ -345,9 +452,9 @@ void ExampleGame::render(Raiden::Renderer::ICommandBuffer &cmd) {
   world_.view<Raiden::ECS::Transform, Raiden::ECS::MeshRenderer>().each(
       [&](Raiden::ECS::Entity, Raiden::ECS::Transform &t,
           Raiden::ECS::MeshRenderer &mr) {
-        auto &cache = getOrCreateCache(mr.meshPath, mr.texturePath, mr.shader,
-                                       mr.metallic, mr.roughness,
-                                       mr.baseColorFactor);
+        auto &cache =
+            getOrCreateCache(mr.meshPath, mr.texturePath, mr.shader,
+                             mr.metallic, mr.roughness, mr.baseColorFactor);
 
         if (cache.material) {
           cache.material->bind(cmd);
@@ -355,7 +462,7 @@ void ExampleGame::render(Raiden::Renderer::ICommandBuffer &cmd) {
 
         cmd.pushConstants(0, sizeof(glm::mat4), &t.worldMatrix);
 
-        if (cache.texture) {
+        if (!cache.material && cache.texture) {
           cmd.bindTexture(0, *cache.texture);
         }
 

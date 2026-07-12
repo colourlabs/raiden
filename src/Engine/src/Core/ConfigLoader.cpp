@@ -43,6 +43,22 @@ bool loadConfig(IVirtualFileSystem &vfs, EngineConfig &outConfig,
       }
     }
 
+    if (auto *phys = table["physics"].as_table()) {
+      outConfig.physics.fixedTimestep = (*phys)["fixedTimestep"].value_or(1.0F / 60.0F);
+      outConfig.physics.solverPositions = (*phys)["solverPositions"].value_or(2U);
+      outConfig.physics.solverVelocities = (*phys)["solverVelocities"].value_or(4U);
+      outConfig.physics.maxBodies = (*phys)["maxBodies"].value_or(1024U);
+      outConfig.physics.maxBodyPairs = (*phys)["maxBodyPairs"].value_or(4096U);
+      outConfig.physics.maxContactConstraints = (*phys)["maxContactConstraints"].value_or(1024U);
+
+      auto grav = (*phys)["gravity"].as_array();
+      if (grav && grav->size() >= 3) {
+        outConfig.physics.gravity.x = (*grav)[0].value_or(0.0F);
+        outConfig.physics.gravity.y = (*grav)[1].value_or(-9.81F);
+        outConfig.physics.gravity.z = (*grav)[2].value_or(0.0F);
+      }
+    }
+
     if (auto *game = table["game"].as_table()) {
       outConfig.plugin.fallback = (*game)["plugin"].value_or(std::string(""));
 

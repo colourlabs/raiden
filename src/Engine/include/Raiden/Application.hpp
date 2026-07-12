@@ -6,6 +6,8 @@
 #include <Raiden/Engine/ImGuiOverlay.hpp>
 #include <Raiden/EngineConfig.hpp>
 #include <Raiden/Jobs/JobSystem.hpp>
+#include <Raiden/Physics/IPhysicsSystem.hpp>
+#include <Raiden/Physics/PhysicsSyncSystem.hpp>
 #include <Raiden/Platform/IPlatform.hpp>
 #include <Raiden/Renderer/IRenderDevice.hpp>
 
@@ -36,20 +38,33 @@ public:
   bool loadGamePlugin(std::string_view path);
   bool registerPlugin(Raiden::Engine::IGamePlugin *plugin);
 
-  [[nodiscard]] ::Raiden::Platform::IPlatform &getPlatform() const { return *platform_; }
-  [[nodiscard]] ::Raiden::Renderer::IRenderDevice &getDevice() const { return *device_; }
-  [[nodiscard]] ::Raiden::Core::IVirtualFileSystem &getVFS() const { return *vfs_; }
+  [[nodiscard]] ::Raiden::Platform::IPlatform &getPlatform() const {
+    return *platform_;
+  }
+  [[nodiscard]] ::Raiden::Renderer::IRenderDevice &getDevice() const {
+    return *device_;
+  }
+  [[nodiscard]] ::Raiden::Core::IVirtualFileSystem &getVFS() const {
+    return *vfs_;
+  }
   [[nodiscard]] ::Raiden::Jobs::JobSystem &getJobSystem() { return jobSystem_; }
   [[nodiscard]] ImGuiOverlay *getOverlay() const { return overlay_.get(); }
+  [[nodiscard]] ::Raiden::Physics::IPhysicsSystem *getPhysics() const {
+    return physicsSystem_.get();
+  }
 
   [[nodiscard]] ::Raiden::ECS::World *getWorld() {
-    if (!pluginLoader_.isLoaded()) return nullptr;
+    if (!pluginLoader_.isLoaded()) {
+      return nullptr;
+    }
     return pluginLoader_.plugin().getWorld();
   }
 
   using GizmoRenderCallback =
       std::function<void(::Raiden::Renderer::ICommandBuffer &)>;
-  void setGizmoRenderCallback(GizmoRenderCallback cb) { gizmoRenderCb_ = std::move(cb); }
+  void setGizmoRenderCallback(GizmoRenderCallback cb) {
+    gizmoRenderCb_ = std::move(cb);
+  }
 
 private:
   std::unique_ptr<::Raiden::Platform::IPlatform> platform_;
@@ -57,6 +72,8 @@ private:
   std::unique_ptr<::Raiden::Core::IVirtualFileSystem> vfs_;
   std::unique_ptr<::Raiden::Assets::IAssetManager> assetManager_;
   std::unique_ptr<::Raiden::Audio::IAudioDevice> audioDevice_;
+  std::unique_ptr<::Raiden::Physics::IPhysicsSystem> physicsSystem_;
+  std::unique_ptr<::Raiden::Physics::PhysicsSyncSystem> physicsSync_;
   std::unique_ptr<ImGuiOverlay> overlay_;
 
   ::Raiden::Jobs::JobSystem jobSystem_;

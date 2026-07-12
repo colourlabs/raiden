@@ -4,8 +4,11 @@
 #include <Raiden/ECS/Camera.hpp>
 #include <Raiden/Engine/VulkanImGuiBackend.hpp>
 #include <Raiden/Logger.hpp>
+#include <Raiden/Physics/IPhysicsSystem.hpp>
 #include <Raiden/Renderer/Vulkan/IVulkanRenderDevice.hpp>
 #include <Renderer/Vulkan/VulkanDevice.hpp>
+
+#include "Physics/JoltPhysicsSystem.hpp"
 
 #include <array>
 #include <cstring>
@@ -20,6 +23,7 @@ using namespace ::Raiden::Renderer;
 using namespace ::Raiden::Platform;
 using namespace ::Raiden::Assets;
 using namespace ::Raiden::Audio;
+using namespace ::Raiden::Physics;
 
 static const ::Raiden::Core::Logger s_logger("Raiden::Engine::Application");
 
@@ -62,6 +66,16 @@ bool Application::init(const EngineConfig &config) {
     audioDevice_.reset();
   }
 
+  physicsSystem_ = std::make_unique<JoltPhysicsSystem>();
+  if (!physicsSystem_->init(config_.physics)) {
+    s_logger.warn("Failed to initialize physics system.");
+    physicsSystem_.reset();
+  }
+
+  if (physicsSystem_) {
+    physicsSync_ = std::make_unique<PhysicsSyncSystem>(*physicsSystem_);
+  }
+
   // init ImGui overlay
   if (auto *vkDevice = dynamic_cast<IVulkanRenderDevice *>(device_.get())) {
     auto backend = std::make_unique<VulkanImGuiBackend>(
@@ -81,8 +95,9 @@ static bool initPlugin(GamePluginLoader &loader,
                         IVirtualFileSystem &vfs,
                         IAssetManager &assets,
                         IPlatform *platform,
-                        IAudioDevice *audio) {
-  if (!loader.plugin().init(device, vfs, assets, platform, audio)) {
+                        IAudioDevice *audio,
+                        ::Raiden::Physics::IPhysicsSystem *physics) {
+  if (!loader.plugin().init(device, vfs, assets, platform, audio, physics)) {
     s_logger.error("Game plugin init failed.");
     loader.unload();
     return false;
@@ -106,13 +121,13 @@ bool Application::loadGamePlugin(std::string_view path) {
   }
 
   return initPlugin(pluginLoader_, *device_, *vfs_, *assetManager_,
-                    platform_.get(), audioDevice_.get());
+                    platform_.get(), audioDevice_.get(), physicsSystem_.get());
 }
 
 bool Application::registerPlugin(Raiden::Engine::IGamePlugin *plugin) {
   pluginLoader_.registerPlugin(plugin);
   return initPlugin(pluginLoader_, *device_, *vfs_, *assetManager_,
-                    platform_.get(), audioDevice_.get());
+                    platform_.get(), audioDevice_.get(), physicsSystem_.get());
 }
 
 void Application::requestShutdown() { running_ = false; }
@@ -128,6 +143,8 @@ void Application::shutdown() {
   overlay_.reset();
   pluginLoader_.unload();
   assetManager_.reset();
+  physicsSync_.reset();
+  physicsSystem_.reset();
   audioDevice_.reset();
   jobSystem_.shutdown();
   device_->shutdown();
@@ -153,6 +170,17 @@ void Application::run() {
 
     if (pluginLoader_.isLoaded()) {
       pluginLoader_.plugin().update(deltaTime, platform_->getInputState());
+    }
+
+    if (physicsSync_) {
+      auto *world = getWorld();
+      if (world) {
+        physicsSync_->update(*world, deltaTime);
+      }
+    }
+
+    if (physicsSystem_) {
+      physicsSystem_->step(deltaTime);
     }
 
     if (audioDevice_) {

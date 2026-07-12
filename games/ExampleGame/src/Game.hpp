@@ -1,9 +1,12 @@
 #pragma once
 
 #include <Raiden/Assets/IAssetManager.hpp>
+#include <Raiden/ECS/Name.hpp>
+#include <Raiden/ECS/Rigidbody.hpp>
 #include <Raiden/ECS/World.hpp>
 #include <Raiden/Engine/IGamePlugin.hpp>
 #include <Raiden/Input/ActionMap.hpp>
+#include <Raiden/Physics/IPhysicsSystem.hpp>
 #include <Raiden/Platform/IPlatform.hpp>
 #include <Raiden/Renderer/IBuffer.hpp>
 #include <Raiden/Renderer/IMaterial.hpp>
@@ -21,7 +24,8 @@ public:
             Raiden::Core::IVirtualFileSystem &vfs,
             Raiden::Assets::IAssetManager &assets,
             Raiden::Platform::IPlatform *platform,
-            Raiden::Audio::IAudioDevice *audio = nullptr) override;
+            Raiden::Audio::IAudioDevice *audio = nullptr,
+            Raiden::Physics::IPhysicsSystem *physics = nullptr) override;
 
   void update(float deltaTime,
               const Raiden::Platform::InputState &input) override;
@@ -39,6 +43,7 @@ private:
   Raiden::Assets::IAssetManager *assets_ = nullptr;
   Raiden::Platform::IPlatform *platform_ = nullptr;
   Raiden::Renderer::IRenderDevice *device_ = nullptr;
+  Raiden::Physics::IPhysicsSystem *physics_ = nullptr;
 
   // main pipeline + resources
   std::unique_ptr<Raiden::Renderer::IPipeline> pipeline_;
@@ -70,8 +75,10 @@ private:
   float rotation_ = 0.0F;
 
   MeshCache &getOrCreateCache(const std::string &meshPath,
-                              const std::string &texturePath,
-                              const std::string &shader, float metallic,
-                              float roughness,
-                              const glm::vec4 &baseColorFactor);
+                               const std::string &texturePath,
+                               const std::string &shader, float metallic,
+                               float roughness,
+                               const glm::vec4 &baseColorFactor);
+
+  const char *findName(uint32_t bodyId);
 };

@@ -537,6 +537,108 @@ void EditorMainWindow::createInspectorDock() {
   cardLayout->addWidget(cardBody);
   inspectorLayout->addWidget(card);
 
+  // rigidbody component card
+  auto *rbCard = new QGroupBox();
+  rbCard->setObjectName(QStringLiteral("ComponentCard"));
+  auto *rbCardLayout = new QVBoxLayout(rbCard);
+  rbCardLayout->setContentsMargins(0, 0, 0, 0);
+  rbCardLayout->setSpacing(0);
+
+  auto *rbHeader = new QWidget();
+  rbHeader->setObjectName(QStringLiteral("ComponentHeader"));
+  auto *rbHeaderLayout = new QHBoxLayout(rbHeader);
+  rbHeaderLayout->setContentsMargins(8, 5, 4, 5);
+  rbHeaderLayout->setSpacing(0);
+
+  auto *rbTitle = new QLabel(QStringLiteral("Rigidbody"));
+  rbTitle->setObjectName(QStringLiteral("ComponentTitle"));
+  rbHeaderLayout->addWidget(rbTitle, 1);
+
+  auto *rbMenu = new QPushButton();
+  rbMenu->setIcon(FluentIcon::load("MoreHorizontal", 20, false));
+  rbMenu->setIconSize(QSize(16, 16));
+  rbMenu->setObjectName(QStringLiteral("ComponentMenuButton"));
+  rbMenu->setFixedSize(28, 28);
+  rbMenu->setFlat(true);
+  rbHeaderLayout->addWidget(rbMenu);
+
+  rbCardLayout->addWidget(rbHeader);
+
+  auto *rbBody = new QWidget();
+  rbBody->setObjectName(QStringLiteral("ComponentBody"));
+  auto *rbBodyLayout = new QFormLayout(rbBody);
+  rbBodyLayout->setContentsMargins(8, 6, 8, 6);
+  rbBodyLayout->setSpacing(4);
+
+  auto *rbTypeLbl = new QLabel(QStringLiteral("Type"));
+  rbTypeLbl->setObjectName(QStringLiteral("FieldLabel"));
+  auto *rbTypeVal = new QLabel(QStringLiteral("Dynamic"));
+  rbTypeVal->setObjectName(QStringLiteral("FieldValue"));
+  rbBodyLayout->addRow(rbTypeLbl, rbTypeVal);
+
+  auto *rbMassLbl = new QLabel(QStringLiteral("Mass"));
+  rbMassLbl->setObjectName(QStringLiteral("FieldLabel"));
+  auto *rbMassVal = new QLabel(QStringLiteral("1.0"));
+  rbMassVal->setObjectName(QStringLiteral("FieldValue"));
+  rbBodyLayout->addRow(rbMassLbl, rbMassVal);
+
+  auto *rbFrictionLbl = new QLabel(QStringLiteral("Friction"));
+  rbFrictionLbl->setObjectName(QStringLiteral("FieldLabel"));
+  auto *rbFrictionVal = new QLabel(QStringLiteral("0.5"));
+  rbFrictionVal->setObjectName(QStringLiteral("FieldValue"));
+  rbBodyLayout->addRow(rbFrictionLbl, rbFrictionVal);
+
+  rbCardLayout->addWidget(rbBody);
+  inspectorLayout->addWidget(rbCard);
+
+  // collider component card
+  auto *colCard = new QGroupBox();
+  colCard->setObjectName(QStringLiteral("ComponentCard"));
+  auto *colCardLayout = new QVBoxLayout(colCard);
+  colCardLayout->setContentsMargins(0, 0, 0, 0);
+  colCardLayout->setSpacing(0);
+
+  auto *colHeader = new QWidget();
+  colHeader->setObjectName(QStringLiteral("ComponentHeader"));
+  auto *colHeaderLayout = new QHBoxLayout(colHeader);
+  colHeaderLayout->setContentsMargins(8, 5, 4, 5);
+  colHeaderLayout->setSpacing(0);
+
+  auto *colTitle = new QLabel(QStringLiteral("Collider"));
+  colTitle->setObjectName(QStringLiteral("ComponentTitle"));
+  colHeaderLayout->addWidget(colTitle, 1);
+
+  auto *colMenuBtn = new QPushButton();
+  colMenuBtn->setIcon(FluentIcon::load("MoreHorizontal", 20, false));
+  colMenuBtn->setIconSize(QSize(16, 16));
+  colMenuBtn->setObjectName(QStringLiteral("ComponentMenuButton"));
+  colMenuBtn->setFixedSize(28, 28);
+  colMenuBtn->setFlat(true);
+  colHeaderLayout->addWidget(colMenuBtn);
+
+  colCardLayout->addWidget(colHeader);
+
+  auto *colBody = new QWidget();
+  colBody->setObjectName(QStringLiteral("ComponentBody"));
+  auto *colBodyLayout = new QFormLayout(colBody);
+  colBodyLayout->setContentsMargins(8, 6, 8, 6);
+  colBodyLayout->setSpacing(4);
+
+  auto *colShapeLbl = new QLabel(QStringLiteral("Shape"));
+  colShapeLbl->setObjectName(QStringLiteral("FieldLabel"));
+  auto *colShapeVal = new QLabel(QStringLiteral("Box"));
+  colShapeVal->setObjectName(QStringLiteral("FieldValue"));
+  colBodyLayout->addRow(colShapeLbl, colShapeVal);
+
+  auto *colSizeLbl = new QLabel(QStringLiteral("Half Extents"));
+  colSizeLbl->setObjectName(QStringLiteral("FieldLabel"));
+  auto *colSizeVal = new QLabel(QStringLiteral("0.5, 0.5, 0.5"));
+  colSizeVal->setObjectName(QStringLiteral("FieldValue"));
+  colBodyLayout->addRow(colSizeLbl, colSizeVal);
+
+  colCardLayout->addWidget(colBody);
+  inspectorLayout->addWidget(colCard);
+
   // add component button
   auto *addBtn = new QPushButton(QStringLiteral("  Add component"));
   addBtn->setIcon(FluentIcon::load("Add", 16, false));
@@ -593,6 +695,57 @@ void EditorMainWindow::createInspectorDock() {
 
   envCardLayout->addWidget(envBody);
   worldLayout->addWidget(envCard);
+
+  // physics config card
+  auto *physCard = new QGroupBox();
+  physCard->setObjectName(QStringLiteral("ComponentCard"));
+  auto *physCardLayout = new QVBoxLayout(physCard);
+  physCardLayout->setContentsMargins(0, 0, 0, 0);
+  physCardLayout->setSpacing(0);
+
+  auto *physHeader = new QWidget();
+  physHeader->setObjectName(QStringLiteral("ComponentHeader"));
+  auto *physHeaderLayout = new QHBoxLayout(physHeader);
+  physHeaderLayout->setContentsMargins(8, 5, 4, 5);
+  physHeaderLayout->setSpacing(0);
+
+  auto *physTitle = new QLabel(QStringLiteral("Physics"));
+  physTitle->setObjectName(QStringLiteral("ComponentTitle"));
+  physHeaderLayout->addWidget(physTitle, 1);
+
+  physCardLayout->addWidget(physHeader);
+
+  auto *physBody = new QWidget();
+  physBody->setObjectName(QStringLiteral("ComponentBody"));
+  auto *physRows = new QFormLayout(physBody);
+  physRows->setContentsMargins(8, 6, 8, 6);
+  physRows->setSpacing(4);
+
+  auto *timestepSpin = new QDoubleSpinBox();
+  timestepSpin->setRange(0.001, 0.1);
+  timestepSpin->setValue(1.0 / 60.0);
+  timestepSpin->setSingleStep(0.001);
+  timestepSpin->setDecimals(4);
+  physRows->addRow(QStringLiteral("Fixed Timestep"), timestepSpin);
+
+  auto *solverPosSpin = new QSpinBox();
+  solverPosSpin->setRange(1, 16);
+  solverPosSpin->setValue(2);
+  physRows->addRow(QStringLiteral("Solver Positions"), solverPosSpin);
+
+  auto *solverVelSpin = new QSpinBox();
+  solverVelSpin->setRange(1, 32);
+  solverVelSpin->setValue(4);
+  physRows->addRow(QStringLiteral("Solver Velocities"), solverVelSpin);
+
+  auto *maxBodiesSpin = new QSpinBox();
+  maxBodiesSpin->setRange(16, 65536);
+  maxBodiesSpin->setValue(1024);
+  maxBodiesSpin->setSingleStep(64);
+  physRows->addRow(QStringLiteral("Max Bodies"), maxBodiesSpin);
+
+  physCardLayout->addWidget(physBody);
+  worldLayout->addWidget(physCard);
 
   worldLayout->addStretch(1);
   worldScroll->setWidget(worldContent);

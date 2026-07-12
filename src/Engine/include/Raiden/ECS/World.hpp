@@ -249,6 +249,16 @@ public:
     return *(T *)(slot.archetype->data(col, slot.row));
   }
 
+  template <typename T> bool has(Entity e) {
+    auto &slot = slots_[e.index];
+    if (slot.generation != e.generation) {
+      return false;
+    }
+    [[maybe_unused]] auto &info = registerIfNew<T>();
+    auto bit = componentInfo_[componentId<T>()].bitIndex;
+    return (slot.archetype->mask & (uint64_t(1) << bit)) != 0;
+  }
+
   template <typename... Ts> auto view() {
     (registerIfNew<Ts>(), ...);
 

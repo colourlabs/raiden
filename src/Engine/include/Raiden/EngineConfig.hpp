@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Raiden/Physics/PhysicsConfig.hpp>
+
 #include <cstdint>
 #include <string>
 
@@ -42,6 +44,7 @@ struct PluginConfig {
 struct EngineConfig {
   WindowConfig window;
   AudioConfig audio;
+  ::Raiden::Physics::PhysicsConfig physics;
   RenderBackend renderBackend = RenderBackend::Vulkan;
   Antialiasing antialiasing = Antialiasing::None;
 

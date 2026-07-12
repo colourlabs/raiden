@@ -36,6 +36,18 @@ struct EntityData {
   std::string shader = "builtin://pbr";
   float metallic = 0.0F;
   float roughness = 0.8F;
+
+  bool hasRigidbody = false;
+  uint8_t rigidbodyType = 0;
+  float rigidbodyMass = 1.0F;
+  float rigidbodyFriction = 0.5F;
+  float rigidbodyRestitution = 0.1F;
+
+  bool hasCollider = false;
+  uint8_t colliderShape = 0;
+  glm::vec3 colliderHalfExtents{0.5F};
+  float colliderRadius = 0.5F;
+  float colliderHeight = 1.0F;
 };
 
 struct SerializedScene {
