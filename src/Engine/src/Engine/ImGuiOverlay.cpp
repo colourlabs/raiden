@@ -1,6 +1,7 @@
 #include "ImGuiFonts/InterFont.hpp"
 
 #include <Raiden/Core/ConVar.hpp>
+#include <Raiden/ECS/World.hpp>
 #include <Raiden/Engine/ImGuiOverlay.hpp>
 #include <Raiden/Logger.hpp>
 
@@ -156,6 +157,14 @@ bool ImGuiOverlay::init(std::unique_ptr<IImGuiBackend> backend) {
     s_logger.error("Failed to init ImGui backend");
     return false;
   }
+
+  auto &cv = ::Raiden::Core::convars();
+  cv.registerBool("show_console", false, ::Raiden::Core::ConVarNone,
+                  "Show debug console");
+  cv.registerBool("show_inspector", false, ::Raiden::Core::ConVarNone,
+                  "Show entity inspector");
+
+  console_.init();
 
   s_logger.info("ImGui overlay initialized");
   return true;
@@ -314,6 +323,36 @@ void ImGuiOverlay::newFrame(const InputState &input, int displayW, int displayH,
     pluginDebugUI();
   }
 
+  // keyboard shortcuts (only when ImGui doesn't capture keyboard)
+  if (!ImGui::GetIO().WantCaptureKeyboard) {
+    // backtick toggles console
+    if (input.keysDown[SDL_SCANCODE_GRAVE] &&
+        !input.keysDownPrev[SDL_SCANCODE_GRAVE]) {
+      showConsole_ = !showConsole_;
+    }
+    // F1 toggles inspector
+    if (input.keysDown[SDL_SCANCODE_F1] &&
+        !input.keysDownPrev[SDL_SCANCODE_F1]) {
+      showInspector_ = !showInspector_;
+    }
+  }
+
+  // sync convar toggles
+  if (::Raiden::Core::convars().getBool("show_console")) {
+    showConsole_ = true;
+    ::Raiden::Core::convars().setBool("show_console", false);
+  }
+  if (::Raiden::Core::convars().getBool("show_inspector")) {
+    showInspector_ = true;
+    ::Raiden::Core::convars().setBool("show_inspector", false);
+  }
+
+  // debug console
+  console_.render(showConsole_);
+
+  // entity inspector
+  inspector_.render(showInspector_);
+
   // convars debug window
   if (showConVars_) {
     ImGui::Begin("ConVars", &showConVars_);
@@ -334,18 +373,20 @@ void ImGuiOverlay::newFrame(const InputState &input, int displayW, int displayH,
       ImGui::TableHeadersRow();
 
       for (auto &entry : all) {
-        if (entry.flags & ::Raiden::Core::ConVarHidden) {
+        if ((entry.flags & ::Raiden::Core::ConVarHidden) != 0U) {
           continue;
         }
 
         // filter
         if (conVarFilter_[0] != '\0') {
           std::string lower = entry.name;
-          std::transform(lower.begin(), lower.end(), lower.begin(),
-                         [](unsigned char c) { return std::tolower(c); });
+          std::ranges::transform(
+              lower.begin(), lower.end(), lower.begin(),
+              [](unsigned char c) { return std::tolower(c); });
           std::string filter(conVarFilter_);
-          std::transform(filter.begin(), filter.end(), filter.begin(),
-                         [](unsigned char c) { return std::tolower(c); });
+          std::ranges::transform(
+              filter.begin(), filter.end(), filter.begin(),
+              [](unsigned char c) { return std::tolower(c); });
           if (lower.find(filter) == std::string::npos) {
             continue;
           }
@@ -400,10 +441,18 @@ void ImGuiOverlay::newFrame(const InputState &input, int displayW, int displayH,
 
         ImGui::TableNextColumn();
         std::string flags;
-        if (entry.flags & ::Raiden::Core::ConVarArchive) flags += "A ";
-        if (entry.flags & ::Raiden::Core::ConVarRestart) flags += "R ";
-        if (entry.flags & ::Raiden::Core::ConVarCheat) flags += "C ";
-        if (entry.flags & ::Raiden::Core::ConVarReadOnly) flags += "RO ";
+        if ((entry.flags & ::Raiden::Core::ConVarArchive) != 0U) {
+          flags += "A ";
+        }
+        if ((entry.flags & ::Raiden::Core::ConVarRestart) != 0U) {
+          flags += "R ";
+        }
+        if ((entry.flags & ::Raiden::Core::ConVarCheat) != 0U) {
+          flags += "C ";
+        }
+        if ((entry.flags & ::Raiden::Core::ConVarReadOnly) != 0U) {
+          flags += "RO ";
+        }
         ImGui::TextUnformatted(flags.c_str());
       }
 
@@ -412,6 +461,16 @@ void ImGuiOverlay::newFrame(const InputState &input, int displayW, int displayH,
 
     ImGui::End();
   }
+}
+
+bool ImGuiOverlay::wantsCaptureKeyboard() const {
+  return console_.wantsCaptureKeyboard() || ImGui::GetIO().WantCaptureKeyboard;
+}
+
+void ImGuiOverlay::setWorld(::Raiden::ECS::World *w) {
+  world_ = w;
+  console_.setWorld(w);
+  inspector_.setWorld(w);
 }
 
 void ImGuiOverlay::endFrame() { ImGui::Render(); }
@@ -466,7 +525,7 @@ void ImGuiOverlay::shutdown() {
   ImGui::DestroyContext();
 }
 
-bool ImGuiOverlay::wantsCaptureMouse()  {
+bool ImGuiOverlay::wantsCaptureMouse() {
   return ImGui::GetIO().WantCaptureMouse;
 }
 

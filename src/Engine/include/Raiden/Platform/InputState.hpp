@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstring>
+
 namespace Raiden::Platform {
 
 struct InputState {
@@ -8,6 +10,7 @@ struct InputState {
 
   // keyboard
   bool keysDown[kMaxKeys]{};
+  bool keysDownPrev[kMaxKeys]{}; // previous frame state for edge detection
 
   // mouse
   int mouseX = 0;
@@ -28,6 +31,7 @@ struct InputState {
   bool gamepadButtons[kMaxGamepadButtons]{};
 
   void endFrame() {
+    std::memcpy(keysDownPrev, keysDown, sizeof(keysDown));
     mouseDeltaX = 0;
     mouseDeltaY = 0;
     scrollY = 0.0F;

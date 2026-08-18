@@ -31,6 +31,7 @@ public:
   uint32_t getMipLevels() const override { return 1; }
 
   VkImageView view() const { return image_.view(); }
+  const VulkanImage &vulkanImage() const { return image_; }
   VkDescriptorSet getOrCreateDescriptorSet(VkDevice device,
                                            VkDescriptorPool pool,
                                            VkDescriptorSetLayout layout,

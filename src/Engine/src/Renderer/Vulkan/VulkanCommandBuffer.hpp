@@ -9,8 +9,9 @@ namespace Raiden::Renderer {
 class VulkanCommandBuffer final : public ICommandBuffer {
 public:
   VulkanCommandBuffer(VkCommandBuffer cmd, VulkanDescriptorPool &pool,
-                      VkDescriptorSet uboSet = VK_NULL_HANDLE)
-      : cmd_(cmd), pool_(&pool), uboSet_(uboSet) {}
+                      VkDescriptorSet uboSet = VK_NULL_HANDLE,
+                      VkDescriptorSet pointLightSet = VK_NULL_HANDLE)
+      : cmd_(cmd), pool_(&pool), uboSet_(uboSet), pointLightSet_(pointLightSet) {}
 
   [[nodiscard]] VkCommandBuffer handle() const { return cmd_; }
   [[nodiscard]] uint32_t drawCalls() const { return drawCalls_; }
@@ -47,6 +48,7 @@ private:
   VulkanDescriptorPool *pool_ = nullptr;
   VkPipelineLayout currentLayout_ = VK_NULL_HANDLE;
   VkDescriptorSet uboSet_ = VK_NULL_HANDLE;
+  VkDescriptorSet pointLightSet_ = VK_NULL_HANDLE;
   uint32_t drawCalls_ = 0;
   uint32_t triangles_ = 0;
 

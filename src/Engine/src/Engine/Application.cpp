@@ -303,6 +303,7 @@ void Application::run() {
 
       // pass active camera matrices to overlay for ImGui
       if (auto *world = getWorld()) {
+        overlay_->setWorld(world);
         std::array<float, 16> viewMat = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
         std::array<float, 16> projMat = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
         world->view<Raiden::ECS::Camera>().each(

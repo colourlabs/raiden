@@ -2,6 +2,7 @@
 
 #include <Raiden/ECS/Camera.hpp>
 #include <Raiden/ECS/Collider.hpp>
+#include <Raiden/ECS/Light.hpp>
 #include <Raiden/ECS/MeshRenderer.hpp>
 #include <Raiden/ECS/Name.hpp>
 #include <Raiden/ECS/Rigidbody.hpp>
@@ -11,6 +12,8 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/vec2.hpp>
+#include <glm/vec4.hpp>
 
 #include <nlohmann/json.hpp>
 
@@ -25,6 +28,15 @@ namespace {
 
 glm::vec3 vec3FromJson(const json &j) {
   return {j[0].get<float>(), j[1].get<float>(), j[2].get<float>()};
+}
+
+glm::vec4 vec4FromJson(const json &j) {
+  return {j[0].get<float>(), j[1].get<float>(), j[2].get<float>(),
+          j[3].get<float>()};
+}
+
+glm::vec2 vec2FromJson(const json &j) {
+  return {j[0].get<float>(), j[1].get<float>()};
 }
 
 glm::quat quatFromJson(const json &j) {
@@ -69,9 +81,42 @@ bool saveJson(const SerializedScene &scene, Core::IVirtualFileSystem &vfs,
     if (e.hasMeshRenderer) {
       ej["meshRenderer"]["mesh"] = e.meshPath;
       ej["meshRenderer"]["texture"] = e.texturePath;
+      ej["meshRenderer"]["normalMap"] = e.normalMap;
+      ej["meshRenderer"]["metallicRoughnessMap"] = e.metallicRoughnessMap;
+      ej["meshRenderer"]["occlusionMap"] = e.occlusionMap;
       ej["meshRenderer"]["shader"] = e.shader;
+      ej["meshRenderer"]["baseColorFactor"] = {
+          e.baseColorFactor.x, e.baseColorFactor.y, e.baseColorFactor.z,
+          e.baseColorFactor.w};
       ej["meshRenderer"]["metallic"] = e.metallic;
       ej["meshRenderer"]["roughness"] = e.roughness;
+      ej["meshRenderer"]["uvScale"] = {e.uvScale.x, e.uvScale.y};
+      ej["meshRenderer"]["triplanarMapping"] = e.triplanarMapping;
+    }
+
+    if (e.hasDirectionalLight) {
+      ej["directionalLight"]["direction"] = vec3ToJson(e.dlDirection);
+      ej["directionalLight"]["color"] = vec3ToJson(e.dlColor);
+      ej["directionalLight"]["intensity"] = e.dlIntensity;
+      ej["directionalLight"]["castShadows"] = e.dlCastShadows;
+      ej["directionalLight"]["shadowNear"] = e.dlShadowNear;
+      ej["directionalLight"]["shadowFar"] = e.dlShadowFar;
+      ej["directionalLight"]["shadowSize"] = e.dlShadowSize;
+      ej["directionalLight"]["shadowMapResolution"] = e.dlShadowMapResolution;
+    }
+
+    if (e.hasPointLight) {
+      ej["pointLight"]["position"] = vec3ToJson(e.plPosition);
+      ej["pointLight"]["color"] = vec3ToJson(e.plColor);
+      ej["pointLight"]["intensity"] = e.plIntensity;
+      ej["pointLight"]["range"] = e.plRange;
+    }
+
+    if (e.hasAmbientLight) {
+      ej["ambientLight"]["skyColor"] = vec3ToJson(e.alSkyColor);
+      ej["ambientLight"]["skyIntensity"] = e.alSkyIntensity;
+      ej["ambientLight"]["groundColor"] = vec3ToJson(e.alGroundColor);
+      ej["ambientLight"]["useIBL"] = e.alUseIBL;
     }
 
     if (e.hasRigidbody) {
@@ -156,9 +201,50 @@ bool loadJson(SerializedScene &scene, Core::IVirtualFileSystem &vfs,
         e.hasMeshRenderer = true;
         e.meshPath = mr.value("mesh", "");
         e.texturePath = mr.value("texture", "");
+        e.normalMap = mr.value("normalMap", "");
+        e.metallicRoughnessMap = mr.value("metallicRoughnessMap", "");
+        e.occlusionMap = mr.value("occlusionMap", "");
         e.shader = mr.value("shader", "builtin://pbr");
+        if (mr.contains("baseColorFactor")) {
+          e.baseColorFactor = vec4FromJson(mr["baseColorFactor"]);
+        }
         e.metallic = mr.value("metallic", 0.0F);
         e.roughness = mr.value("roughness", 0.8F);
+        if (mr.contains("uvScale")) {
+          e.uvScale = vec2FromJson(mr["uvScale"]);
+        }
+        e.triplanarMapping = mr.value("triplanarMapping", false);
+      }
+
+      if (ej.contains("directionalLight")) {
+        const auto &dl = ej["directionalLight"];
+        e.hasDirectionalLight = true;
+        e.dlDirection = vec3FromJson(dl["direction"]);
+        e.dlColor = vec3FromJson(dl["color"]);
+        e.dlIntensity = dl.value("intensity", 1.0F);
+        e.dlCastShadows = dl.value("castShadows", true);
+        e.dlShadowNear = dl.value("shadowNear", 0.1F);
+        e.dlShadowFar = dl.value("shadowFar", 50.0F);
+        e.dlShadowSize = dl.value("shadowSize", 20.0F);
+        e.dlShadowMapResolution = dl.value("shadowMapResolution", 2048U);
+      }
+
+      if (ej.contains("pointLight")) {
+        const auto &pl = ej["pointLight"];
+        e.hasPointLight = true;
+        e.plPosition = vec3FromJson(pl["position"]);
+        e.plColor = vec3FromJson(pl["color"]);
+        e.plIntensity = pl.value("intensity", 1.0F);
+        e.plRange = pl.value("range", 10.0F);
+      }
+
+      if (ej.contains("ambientLight")) {
+        const auto &al = ej["ambientLight"];
+        e.hasAmbientLight = true;
+        e.alSkyColor = vec3FromJson(al["skyColor"]);
+        e.alSkyIntensity = al.value("skyIntensity", 1.0F);
+        e.alGroundColor = vec3FromJson(al["groundColor"]);
+        e.alUseIBL = al.value("useIBL", false);
       }
 
       if (ej.contains("rigidbody")) {
@@ -515,8 +601,9 @@ bool loadBinary(SerializedScene &scene, Core::IVirtualFileSystem &vfs,
     e.hasCollider = true;
     uint8_t colShape = 0;
     if (!readU8(colShape) || !readF32(e.colliderHalfExtents.x) ||
-        !readF32(e.colliderHalfExtents.y) || !readF32(e.colliderHalfExtents.z) ||
-        !readF32(e.colliderRadius) || !readF32(e.colliderHeight)) {
+        !readF32(e.colliderHalfExtents.y) ||
+        !readF32(e.colliderHalfExtents.z) || !readF32(e.colliderRadius) ||
+        !readF32(e.colliderHeight)) {
       s_logger.error("Failed to read collider for entity {}", i);
       return false;
     }
@@ -585,20 +672,78 @@ SerializedScene serializeWorld(ECS::World &world) {
   });
 
   // mesh renderers
-  world.view<ECS::MeshRenderer>().each([&](ECS::Entity e, ECS::MeshRenderer &mr) {
+  world.view<ECS::MeshRenderer>().each(
+      [&](ECS::Entity e, ECS::MeshRenderer &mr) {
+        auto it = entityToIndex.find(e.index);
+        if (it == entityToIndex.end()) {
+          return;
+        }
+
+        auto &ed = scene.entities[it->second];
+        ed.hasMeshRenderer = true;
+        ed.meshPath = mr.meshPath;
+        ed.texturePath = mr.texturePath;
+        ed.normalMap = mr.normalMap;
+        ed.metallicRoughnessMap = mr.metallicRoughnessMap;
+        ed.occlusionMap = mr.occlusionMap;
+        ed.shader = mr.shader;
+        ed.baseColorFactor = mr.baseColorFactor;
+        ed.metallic = mr.metallic;
+        ed.roughness = mr.roughness;
+        ed.uvScale = mr.uvScale;
+        ed.triplanarMapping = mr.triplanarMapping;
+      });
+
+  // directional lights
+  world.view<ECS::DirectionalLight>().each(
+      [&](ECS::Entity e, ECS::DirectionalLight &dl) {
+        auto it = entityToIndex.find(e.index);
+        if (it == entityToIndex.end()) {
+          return;
+        }
+
+        auto &ed = scene.entities[it->second];
+        ed.hasDirectionalLight = true;
+        ed.dlDirection = dl.direction;
+        ed.dlColor = dl.color;
+        ed.dlIntensity = dl.intensity;
+        ed.dlCastShadows = dl.castShadows;
+        ed.dlShadowNear = dl.shadowNear;
+        ed.dlShadowFar = dl.shadowFar;
+        ed.dlShadowSize = dl.shadowSize;
+        ed.dlShadowMapResolution = dl.shadowMapResolution;
+      });
+
+  // point lights
+  world.view<ECS::PointLight>().each([&](ECS::Entity e, ECS::PointLight &pl) {
     auto it = entityToIndex.find(e.index);
     if (it == entityToIndex.end()) {
       return;
     }
 
     auto &ed = scene.entities[it->second];
-    ed.hasMeshRenderer = true;
-    ed.meshPath = mr.meshPath;
-    ed.texturePath = mr.texturePath;
-    ed.shader = mr.shader;
-    ed.metallic = mr.metallic;
-    ed.roughness = mr.roughness;
+    ed.hasPointLight = true;
+    ed.plPosition = pl.position;
+    ed.plColor = pl.color;
+    ed.plIntensity = pl.intensity;
+    ed.plRange = pl.range;
   });
+
+  // ambient lights
+  world.view<ECS::AmbientLight>().each(
+      [&](ECS::Entity e, ECS::AmbientLight &al) {
+        auto it = entityToIndex.find(e.index);
+        if (it == entityToIndex.end()) {
+          return;
+        }
+
+        auto &ed = scene.entities[it->second];
+        ed.hasAmbientLight = true;
+        ed.alSkyColor = al.skyColor;
+        ed.alSkyIntensity = al.skyIntensity;
+        ed.alGroundColor = al.groundColor;
+        ed.alUseIBL = al.useIBL;
+      });
 
   // rigidbodies
   world.view<ECS::Rigidbody>().each([&](ECS::Entity e, ECS::Rigidbody &rb) {
@@ -680,10 +825,47 @@ void deserializeWorld(const SerializedScene &scene, ECS::World &world) {
       ECS::MeshRenderer mr;
       mr.meshPath = ed.meshPath;
       mr.texturePath = ed.texturePath;
+      mr.normalMap = ed.normalMap;
+      mr.metallicRoughnessMap = ed.metallicRoughnessMap;
+      mr.occlusionMap = ed.occlusionMap;
       mr.shader = ed.shader;
+      mr.baseColorFactor = ed.baseColorFactor;
       mr.metallic = ed.metallic;
       mr.roughness = ed.roughness;
+      mr.uvScale = ed.uvScale;
+      mr.triplanarMapping = ed.triplanarMapping;
       world.assign<ECS::MeshRenderer>(entity, mr);
+    }
+
+    if (ed.hasDirectionalLight) {
+      ECS::DirectionalLight dl;
+      dl.direction = ed.dlDirection;
+      dl.color = ed.dlColor;
+      dl.intensity = ed.dlIntensity;
+      dl.castShadows = ed.dlCastShadows;
+      dl.shadowNear = ed.dlShadowNear;
+      dl.shadowFar = ed.dlShadowFar;
+      dl.shadowSize = ed.dlShadowSize;
+      dl.shadowMapResolution = ed.dlShadowMapResolution;
+      world.assign<ECS::DirectionalLight>(entity, dl);
+    }
+
+    if (ed.hasPointLight) {
+      ECS::PointLight pl;
+      pl.position = ed.plPosition;
+      pl.color = ed.plColor;
+      pl.intensity = ed.plIntensity;
+      pl.range = ed.plRange;
+      world.assign<ECS::PointLight>(entity, pl);
+    }
+
+    if (ed.hasAmbientLight) {
+      ECS::AmbientLight al;
+      al.skyColor = ed.alSkyColor;
+      al.skyIntensity = ed.alSkyIntensity;
+      al.groundColor = ed.alGroundColor;
+      al.useIBL = ed.alUseIBL;
+      world.assign<ECS::AmbientLight>(entity, al);
     }
 
     if (ed.hasRigidbody) {

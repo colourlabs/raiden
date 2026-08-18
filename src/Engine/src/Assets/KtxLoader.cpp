@@ -15,21 +15,6 @@ using namespace ::Raiden::Renderer;
 
 static const ::Raiden::Core::Logger s_logger("Raiden::Assets::KtxLoader");
 
-static Format vkFormatToFormat(ktx_uint32_t vkFmt) {
-  switch (vkFmt) {
-  case VK_FORMAT_R8G8B8A8_UNORM:
-    return Format::R8G8B8A8_UNORM;
-  case VK_FORMAT_R8G8B8A8_SRGB:
-    return Format::R8G8B8A8_SRGB;
-  case VK_FORMAT_BC7_SRGB_BLOCK:
-    return Format::R8G8B8A8_SRGB;
-  case VK_FORMAT_BC7_UNORM_BLOCK:
-    return Format::R8G8B8A8_UNORM;
-  default:
-    return Format::R8G8B8A8_UNORM;
-  }
-}
-
 std::optional<DecodedTextureData> decodeKtx2(const std::byte *data,
                                              size_t size) {
   ktxTexture2 *ktxTex = nullptr;
@@ -43,6 +28,8 @@ std::optional<DecodedTextureData> decodeKtx2(const std::byte *data,
     return std::nullopt;
   }
 
+  khr_df_transfer_e transfer = ktxTexture2_GetTransferFunction_e(ktxTex);
+
   if (ktxTexture2_NeedsTranscoding(ktxTex)) {
     result = ktxTexture2_TranscodeBasis(ktxTex, KTX_TTF_RGBA32, 0);
     if (result != KTX_SUCCESS) {
@@ -55,7 +42,12 @@ std::optional<DecodedTextureData> decodeKtx2(const std::byte *data,
   DecodedTextureData decoded;
   decoded.width = ktxTex->baseWidth;
   decoded.height = ktxTex->baseHeight;
-  decoded.format = vkFormatToFormat(ktxTex->vkFormat);
+
+  if (transfer == KHR_DF_TRANSFER_SRGB) {
+    decoded.format = Format::R8G8B8A8_SRGB;
+  } else {
+    decoded.format = Format::R8G8B8A8_UNORM;
+  }
 
   uint32_t faceCount = ktxTex->numFaces;
   decoded.type = (faceCount == 6) ? TextureType::TextureCube

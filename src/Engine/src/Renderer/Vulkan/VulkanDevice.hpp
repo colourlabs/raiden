@@ -125,6 +125,7 @@ public:
   }
 
   void setShadowCallback(RenderCallback cb) override { shadowCallback_ = std::move(cb); }
+  bool initIBL(std::shared_ptr<ITexture> cubemap) override;
   bool drawFrame(const RenderCallback &callback) override;
 
 private:
@@ -228,7 +229,7 @@ private:
   uint32_t lastTriangles_ = 0;
 
   // shadow mapping
-  static constexpr uint32_t kShadowMapResolution = 2048;
+  static constexpr uint32_t kShadowMapResolution = 4096;
   VkRenderPass shadowRenderPass_ = VK_NULL_HANDLE;
   VulkanImage shadowMapImage_;
   VkFramebuffer shadowFramebuffer_ = VK_NULL_HANDLE;
@@ -254,8 +255,18 @@ private:
   VulkanImage prefilterImage_;
   VulkanImage brdfLUTImage_;
   VkRenderPass iblRenderPass_ = VK_NULL_HANDLE;
+  VkDescriptorSetLayout iblSourceSetLayout_ = VK_NULL_HANDLE;
+  VkPipelineLayout iblCubemapPipelineLayout_ = VK_NULL_HANDLE;
+  VkPipeline iblIrradiancePipeline_ = VK_NULL_HANDLE;
+  VkPipeline iblPrefilterPipeline_ = VK_NULL_HANDLE;
+  VkPipelineLayout iblBrdfPipelineLayout_ = VK_NULL_HANDLE;
+  VkPipeline iblBrdfPipeline_ = VK_NULL_HANDLE;
   bool initIBLResources(const VulkanImage &sourceCubemap);
   void destroyIBLResources();
+
+  // point lights
+  static constexpr uint32_t kMaxPointLights = 64;
+  VulkanBuffer pointLightBuffer_;
 
   // tone mapping
   VkPipeline tonemapPipeline_ = VK_NULL_HANDLE;

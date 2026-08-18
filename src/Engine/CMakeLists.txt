@@ -54,6 +54,12 @@ CPMAddPackage(
   GIT_TAG master
 )
 
+CPMAddPackage(
+  NAME ufbx
+  GITHUB_REPOSITORY ufbx/ufbx
+  GIT_TAG v0.23.0
+)
+
 # audio
 CPMAddPackage(
   NAME miniaudio
@@ -124,6 +130,8 @@ add_library(EngineCore STATIC
   src/Engine/GamePluginLoader.cpp
   src/Engine/ImGuiOverlay.cpp
   src/Engine/VulkanImGuiBackend.cpp
+  src/Engine/DebugConsole.cpp
+  src/Engine/EntityInspector.cpp
 
   src/Editor/GizmoRenderer.cpp
 
@@ -137,6 +145,9 @@ add_library(EngineCore STATIC
   src/Assets/KtxLoader.cpp
   src/Assets/GltfLoader.cpp
   src/Assets/StbImageLoader.cpp
+  src/Assets/FbxLoader.cpp
+
+  ${ufbx_SOURCE_DIR}/ufbx.c
 
   src/Physics/JoltContactListener.cpp
   src/Physics/JoltPhysicsSystem.cpp
@@ -218,6 +229,7 @@ target_include_directories(EngineCore PRIVATE
   ${imgui_SOURCE_DIR}/backends
   ${implot_SOURCE_DIR}
   ${stb_SOURCE_DIR}
+  ${ufbx_SOURCE_DIR}
 )
 
 target_sources(EngineCore PRIVATE
@@ -239,6 +251,7 @@ set_source_files_properties(
   ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
   ${implot_SOURCE_DIR}/implot.cpp
   ${implot_SOURCE_DIR}/implot_items.cpp
+  ${ufbx_SOURCE_DIR}/ufbx.c
   PROPERTIES COMPILE_OPTIONS
     "$<IF:$<CXX_COMPILER_ID:MSVC>,/W0,-w>"
 )

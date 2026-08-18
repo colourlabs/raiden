@@ -28,6 +28,8 @@ float3 acesToneMapping(float3 x) {
 [shader("fragment")]
 float4 fragmentMain(VertexOutput input) : SV_Target {
   float3 color = hdrImage.Sample(hdrSampler, input.uv).rgb;
+  const float exposure = 1.0;
+  color *= exposure;
   color = acesToneMapping(color);
   return float4(color, 1.0);
 }

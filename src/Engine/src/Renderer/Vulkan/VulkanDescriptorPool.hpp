@@ -31,11 +31,6 @@ public:
   [[nodiscard]] VkDescriptorSetLayout samplerSetLayout() const { return samplerSetLayout_; }
   [[nodiscard]] VkDescriptorSet samplerSet() const { return samplerSet_; }
 
-  // set 1b, sampler + shadow map (used by PBR material path)
-  [[nodiscard]] VkDescriptorSetLayout samplerWithShadowSetLayout() const { return samplerWithShadowSetLayout_; }
-  [[nodiscard]] VkDescriptorSet samplerWithShadowSet() const { return samplerWithShadowSet_; }
-  void updateShadowMapDescriptor(VkImageView shadowMapView);
-
   // set 2, simple single texture (VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, binding 0)
   [[nodiscard]] VkDescriptorSetLayout textureSetLayout() const { return textureSetLayout_; }
 
@@ -62,9 +57,12 @@ public:
 
   [[nodiscard]] VkSampler sampler() const { return sampler_; }
   [[nodiscard]] VkSampler clampSampler() const { return clampSampler_; }
-  [[nodiscard]] VkSampler shadowSampler() const { return shadowSampler_; }
   [[nodiscard]] VkDescriptorSet clampSamplerSet() const { return clampSamplerSet_; }
   [[nodiscard]] VkDevice device() const { return device_; }
+
+  // set 5, point lights (storage buffer)
+  [[nodiscard]] VkDescriptorSetLayout pointLightSetLayout() const { return pointLightSetLayout_; }
+  [[nodiscard]] VkDescriptorSet pointLightSet() const { return pointLightSet_; }
 
   VkDescriptorSet allocSamplerSet();
   [[nodiscard]] VkDescriptorImageInfo fallbackImageInfo() const;
@@ -83,13 +81,11 @@ private:
   VmaAllocator allocator_ = VK_NULL_HANDLE;
 
   VkDescriptorSetLayout samplerSetLayout_ = VK_NULL_HANDLE;
-  VkDescriptorSetLayout samplerWithShadowSetLayout_ = VK_NULL_HANDLE;
   VkDescriptorSetLayout textureSetLayout_ = VK_NULL_HANDLE;
   VkDescriptorSetLayout materialSetLayout_ = VK_NULL_HANDLE;
   VkDescriptorSetLayout materialParamsSetLayout_ = VK_NULL_HANDLE;
   VkSampler sampler_ = VK_NULL_HANDLE;
   VkDescriptorSet samplerSet_ = VK_NULL_HANDLE;
-  VkDescriptorSet samplerWithShadowSet_ = VK_NULL_HANDLE;
 
   VkSampler clampSampler_ = VK_NULL_HANDLE;
   VkDescriptorSet clampSamplerSet_ = VK_NULL_HANDLE;
@@ -100,6 +96,10 @@ private:
   // IBL (set 4: irradiance, prefiltered, BRDF LUT)
   VkDescriptorSetLayout iblSetLayout_ = VK_NULL_HANDLE;
   VkDescriptorSet iblSet_ = VK_NULL_HANDLE;
+
+  // point lights (set 5: storage buffer)
+  VkDescriptorSetLayout pointLightSetLayout_ = VK_NULL_HANDLE;
+  VkDescriptorSet pointLightSet_ = VK_NULL_HANDLE;
 
   // 1x1 white fallback for unbound material texture slots
   VkImage fallbackImage_ = VK_NULL_HANDLE;

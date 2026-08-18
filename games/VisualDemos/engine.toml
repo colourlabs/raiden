@@ -1,0 +1,16 @@
+[window]
+title = "Raiden Visual Demos - Grassland & Physics"
+width = 1280
+height = 720
+resizable = true
+fullscreen = false
+vsync = true
+
+[render]
+backend = "vulkan"
+validation = true
+antialiasing = "msaa_x8"
+
+[game.platform]
+linux = "lib/libVisualDemos.so"
+windows = "lib/VisualDemos.dll"

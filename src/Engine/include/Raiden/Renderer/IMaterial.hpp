@@ -32,6 +32,7 @@ struct MaterialDesc {
   glm::vec2 uvOffset = {0.0F, 0.0F};
   glm::vec2 uvScale = {1.0F, 1.0F};
   float uvRotation = 0.0F;
+  bool triplanarMapping = false;
 
   // misc
   bool doubleSided = false;

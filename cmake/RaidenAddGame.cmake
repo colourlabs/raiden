@@ -14,7 +14,7 @@ function(raiden_add_game NAME)
     GAME                     # prefix
     ""                       # options (no boolean flags)
     ""                       # one-value keywords
-    "SOURCES;ASSETS;TEXTURES;INCLUDES;LINK_LIBRARIES;DEFINITIONS" # multi-value
+    "SOURCES;ASSETS;TEXTURES;LINEAR_TEXTURES;INCLUDES;LINK_LIBRARIES;DEFINITIONS" # multi-value
     ${ARGN}
   )
 
@@ -98,6 +98,12 @@ function(raiden_add_game NAME)
         set(INPUT  "${CMAKE_CURRENT_SOURCE_DIR}/${TEX}")
         set(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/textures/${STEM}.ktx2")
 
+        list(FIND GAME_LINEAR_TEXTURES "${TEX}" LINEAR_TEXTURE_INDEX)
+        set(TOKTX_COLORSPACE_ARGS)
+        if(NOT LINEAR_TEXTURE_INDEX EQUAL -1)
+          set(TOKTX_COLORSPACE_ARGS --assign_oetf linear)
+        endif()
+
         add_custom_command(
           OUTPUT "${OUTPUT}"
           COMMAND ${TOKTX_EXECUTABLE}
@@ -105,6 +111,7 @@ function(raiden_add_game NAME)
                   --uastc_quality 2
                   --zcmp 5
                   --genmipmap
+                  ${TOKTX_COLORSPACE_ARGS}
                   "${OUTPUT}"
                   "${INPUT}"
           DEPENDS "${INPUT}"

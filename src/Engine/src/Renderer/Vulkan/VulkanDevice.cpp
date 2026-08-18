@@ -372,6 +372,32 @@ bool VulkanDevice::init(const EngineConfig &config, IPlatform *platform) {
     vkUpdateDescriptorSets(device_, 3, writes, 0, nullptr);
   }
 
+  // initialize point light storage buffer (set 5)
+  {
+    constexpr VkDeviceSize plBufSize = sizeof(glm::vec4) * 2 * kMaxPointLights;
+    pointLightBuffer_.init(allocator_.handle(), plBufSize,
+                           VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                           VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
+                           VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+    pointLightBuffer_.map();
+
+    VkDescriptorBufferInfo plBufInfo{
+        .buffer = pointLightBuffer_.buffer(),
+        .offset = 0,
+        .range = plBufSize,
+    };
+
+    VkWriteDescriptorSet plWrite{
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = descriptorPool_.pointLightSet(),
+        .dstBinding = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .pBufferInfo = &plBufInfo,
+    };
+    vkUpdateDescriptorSets(device_, 1, &plWrite, 0, nullptr);
+  }
+
   for (auto &[uniformBuffer, uniformSet] : perFrame_) {
     uniformBuffer.init(allocator_.handle(), sizeof(FrameUniforms),
                        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -919,12 +945,13 @@ VulkanDevice::createPipeline(const PipelineDesc &desc) {
     vertexDesc.attributes.push_back(vkAttr);
   }
 
-  std::array<VkDescriptorSetLayout, 5> setLayouts{
+  std::array<VkDescriptorSetLayout, 6> setLayouts{
       descriptorPool_.uboSetLayout(),       // set 0
       descriptorPool_.samplerSetLayout(),   // set 1
       descriptorPool_.textureSetLayout(),   // set 2
       descriptorPool_.materialParamsSetLayout(), // set 3
       descriptorPool_.iblSetLayout(),       // set 4
+      descriptorPool_.pointLightSetLayout(), // set 5
   };
 
   auto impl = std::make_unique<VulkanPipelineImpl>();
@@ -953,7 +980,7 @@ VulkanDevice::createPipeline(const PipelineDesc &desc) {
   if (!impl->init(device_, getRenderPass(), vertShader, fragShader,
                   vertexDesc, vkTopology, desc.depthTestEnable,
                   desc.depthWriteEnable, depthOp, toVkCullMode(desc.cullMode),
-                  sampleCount_, setLayouts.data(), 5, blendConfig)) {
+                  sampleCount_, setLayouts.data(), 6, blendConfig)) {
     s_logger.error("Failed to create pipeline");
     vertShader.shutdown();
     fragShader.shutdown();
@@ -994,6 +1021,8 @@ void VulkanDevice::shutdown() {
 
   destroyShadowResources();
   destroyIBLResources();
+
+  pointLightBuffer_.shutdown();
 
   // clean up HDR resources
   if (hdrFramebuffer_ != VK_NULL_HANDLE) {
@@ -1244,6 +1273,25 @@ SwapChainSupport VulkanDevice::querySwapChainSupport(VkPhysicalDevice device,
   return support;
 }
 
+bool VulkanDevice::initIBL(std::shared_ptr<ITexture> cubemap) {
+  if (!cubemap) {
+    s_logger.warn("initIBL: null texture provided");
+    return false;
+  }
+  auto *vkTex = static_cast<VulkanTextureImpl *>(cubemap.get());
+  if (vkTex->getType() != TextureType::TextureCube) {
+    s_logger.warn("initIBL: texture is not a cubemap");
+    return false;
+  }
+  const auto &srcImage = vkTex->vulkanImage();
+  if (!initIBLResources(srcImage)) {
+    s_logger.error("initIBL: failed to generate IBL resources");
+    return false;
+  }
+  s_logger.info("IBL resources initialized from cubemap");
+  return true;
+}
+
 bool VulkanDevice::drawFrame(const RenderCallback &callback) {
   if (platform_->hasResizePending()) {
     if (!platform_->isWindowExposed()) {
@@ -1372,6 +1420,42 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
 
   uniforms.ambientSky = glm::vec4(0.1F, 0.15F, 0.3F, 1.0F);
   uniforms.ambientGround = glm::vec4(0.02F, 0.01F, 0.01F, 0.0F);
+
+  // read ambient light from ECS if available
+  if (world_ != nullptr) {
+    world_->view<AmbientLight>().each([&](Entity, AmbientLight &amb) {
+      uniforms.ambientSky = glm::vec4(amb.skyColor, amb.skyIntensity);
+      uniforms.ambientGround = glm::vec4(amb.groundColor, amb.useIBL ? 1.0F : 0.0F);
+    });
+  }
+
+  // read point lights from ECS
+  struct GpuPointLight {
+    glm::vec4 positionRange;
+    glm::vec4 colorIntensity;
+  };
+  std::array<GpuPointLight, kMaxPointLights> gpuPointLights{};
+  uint32_t pointLightCount = 0;
+
+  if (world_ != nullptr) {
+    world_->view<PointLight>().each([&](Entity, PointLight &pl) {
+      if (pointLightCount >= kMaxPointLights) return;
+      gpuPointLights[pointLightCount].positionRange =
+          glm::vec4(pl.position, pl.range);
+      gpuPointLights[pointLightCount].colorIntensity =
+          glm::vec4(pl.color, pl.intensity);
+      pointLightCount++;
+    });
+  }
+
+  uniforms.pointLightCount = pointLightCount;
+  uniforms.shadowMapSize = static_cast<float>(kShadowMapResolution);
+
+  // upload point light data to storage buffer
+  if (pointLightCount > 0) {
+    pointLightBuffer_.upload(gpuPointLights.data(),
+                             sizeof(GpuPointLight) * pointLightCount);
+  }
 
   // compute light VP for shadow mapping
   if (hasShadows) {
@@ -1585,10 +1669,11 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
 
       JobDesc desc;
       desc.task = [&callback, secCmd, &pool = descriptorPool_,
-                   uboSet = perFrame.uniformSet, &readyCount,
+                   uboSet = perFrame.uniformSet,
+                   plSet = descriptorPool_.pointLightSet(), &readyCount,
                    &stats = workerStats[i], i, cappedWorkers, viewport,
                    scissor]() {
-        VulkanCommandBuffer vkCmdBuf(secCmd, pool, uboSet);
+        VulkanCommandBuffer vkCmdBuf(secCmd, pool, uboSet, plSet);
 
         vkCmdBuf.setViewport(static_cast<int>(viewport.x),
                              static_cast<int>(viewport.y),
@@ -1624,7 +1709,8 @@ bool VulkanDevice::drawFrame(const RenderCallback &callback) {
       lastTriangles_ += workerStats[i][1];
     }
   } else {
-    VulkanCommandBuffer vkCmdBuf(cmd, descriptorPool_, perFrame.uniformSet);
+    VulkanCommandBuffer vkCmdBuf(cmd, descriptorPool_, perFrame.uniformSet,
+                                 descriptorPool_.pointLightSet());
     callback(vkCmdBuf, 0, 1);
     lastDrawCalls_ = vkCmdBuf.drawCalls();
     lastTriangles_ = vkCmdBuf.triangles();
@@ -1771,19 +1857,20 @@ std::shared_ptr<IMaterial> VulkanDevice::createMaterial(
        .offset = offsetof(Vertex, uv)},
   };
 
-  std::array<VkDescriptorSetLayout, 5> setLayouts{
+  std::array<VkDescriptorSetLayout, 6> setLayouts{
       descriptorPool_.uboSetLayout(),            // set 0
       descriptorPool_.samplerSetLayout(),        // set 1
       descriptorPool_.materialSetLayout(),       // set 2
       descriptorPool_.materialParamsSetLayout(), // set 3
       descriptorPool_.iblSetLayout(),            // set 4
+      descriptorPool_.pointLightSetLayout(),     // set 5
   };
 
   auto pipeline = std::make_unique<VulkanPipelineImpl>();
   if (!pipeline->init(device_, getRenderPass(), vertShader, fragShader,
                       vertexDesc, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, desc.depthTest, true, VK_COMPARE_OP_LESS,
                       VK_CULL_MODE_BACK_BIT, sampleCount_, setLayouts.data(),
-                      5)) {
+                      6)) {
     s_logger.error("createMaterial: failed to create pipeline");
 
     vertShader.shutdown();
@@ -1807,7 +1894,7 @@ std::shared_ptr<IMaterial> VulkanDevice::createMaterial(
   // track for shadow map descriptor updates
   shadowMaterials_.push_back(mat.get());
   if (shadowMapImage_.view() != VK_NULL_HANDLE) {
-    mat->updateShadowMap(shadowMapImage_.view(), descriptorPool_.shadowSampler());
+    mat->updateShadowMap(shadowMapImage_.view());
   }
 
   // keep pipeline alive as long as the material is alive
@@ -1818,19 +1905,652 @@ std::shared_ptr<IMaterial> VulkanDevice::createMaterial(
   return mat;
 }
 
-bool VulkanDevice::initIBLResources(const VulkanImage & /*sourceCubemap*/) {
-  // TODO: Implement IBL generation (irradiance convolution, prefilter specular,
-  // BRDF LUT). This requires:
-  // 1. Create iblRenderPass_ (color-only R16G16B16A16_SFLOAT, 1 sample)
-  // 2. For each pass (irradiance, prefilter, BRDF LUT):
-  //    a. Create framebuffer targeting the output image
-  //    b. Record fullscreen triangle with push constants (face VP matrix)
-  //    c. Submit and wait
-  s_logger.info("IBL resource generation not yet implemented");
+bool VulkanDevice::initIBLResources(const VulkanImage &sourceCubemap) {
+  if (sourceCubemap.image() == VK_NULL_HANDLE) {
+    s_logger.warn("IBL generation skipped: no source cubemap provided");
+    return true;
+  }
+
+  // capture projection (90-degree FOV, aspect 1, near 0.1, far 10)
+  glm::mat4 captureProj = glm::perspective(glm::radians(90.0F), 1.0F, 0.1F, 10.0F);
+  captureProj[1][1] *= -1.0F; // Vulkan Y-flip
+
+  glm::mat4 captureViews[6] = {
+      glm::lookAt(glm::vec3(0), glm::vec3(1, 0, 0), glm::vec3(0, -1, 0)),
+      glm::lookAt(glm::vec3(0), glm::vec3(-1, 0, 0), glm::vec3(0, -1, 0)),
+      glm::lookAt(glm::vec3(0), glm::vec3(0, 1, 0), glm::vec3(0, 0, 1)),
+      glm::lookAt(glm::vec3(0), glm::vec3(0, -1, 0), glm::vec3(0, 0, -1)),
+      glm::lookAt(glm::vec3(0), glm::vec3(0, 0, 1), glm::vec3(0, -1, 0)),
+      glm::lookAt(glm::vec3(0), glm::vec3(0, 0, -1), glm::vec3(0, -1, 0)),
+  };
+
+  // --- 1. IBL render pass (color-only R16G16B16A16_SFLOAT) ---
+  {
+    VkAttachmentDescription colorAtt{
+        .format = VK_FORMAT_R16G16B16A16_SFLOAT,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+
+    VkAttachmentReference colorRef{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+
+    VkSubpassDescription subpass{
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colorRef,
+    };
+
+    VkSubpassDependency dep{
+        .srcSubpass = VK_SUBPASS_EXTERNAL,
+        .dstSubpass = 0,
+        .srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .srcAccessMask = 0,
+        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+    };
+
+    VkRenderPassCreateInfo rpInfo{
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &colorAtt,
+        .subpassCount = 1,
+        .pSubpasses = &subpass,
+        .dependencyCount = 1,
+        .pDependencies = &dep,
+    };
+
+    if (vkCreateRenderPass(device_, &rpInfo, nullptr, &iblRenderPass_) != VK_SUCCESS) {
+      s_logger.error("Failed to create IBL render pass");
+      return false;
+    }
+  }
+
+  // --- 2. Descriptor set layout for source cubemap (set 0: cubemap + sampler) ---
+  std::array<VkDescriptorSetLayoutBinding, 2> srcBindings{{
+      {.binding = 0,
+       .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+       .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT},
+      {.binding = 1,
+       .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+       .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT},
+  }};
+
+  VkDescriptorSetLayoutCreateInfo srcLayoutInfo{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .bindingCount = static_cast<uint32_t>(srcBindings.size()),
+      .pBindings = srcBindings.data(),
+  };
+
+  if (vkCreateDescriptorSetLayout(device_, &srcLayoutInfo, nullptr,
+                                  &iblSourceSetLayout_) != VK_SUCCESS) {
+    s_logger.error("Failed to create IBL source descriptor set layout");
+    return false;
+  }
+
+  // --- 3. Pipeline layouts ---
+  // Irradiance + prefilter: set 0 (source cubemap), push constant = inverseVP (64) + iblParams (16) = 80
+  {
+    VkPushConstantRange pushRange{
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+        .offset = 0,
+        .size = 80,
+    };
+
+    VkPipelineLayoutCreateInfo layoutInfo{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1,
+        .pSetLayouts = &iblSourceSetLayout_,
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &pushRange,
+    };
+
+    if (vkCreatePipelineLayout(device_, &layoutInfo, nullptr,
+                               &iblCubemapPipelineLayout_) != VK_SUCCESS) {
+      s_logger.error("Failed to create IBL cubemap pipeline layout");
+      return false;
+    }
+  }
+
+  // BRDF LUT: no descriptor sets, no push constants
+  {
+    VkPipelineLayoutCreateInfo layoutInfo{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+    };
+
+    if (vkCreatePipelineLayout(device_, &layoutInfo, nullptr,
+                               &iblBrdfPipelineLayout_) != VK_SUCCESS) {
+      s_logger.error("Failed to create IBL BRDF pipeline layout");
+      return false;
+    }
+  }
+
+  // --- 4. Create pipelines ---
+  auto createIblPipeline = [&](const std::string &name, VkPipelineLayout pipelineLayout,
+                               VkPipeline *outPipeline) -> bool {
+    std::string shadersDir = SHADERS_DIR;
+    VulkanShader vert, frag;
+    if (!vert.init(device_, ShaderStage::Vertex, shadersDir + "/" + name + ".vert.spv")) {
+      s_logger.error("Failed to load IBL vertex shader: {}", name);
+      return false;
+    }
+    if (!frag.init(device_, ShaderStage::Fragment, shadersDir + "/" + name + ".frag.spv")) {
+      s_logger.error("Failed to load IBL fragment shader: {}", name);
+      vert.shutdown();
+      return false;
+    }
+
+    // fullscreen triangle: no vertex input
+    VkPipelineVertexInputStateCreateInfo vertexInput{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+    };
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+    };
+
+    VkPipelineViewportStateCreateInfo viewportState{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount = 1,
+        .scissorCount = 1,
+    };
+
+    VkPipelineRasterizationStateCreateInfo rasterizer{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .polygonMode = VK_POLYGON_MODE_FILL,
+        .cullMode = VK_CULL_MODE_NONE,
+        .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+        .lineWidth = 1.0F,
+    };
+
+    VkPipelineMultisampleStateCreateInfo multisampling{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+    };
+
+    VkPipelineColorBlendAttachmentState blendAttachment{
+        .blendEnable = VK_FALSE,
+        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                          VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+    };
+
+    VkPipelineColorBlendStateCreateInfo colorBlending{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &blendAttachment,
+    };
+
+    VkPipelineDepthStencilStateCreateInfo depthStencil{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .depthTestEnable = VK_FALSE,
+        .depthWriteEnable = VK_FALSE,
+    };
+
+    std::array<VkDynamicState, 2> dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    VkPipelineDynamicStateCreateInfo dynamicState{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount = 2,
+        .pDynamicStates = dynamicStates.data(),
+    };
+
+    std::array<VkPipelineShaderStageCreateInfo, 2> stages = {
+        vert.stageCreateInfo(), frag.stageCreateInfo()};
+
+    VkGraphicsPipelineCreateInfo pipelineInfo{
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .stageCount = 2,
+        .pStages = stages.data(),
+        .pVertexInputState = &vertexInput,
+        .pInputAssemblyState = &inputAssembly,
+        .pViewportState = &viewportState,
+        .pRasterizationState = &rasterizer,
+        .pMultisampleState = &multisampling,
+        .pDepthStencilState = &depthStencil,
+        .pColorBlendState = &colorBlending,
+        .pDynamicState = &dynamicState,
+        .layout = pipelineLayout,
+        .renderPass = iblRenderPass_,
+        .subpass = 0,
+    };
+
+    bool ok = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo,
+                                         nullptr, outPipeline) == VK_SUCCESS;
+    vert.shutdown();
+    frag.shutdown();
+    return ok;
+  };
+
+  if (!createIblPipeline("irradiance_convolution", iblCubemapPipelineLayout_, &iblIrradiancePipeline_)) {
+    s_logger.error("Failed to create irradiance pipeline");
+    return false;
+  }
+  if (!createIblPipeline("prefilter_envmap", iblCubemapPipelineLayout_, &iblPrefilterPipeline_)) {
+    s_logger.error("Failed to create prefilter pipeline");
+    return false;
+  }
+  if (!createIblPipeline("brdf_lut", iblBrdfPipelineLayout_, &iblBrdfPipeline_)) {
+    s_logger.error("Failed to create BRDF LUT pipeline");
+    return false;
+  }
+
+  // --- 5. Allocate and write source cubemap descriptor set ---
+  VkDescriptorSet srcSet = VK_NULL_HANDLE;
+  {
+    VkDescriptorSetAllocateInfo allocInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = descriptorPool_.handle(),
+        .descriptorSetCount = 1,
+        .pSetLayouts = &iblSourceSetLayout_,
+    };
+
+    if (vkAllocateDescriptorSets(device_, &allocInfo, &srcSet) != VK_SUCCESS) {
+      s_logger.error("Failed to allocate IBL source descriptor set");
+      return false;
+    }
+
+    VkDescriptorImageInfo cubemapInfo{
+        .sampler = descriptorPool_.clampSampler(),
+        .imageView = sourceCubemap.view(),
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+
+    VkDescriptorImageInfo samplerInfo{
+        .sampler = descriptorPool_.clampSampler(),
+    };
+
+    std::array<VkWriteDescriptorSet, 2> srcWrites{{
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+         .dstSet = srcSet,
+         .dstBinding = 0,
+         .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+         .pImageInfo = &cubemapInfo},
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+         .dstSet = srcSet,
+         .dstBinding = 1,
+         .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+         .pImageInfo = &samplerInfo},
+    }};
+
+    vkUpdateDescriptorSets(device_, static_cast<uint32_t>(srcWrites.size()),
+                           srcWrites.data(), 0, nullptr);
+  }
+
+  // --- helper: create a cubemap image with per-face 2D views ---
+  auto createCubemapWithFaceViews = [&](uint32_t size, uint32_t mipLevels,
+                                         VulkanImage &image,
+                                         std::array<VkImageView, 6> &faceViews) -> bool {
+    VulkanImageInfo info{
+        .width = size,
+        .height = size,
+        .format = VK_FORMAT_R16G16B16A16_SFLOAT,
+        .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+        .aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT,
+        .sampleCount = VK_SAMPLE_COUNT_1_BIT,
+        .arrayLayers = 6,
+        .mipLevels = mipLevels,
+        .createFlags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,
+        .viewType = VK_IMAGE_VIEW_TYPE_CUBE,
+    };
+
+    if (!image.init(device_, allocator_.handle(), info)) {
+      s_logger.error("Failed to create IBL cubemap image");
+      return false;
+    }
+
+    // create per-face 2D views
+    for (uint32_t face = 0; face < 6; ++face) {
+      VkImageViewCreateInfo viewInfo{
+          .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+          .image = image.image(),
+          .viewType = VK_IMAGE_VIEW_TYPE_2D,
+          .format = VK_FORMAT_R16G16B16A16_SFLOAT,
+          .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, face, 1},
+      };
+
+      if (vkCreateImageView(device_, &viewInfo, nullptr, &faceViews[face]) != VK_SUCCESS) {
+        s_logger.error("Failed to create IBL face view for face {}", face);
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  // --- helper: one-shot command buffer for offline rendering ---
+  auto runOneShot = [&](const std::function<void(VkCommandBuffer)> &fn) -> bool {
+    VkCommandBufferAllocateInfo allocCmd{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = transferPool_,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+    VkCommandBuffer cmd = VK_NULL_HANDLE;
+    vkAllocateCommandBuffers(device_, &allocCmd, &cmd);
+
+    VkCommandBufferBeginInfo beginInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
+    vkBeginCommandBuffer(cmd, &beginInfo);
+
+    fn(cmd);
+
+    vkEndCommandBuffer(cmd);
+
+    VkSubmitInfo submit{
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &cmd,
+    };
+    vkQueueSubmit(graphicsQueue_, 1, &submit, VK_NULL_HANDLE);
+    vkQueueWaitIdle(graphicsQueue_);
+
+    vkFreeCommandBuffers(device_, transferPool_, 1, &cmd);
+    return true;
+  };
+
+  // --- 6. Generate irradiance cubemap (64x64, 1 mip) ---
+  {
+    std::array<VkImageView, 6> faceViews{};
+    if (!createCubemapWithFaceViews(kIrradianceSize, 1, irradianceImage_, faceViews)) {
+      return false;
+    }
+
+    std::array<VkFramebuffer, 6> framebuffers{};
+    for (uint32_t face = 0; face < 6; ++face) {
+      VkFramebufferCreateInfo fbInfo{
+          .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+          .renderPass = iblRenderPass_,
+          .attachmentCount = 1,
+          .pAttachments = &faceViews[face],
+          .width = kIrradianceSize,
+          .height = kIrradianceSize,
+          .layers = 1,
+      };
+
+      if (vkCreateFramebuffer(device_, &fbInfo, nullptr, &framebuffers[face]) != VK_SUCCESS) {
+        s_logger.error("Failed to create irradiance framebuffer for face {}", face);
+        return false;
+      }
+    }
+
+    bool ok = runOneShot([&](VkCommandBuffer cmd) {
+      VkClearValue clear{};
+      clear.color.float32[0] = 0.0F;
+      clear.color.float32[1] = 0.0F;
+      clear.color.float32[2] = 0.0F;
+      clear.color.float32[3] = 1.0F;
+
+      VkViewport viewport{
+          .x = 0.0F, .y = 0.0F,
+          .width = static_cast<float>(kIrradianceSize),
+          .height = static_cast<float>(kIrradianceSize),
+          .minDepth = 0.0F, .maxDepth = 1.0F,
+      };
+      VkRect2D scissor{
+          .offset = {0, 0},
+          .extent = {kIrradianceSize, kIrradianceSize},
+      };
+
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, iblIrradiancePipeline_);
+      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              iblCubemapPipelineLayout_, 0, 1, &srcSet, 0, nullptr);
+
+      for (uint32_t face = 0; face < 6; ++face) {
+        VkRenderPassBeginInfo rpBegin{
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass = iblRenderPass_,
+            .framebuffer = framebuffers[face],
+            .renderArea = {{0, 0}, {kIrradianceSize, kIrradianceSize}},
+            .clearValueCount = 1,
+            .pClearValues = &clear,
+        };
+
+        vkCmdBeginRenderPass(cmd, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+        glm::mat4 inverseVP = glm::inverse(captureProj * captureViews[face]);
+        struct { glm::mat4 mvp; float params[4]; } push{};
+        push.mvp = inverseVP;
+        vkCmdPushConstants(cmd, iblCubemapPipelineLayout_,
+                           VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                           0, sizeof(push), &push);
+
+        vkCmdDraw(cmd, 3, 1, 0, 0);
+        vkCmdEndRenderPass(cmd);
+      }
+    });
+
+    for (auto fb : framebuffers) {
+      vkDestroyFramebuffer(device_, fb, nullptr);
+    }
+    for (auto view : faceViews) {
+      vkDestroyImageView(device_, view, nullptr);
+    }
+
+    if (!ok) return false;
+    s_logger.info("Irradiance cubemap generated ({}x{}).", kIrradianceSize, kIrradianceSize);
+  }
+
+  // --- 7. Generate prefiltered cubemap (128x128, 5 mip levels) ---
+  {
+    std::array<VkImageView, 6> faceViews{};
+    if (!createCubemapWithFaceViews(kPrefilterSize, kPrefilterMipLevels, prefilterImage_, faceViews)) {
+      return false;
+    }
+
+    bool ok = runOneShot([&](VkCommandBuffer cmd) {
+      VkClearValue clear{};
+      clear.color.float32[0] = 0.0F;
+      clear.color.float32[1] = 0.0F;
+      clear.color.float32[2] = 0.0F;
+      clear.color.float32[3] = 1.0F;
+
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, iblPrefilterPipeline_);
+      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              iblCubemapPipelineLayout_, 0, 1, &srcSet, 0, nullptr);
+
+      for (uint32_t face = 0; face < 6; ++face) {
+        for (uint32_t mip = 0; mip < kPrefilterMipLevels; ++mip) {
+          uint32_t mipSize = kPrefilterSize >> mip;
+          if (mipSize < 1) mipSize = 1;
+
+          // create temporary framebuffer for this face+mip
+          VkImageViewCreateInfo viewInfo{
+              .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+              .image = prefilterImage_.image(),
+              .viewType = VK_IMAGE_VIEW_TYPE_2D,
+              .format = VK_FORMAT_R16G16B16A16_SFLOAT,
+              .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, face, 1},
+          };
+
+          VkImageView mipView = VK_NULL_HANDLE;
+          vkCreateImageView(device_, &viewInfo, nullptr, &mipView);
+
+          VkFramebufferCreateInfo fbInfo{
+              .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+              .renderPass = iblRenderPass_,
+              .attachmentCount = 1,
+              .pAttachments = &mipView,
+              .width = mipSize,
+              .height = mipSize,
+              .layers = 1,
+          };
+
+          VkFramebuffer fb = VK_NULL_HANDLE;
+          vkCreateFramebuffer(device_, &fbInfo, nullptr, &fb);
+
+          VkViewport viewport{
+              .x = 0.0F, .y = 0.0F,
+              .width = static_cast<float>(mipSize),
+              .height = static_cast<float>(mipSize),
+              .minDepth = 0.0F, .maxDepth = 1.0F,
+          };
+          VkRect2D scissor{
+              .offset = {0, 0},
+              .extent = {mipSize, mipSize},
+          };
+
+          VkRenderPassBeginInfo rpBegin{
+              .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+              .renderPass = iblRenderPass_,
+              .framebuffer = fb,
+              .renderArea = {{0, 0}, {mipSize, mipSize}},
+              .clearValueCount = 1,
+              .pClearValues = &clear,
+          };
+
+          vkCmdBeginRenderPass(cmd, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
+          vkCmdSetViewport(cmd, 0, 1, &viewport);
+          vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+          float roughness = static_cast<float>(mip) / static_cast<float>(kPrefilterMipLevels - 1);
+          glm::mat4 inverseVP = glm::inverse(captureProj * captureViews[face]);
+          struct { glm::mat4 mvp; float params[4]; } push{};
+          push.mvp = inverseVP;
+          push.params[0] = roughness;
+          vkCmdPushConstants(cmd, iblCubemapPipelineLayout_,
+                             VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                             0, sizeof(push), &push);
+
+          vkCmdDraw(cmd, 3, 1, 0, 0);
+          vkCmdEndRenderPass(cmd);
+
+          vkDestroyFramebuffer(device_, fb, nullptr);
+          vkDestroyImageView(device_, mipView, nullptr);
+        }
+      }
+    });
+
+    for (auto view : faceViews) {
+      vkDestroyImageView(device_, view, nullptr);
+    }
+
+    if (!ok) return false;
+    s_logger.info("Prefiltered cubemap generated ({}x{}, {} mip levels).",
+                  kPrefilterSize, kPrefilterSize, kPrefilterMipLevels);
+  }
+
+  // --- 8. Generate BRDF LUT (512x512, 2D) ---
+  {
+    VulkanImageInfo info{
+        .width = kBRDFSize,
+        .height = kBRDFSize,
+        .format = VK_FORMAT_R16G16B16A16_SFLOAT,
+        .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        .memoryUsage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+        .aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT,
+    };
+
+    if (!brdfLUTImage_.init(device_, allocator_.handle(), info)) {
+      s_logger.error("Failed to create BRDF LUT image");
+      return false;
+    }
+
+    VkImageView brdfView = brdfLUTImage_.view();
+    VkFramebufferCreateInfo fbInfo{
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = iblRenderPass_,
+        .attachmentCount = 1,
+        .pAttachments = &brdfView,
+        .width = kBRDFSize,
+        .height = kBRDFSize,
+        .layers = 1,
+    };
+
+    VkFramebuffer fb = VK_NULL_HANDLE;
+    if (vkCreateFramebuffer(device_, &fbInfo, nullptr, &fb) != VK_SUCCESS) {
+      s_logger.error("Failed to create BRDF LUT framebuffer");
+      return false;
+    }
+
+    bool ok = runOneShot([&](VkCommandBuffer cmd) {
+      VkClearValue clear{};
+      clear.color.float32[0] = 0.0F;
+      clear.color.float32[1] = 0.0F;
+      clear.color.float32[2] = 0.0F;
+      clear.color.float32[3] = 1.0F;
+
+      VkViewport viewport{
+          .x = 0.0F, .y = 0.0F,
+          .width = static_cast<float>(kBRDFSize),
+          .height = static_cast<float>(kBRDFSize),
+          .minDepth = 0.0F, .maxDepth = 1.0F,
+      };
+      VkRect2D scissor{
+          .offset = {0, 0},
+          .extent = {kBRDFSize, kBRDFSize},
+      };
+
+      VkRenderPassBeginInfo rpBegin{
+          .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+          .renderPass = iblRenderPass_,
+          .framebuffer = fb,
+          .renderArea = {{0, 0}, {kBRDFSize, kBRDFSize}},
+          .clearValueCount = 1,
+          .pClearValues = &clear,
+      };
+
+      vkCmdBeginRenderPass(cmd, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
+      vkCmdSetViewport(cmd, 0, 1, &viewport);
+      vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, iblBrdfPipeline_);
+      vkCmdDraw(cmd, 3, 1, 0, 0);
+      vkCmdEndRenderPass(cmd);
+    });
+
+    vkDestroyFramebuffer(device_, fb, nullptr);
+
+    if (!ok) return false;
+    s_logger.info("BRDF LUT generated ({}x{}).", kBRDFSize, kBRDFSize);
+  }
+
+  // --- 9. Update IBL descriptor set ---
+  descriptorPool_.updateIBLDescriptors(
+      irradianceImage_.view(), prefilterImage_.view(),
+      brdfLUTImage_.view(), descriptorPool_.clampSampler());
+
+  s_logger.info("IBL resources generated successfully.");
   return true;
 }
 
 void VulkanDevice::destroyIBLResources() {
+  if (iblIrradiancePipeline_ != VK_NULL_HANDLE) {
+    vkDestroyPipeline(device_, iblIrradiancePipeline_, nullptr);
+    iblIrradiancePipeline_ = VK_NULL_HANDLE;
+  }
+  if (iblPrefilterPipeline_ != VK_NULL_HANDLE) {
+    vkDestroyPipeline(device_, iblPrefilterPipeline_, nullptr);
+    iblPrefilterPipeline_ = VK_NULL_HANDLE;
+  }
+  if (iblBrdfPipeline_ != VK_NULL_HANDLE) {
+    vkDestroyPipeline(device_, iblBrdfPipeline_, nullptr);
+    iblBrdfPipeline_ = VK_NULL_HANDLE;
+  }
+  if (iblCubemapPipelineLayout_ != VK_NULL_HANDLE) {
+    vkDestroyPipelineLayout(device_, iblCubemapPipelineLayout_, nullptr);
+    iblCubemapPipelineLayout_ = VK_NULL_HANDLE;
+  }
+  if (iblBrdfPipelineLayout_ != VK_NULL_HANDLE) {
+    vkDestroyPipelineLayout(device_, iblBrdfPipelineLayout_, nullptr);
+    iblBrdfPipelineLayout_ = VK_NULL_HANDLE;
+  }
+  if (iblSourceSetLayout_ != VK_NULL_HANDLE) {
+    vkDestroyDescriptorSetLayout(device_, iblSourceSetLayout_, nullptr);
+    iblSourceSetLayout_ = VK_NULL_HANDLE;
+  }
   if (iblRenderPass_ != VK_NULL_HANDLE) {
     vkDestroyRenderPass(device_, iblRenderPass_, nullptr);
     iblRenderPass_ = VK_NULL_HANDLE;
@@ -2316,10 +3036,9 @@ void VulkanDevice::updateShadowMapDescriptors() {
   if (shadowView == VK_NULL_HANDLE) {
     return;
   }
-  VkSampler sampler = descriptorPool_.shadowSampler();
   for (auto *mat : shadowMaterials_) {
     if (mat != nullptr) {
-      mat->updateShadowMap(shadowView, sampler);
+      mat->updateShadowMap(shadowView);
     }
   }
 }

@@ -60,8 +60,8 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
     world_.assign<Raiden::ECS::DirectionalLight>(
         e, Raiden::ECS::DirectionalLight{
                .direction = {0.3F, -1.0F, 0.5F},
-               .color = {1.0F, 0.98F, 0.92F},
-               .intensity = 2.0F,
+               .color = {1.0F, 0.95F, 0.9F},
+               .intensity = 1.0F,
                .castShadows = true,
                .shadowNear = 0.1F,
                .shadowFar = 50.0F,
@@ -114,7 +114,9 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
         e, Raiden::ECS::MeshRenderer{
                .meshPath = "game://meshes/cube.glb",
                .texturePath = "game://textures/checkerboard.ktx2",
-           });
+               .normalMap = "",
+               .occlusionMap = "",
+            });
   }
 
   // PBR cubes
@@ -162,6 +164,8 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
         e, Raiden::ECS::MeshRenderer{
                .meshPath = "game://meshes/cube.glb",
                .texturePath = "",
+               .normalMap = "",
+               .occlusionMap = "",
                .shader = "builtin://pbr",
                .baseColorFactor = p.color,
                .metallic = p.metallic,
@@ -182,7 +186,9 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
         e, Raiden::ECS::MeshRenderer{
                .meshPath = "game://meshes/cube.glb",
                .texturePath = "game://textures/checkerboard.ktx2",
-           });
+               .normalMap = "",
+               .occlusionMap = "",
+            });
     world_.assign<Raiden::ECS::Rigidbody>(
         e, Raiden::ECS::Rigidbody{
                .type = Raiden::ECS::Rigidbody::Type::Static,
@@ -225,6 +231,8 @@ bool ExampleGame::init(Raiden::Renderer::IRenderDevice &device,
           e, Raiden::ECS::MeshRenderer{
                  .meshPath = "game://meshes/cube.glb",
                  .texturePath = "",
+                 .normalMap = "",
+                 .occlusionMap = "",
                  .shader = "builtin://pbr",
                  .baseColorFactor = {0.9F, 0.4F, 0.2F, 1.0F},
                  .metallic = 0.0F,

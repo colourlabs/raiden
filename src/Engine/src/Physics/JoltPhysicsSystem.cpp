@@ -447,7 +447,7 @@ void JoltPhysicsSystem::addBoxCollider(uint32_t bodyId,
     return;
   }
 
-  auto *shape = new JPH::BoxShape(toJolt(halfExtents));
+  auto *shape = new JPH::BoxShape(toJolt(halfExtents), 0.0F);
   impl_->bodyInterface->SetShape(it->second, shape, true,
                                   JPH::EActivation::Activate);
 }

@@ -62,6 +62,8 @@ add_subdirectory(src/RaidenUI)
 add_subdirectory(src/RaidenEditor)
 
 add_subdirectory(games/ExampleGame)
+add_subdirectory(games/VisualDemos)
+add_subdirectory(games/NewVisualDemo)
 add_subdirectory(src/RaidenEditor/editor)
 
 if(RAIDEN_BUILD_TESTS)

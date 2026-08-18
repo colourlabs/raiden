@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Raiden/Engine/DebugConsole.hpp>
+#include <Raiden/Engine/EntityInspector.hpp>
 #include <Raiden/Engine/IImGuiBackend.hpp>
 #include <Raiden/Platform/InputState.hpp>
 #include <array>
@@ -62,6 +64,13 @@ public:
 
   void toggleConVarsWindow() { showConVars_ = !showConVars_; }
 
+  void setWorld(::Raiden::ECS::World *w);
+
+  [[nodiscard]] bool wantsCaptureKeyboard() const;
+
+  DebugConsole &console() { return console_; }
+  EntityInspector &inspector() { return inspector_; }
+
 private:
   void pushPerfData(const ProfilerFrameData &profiler, float dt);
 
@@ -96,7 +105,13 @@ private:
   int cameraViewportH_ = 0;
 
   bool showConVars_ = false;
+  bool showConsole_ = false;
+  bool showInspector_ = false;
   char conVarFilter_[128] = {};
+
+  ::Raiden::ECS::World *world_ = nullptr;
+  DebugConsole console_;
+  EntityInspector inspector_;
 };
 
 } // namespace Raiden::Engine

@@ -1,4 +1,5 @@
 #include "DecodedTextureData.hpp"
+#include "FbxLoader.hpp"
 #include "GltfLoader.hpp"
 #include "KtxLoader.hpp"
 #include "StbImageLoader.hpp"
@@ -257,22 +258,29 @@ std::shared_ptr<Model> AssetManager::loadMesh(std::string_view vfsPath) {
   std::string path(vfsPath);
   bool isGlb = path.size() > 4 && path.substr(path.size() - 4) == ".glb";
   bool isGltf = path.size() > 5 && path.substr(path.size() - 5) == ".gltf";
+  bool isFbx = path.size() > 4 && path.substr(path.size() - 4) == ".fbx";
 
-  if (!isGlb && !isGltf) {
+  if (!isGlb && !isGltf && !isFbx) {
     s_logger.warn("Unsupported mesh format: {}", vfsPath);
     return nullptr;
   }
 
-  auto meshes = loadGltf(device_, *this, bytes.data(), bytes.size(), vfsPath);
+  std::vector<Mesh> meshes;
+  if (isFbx) {
+    meshes = loadFbx(device_, *this, bytes.data(), bytes.size(), vfsPath);
+  } else {
+    meshes = loadGltf(device_, *this, bytes.data(), bytes.size(), vfsPath);
+  }
+
   if (meshes.empty()) {
-    s_logger.error("Failed to load glTF: {}", vfsPath);
+    s_logger.error("Failed to load mesh: {}", vfsPath);
     return nullptr;
   }
 
   auto model = std::make_shared<Model>();
   model->meshes = std::move(meshes);
   meshCache_[key] = model;
-  s_logger.info("glTF loaded: {} meshes from {}", model->meshes.size(),
+  s_logger.info("Mesh loaded: {} sub-meshes from {}", model->meshes.size(),
                 vfsPath);
   return model;
 }

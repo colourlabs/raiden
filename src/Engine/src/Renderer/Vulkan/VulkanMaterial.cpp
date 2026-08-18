@@ -29,7 +29,8 @@ struct MaterialParams {
   glm::vec2 uvScale;
   float uvRotation;
   int vertexColorMode; // 0=Ignore, 1=Multiply, 2=Add
-  std::array<float, 2> _pad; // keep 16-byte alignment
+  int triplanarMapping;
+  float _pad;
 };
 
 bool VulkanMaterial::init(VkDevice device, VmaAllocator allocator,
@@ -116,6 +117,7 @@ void VulkanMaterial::uploadParams(const MaterialDesc &desc) {
       .uvScale = desc.uvScale,
       .uvRotation = desc.uvRotation,
       .vertexColorMode = static_cast<int>(desc.vertexColorMode),
+      .triplanarMapping = desc.triplanarMapping ? 1 : 0,
   };
 
   paramsUbo_.upload(&params, sizeof(params));
@@ -247,7 +249,8 @@ void VulkanMaterial::bind(ICommandBuffer &cmd) {
 
     VkDescriptorSet samplerSet = pool_->samplerSet();
     VkDescriptorSet iblSet = pool_->iblSet();
-    std::array<VkDescriptorSet, 4> sets = {samplerSet, materialSet_, paramsSet_, iblSet};
+    VkDescriptorSet plSet = pool_->pointLightSet();
+    std::array<VkDescriptorSet, 5> sets = {samplerSet, materialSet_, paramsSet_, iblSet, plSet};
     vkCmdBindDescriptorSets(raw, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             vkPipeline->layout(),
                             1, static_cast<uint32_t>(sets.size()), sets.data(),
@@ -255,10 +258,9 @@ void VulkanMaterial::bind(ICommandBuffer &cmd) {
   }
 }
 
-void VulkanMaterial::updateShadowMap(VkImageView shadowMapView,
-                                     VkSampler shadowSampler) {
+void VulkanMaterial::updateShadowMap(VkImageView shadowMapView) {
   VkDescriptorImageInfo shadowInfo{
-      .sampler = shadowSampler,
+      .sampler = pool_->clampSampler(),
       .imageView = shadowMapView,
       .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
   };

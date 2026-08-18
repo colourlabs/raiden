@@ -1,0 +1,16 @@
+[window]
+title = "Raiden New Visual Demo - Rocky Terrain & Roofless House"
+width = 1280
+height = 720
+resizable = true
+fullscreen = false
+vsync = true
+
+[render]
+backend = "vulkan"
+validation = true
+antialiasing = "msaa_x8"
+
+[game.platform]
+linux = "lib/libNewVisualDemo.so"
+windows = "lib/NewVisualDemo.dll"

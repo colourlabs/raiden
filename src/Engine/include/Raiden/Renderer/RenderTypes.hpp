@@ -170,6 +170,9 @@ struct alignas(16) FrameUniforms {
   glm::vec4 ambientSky;    // rgb=hemispheric sky color, w=intensity
   glm::vec4 ambientGround; // rgb=hemispheric ground color, w=unused
   glm::mat4 lightViewProj; // light space VP matrix for shadow mapping
+  uint32_t pointLightCount; // number of active point lights
+  float shadowMapSize;      // shadow map resolution (for texel size calc)
+  float _padFrame[2];
 };
 
 struct Vertex {

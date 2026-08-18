@@ -116,13 +116,37 @@ static void readVertexColor(const fastgltf::Asset &asset, const std::byte *src,
 
 // extract embedded image bytes (sources::Array or ByteView)
 // returns empty vector when the image uses an external URI
+// extract embedded image bytes (sources::Array, ByteView, or BufferView)
+// returns empty vector when the image uses an external URI
 static std::vector<std::byte>
-getEmbeddedImageData(const fastgltf::Image &image) {
+getEmbeddedImageData(const fastgltf::Asset &asset,
+                     const fastgltf::Image &image) {
   if (const auto *arr = std::get_if<fastgltf::sources::Array>(&image.data)) {
     return {arr->bytes.begin(), arr->bytes.end()};
   }
   if (const auto *bv = std::get_if<fastgltf::sources::ByteView>(&image.data)) {
     return {bv->bytes.begin(), bv->bytes.end()};
+  }
+  // binary glTF (.glb) conventionally stores embedded images this way:
+  // a bufferView index into one of the asset's buffers, rather than a
+  // direct byte span. This was the missing case causing embedded GLB
+  // textures to silently fail to register under mem://gltf/tex/N.
+  if (const auto *bvSrc =
+          std::get_if<fastgltf::sources::BufferView>(&image.data)) {
+    if (bvSrc->bufferViewIndex >= asset.bufferViews.size()) {
+      return {};
+    }
+    const auto &bufView = asset.bufferViews[bvSrc->bufferViewIndex];
+    if (bufView.bufferIndex >= asset.buffers.size()) {
+      return {};
+    }
+    const auto &buf = asset.buffers[bufView.bufferIndex];
+    const auto *base = getBufferData(buf);
+    if (base == nullptr) {
+      return {};
+    }
+    const auto *start = base + bufView.byteOffset;
+    return {start, start + bufView.byteLength};
   }
   return {};
 }
@@ -284,8 +308,8 @@ std::vector<Mesh> loadGltf(IRenderDevice &device, IAssetManager &assets,
   // so loadMaterial() -> loadTexture() -> vfs.readBytes() can find them
   for (size_t i = 0; i < gltfAsset.images.size(); ++i) {
     const auto &image = gltfAsset.images[i];
-    std::vector<std::byte> imgData = getEmbeddedImageData(image);
-
+    std::vector<std::byte> imgData = getEmbeddedImageData(gltfAsset, image);
+    
     // also decode data URIs (e.g. data:image/png;base64,...)
     if (imgData.empty()) {
       if (const auto *uri = std::get_if<fastgltf::sources::URI>(&image.data)) {

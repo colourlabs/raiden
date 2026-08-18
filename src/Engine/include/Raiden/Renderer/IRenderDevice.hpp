@@ -52,6 +52,7 @@ public:
       std::function<void(ICommandBuffer &, uint32_t workerIndex,
                          uint32_t totalWorkers)>;
   virtual void setShadowCallback(RenderCallback) {}
+  virtual bool initIBL(std::shared_ptr<ITexture> /*cubemap*/) { return false; }
   virtual bool drawFrame(const RenderCallback &callback) = 0;
 };
 

@@ -25,6 +25,12 @@ void VulkanCommandBuffer::bindPipeline(const IPipeline &pipeline) {
     vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             currentLayout_, 0, 1, &uboSet_, 0, nullptr);
   }
+
+  // bind point light storage buffer (set 5)
+  if (pointLightSet_ != VK_NULL_HANDLE) {
+    vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            currentLayout_, 5, 1, &pointLightSet_, 0, nullptr);
+  }
 }
 
 void VulkanCommandBuffer::bindVertexBuffer(const IBuffer &buffer) {

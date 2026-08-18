@@ -162,6 +162,24 @@ bool VulkanDescriptorPool::init(VkDevice device, VkPhysicalDevice physDev,
     return false;
   }
 
+  // set 5, point lights (storage buffer)
+  VkDescriptorSetLayoutBinding pointLightBinding{
+      .binding = 0,
+      .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+      .descriptorCount = 1,
+      .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+  };
+  VkDescriptorSetLayoutCreateInfo pointLightLayoutInfo{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .bindingCount = 1,
+      .pBindings = &pointLightBinding,
+  };
+  if (vkCreateDescriptorSetLayout(device_, &pointLightLayoutInfo, nullptr,
+                                  &pointLightSetLayout_) != VK_SUCCESS) {
+    s_logger.error("Failed to create point light descriptor set layout");
+    return false;
+  }
+
   // sampler
   VkSamplerCreateInfo samplerInfo{
       .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -203,15 +221,17 @@ bool VulkanDescriptorPool::init(VkDevice device, VkPhysicalDevice physDev,
   // pool sized for: 3 frame UBOs + 1 shared sampler + 1 clamp sampler
   //               + 64 simple textures + 64 material texture sets + 64 material
   //               params UBOs + shadow map descriptors + 1 IBL set + 1 tonemap set
-  std::array<VkDescriptorPoolSize, 3> poolSizes{{
+  //               + 1 point light storage buffer set
+  std::array<VkDescriptorPoolSize, 4> poolSizes{{
       {.type=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount=3 + 64},
       {.type=VK_DESCRIPTOR_TYPE_SAMPLER, .descriptorCount=3},
       {.type=VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, .descriptorCount=64 + (64 * 6) + 3 + 1},
+      {.type=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount=1},
   }};
 
   VkDescriptorPoolCreateInfo poolInfo{
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-      .maxSets = 3 + 1 + 64 + 64 + 64 + 1 + 1,
+      .maxSets = 3 + 1 + 64 + 64 + 64 + 1 + 1 + 1,
       .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
       .pPoolSizes = poolSizes.data(),
   };
@@ -281,27 +301,6 @@ bool VulkanDescriptorPool::init(VkDevice device, VkPhysicalDevice physDev,
   
   vkUpdateDescriptorSets(device_, 1, &clampWrite, 0, nullptr);
 
-  // shadow map comparison sampler (for PCF filtering)
-  VkSamplerCreateInfo shadowSamplerInfo{
-      .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-      .magFilter = VK_FILTER_LINEAR,
-      .minFilter = VK_FILTER_LINEAR,
-      .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-      .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-      .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-      .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-      .anisotropyEnable = VK_FALSE,
-      .compareEnable = VK_TRUE,
-      .compareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
-      .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
-  };
-
-  if (vkCreateSampler(device_, &shadowSamplerInfo, nullptr, &shadowSampler_) !=
-      VK_SUCCESS) {
-    s_logger.error("Failed to create shadow sampler");
-    return false;
-  }
-
   // pre-allocate IBL descriptor set (set 4)
   VkDescriptorSetAllocateInfo iblAlloc{
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -311,6 +310,18 @@ bool VulkanDescriptorPool::init(VkDevice device, VkPhysicalDevice physDev,
   };
   if (vkAllocateDescriptorSets(device_, &iblAlloc, &iblSet_) != VK_SUCCESS) {
     s_logger.error("Failed to allocate IBL descriptor set");
+    return false;
+  }
+
+  // pre-allocate point light descriptor set (set 5)
+  VkDescriptorSetAllocateInfo plAlloc{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+      .descriptorPool = pool_,
+      .descriptorSetCount = 1,
+      .pSetLayouts = &pointLightSetLayout_,
+  };
+  if (vkAllocateDescriptorSets(device_, &plAlloc, &pointLightSet_) != VK_SUCCESS) {
+    s_logger.error("Failed to allocate point light descriptor set");
     return false;
   }
 
@@ -358,10 +369,6 @@ void VulkanDescriptorPool::shutdown() {
     vkDestroySampler(device_, clampSampler_, nullptr);
     clampSampler_ = VK_NULL_HANDLE;
   }
-  if (shadowSampler_ != VK_NULL_HANDLE) {
-    vkDestroySampler(device_, shadowSampler_, nullptr);
-    shadowSampler_ = VK_NULL_HANDLE;
-  }
   if (fallbackImageView_ != VK_NULL_HANDLE) {
     vkDestroyImageView(device_, fallbackImageView_, nullptr);
     fallbackImageView_ = VK_NULL_HANDLE;
@@ -403,6 +410,10 @@ void VulkanDescriptorPool::shutdown() {
   if (iblSetLayout_ != VK_NULL_HANDLE) {
     vkDestroyDescriptorSetLayout(device_, iblSetLayout_, nullptr);
     iblSetLayout_ = VK_NULL_HANDLE;
+  }
+  if (pointLightSetLayout_ != VK_NULL_HANDLE) {
+    vkDestroyDescriptorSetLayout(device_, pointLightSetLayout_, nullptr);
+    pointLightSetLayout_ = VK_NULL_HANDLE;
   }
 }
 

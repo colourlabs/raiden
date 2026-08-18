@@ -25,4 +25,11 @@ struct PointLight {
   bool castShadows = false; // cubemap shadows - future
 };
 
+struct AmbientLight {
+  glm::vec3 skyColor{0.1F, 0.15F, 0.3F};
+  float skyIntensity = 1.0F;
+  glm::vec3 groundColor{0.02F, 0.01F, 0.01F};
+  bool useIBL = false;
+};
+
 } // namespace Raiden::ECS

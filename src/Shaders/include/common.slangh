@@ -2,37 +2,48 @@ static const float PI = 3.14159265;
 
 struct FrameUniforms
 {
-  float4x4 projection;
-  float4x4 view;
-  float4x4 model;
-  float4 extra;         // x=time, y=deltaTime, z=resX, w=resY
-  float4 cameraPos;     // xyz=camera world position, w unused
-  float4 lightDir;      // xyz=direction toward light, w=intensity
-  float4 lightColor;    // rgb=color, w=shadowEnabled
-  float4 ambientSky;    // rgb=hemispheric sky color, w=intensity
-  float4 ambientGround; // rgb=hemispheric ground color, w=unused
-  float4x4 lightViewProj; // light space VP matrix for shadow mapping
+    float4x4 projection;
+    float4x4 view;
+    float4x4 model;
+    float4 extra;         // x=time, y=deltaTime, z=resX, w=resY
+    float4 cameraPos;     // xyz=camera world position, w unused
+    float4 lightDir;      // xyz=direction toward light, w=intensity
+    float4 lightColor;    // rgb=color, w=shadowEnabled
+    float4 ambientSky;    // rgb=hemispheric sky color, w=intensity
+    float4 ambientGround; // rgb=hemispheric ground color, w=unused
+    float4x4 lightViewProj; // light space VP matrix for shadow mapping
+    uint pointLightCount;   // how many point lights are active
+    float shadowMapSize;    // shadow map resolution (for texel size)
+    float2 _padFrame;
+};
+
+// NEW: one entry per point light
+struct PointLight
+{
+    float4 positionRange;   // xyz = world position, w = range
+    float4 colorIntensity;  // rgb = color, w = intensity
 };
 
 struct MaterialParams
 {
-  float4 baseColorFactor;
-  float4 emissiveFactor; // w unused
-  float metallicFactor;
-  float roughnessFactor;
-  float occlusionStrength;
-  float alphaCutoff;
-  int alphaMode; // 0=Opaque 1=Mask 2=Blend
-  int normalMapDirectX;
-  int hasNormalMap;
-  int hasEmissiveMap;
-  int hasOcclusionMap;
-  int hasMetallicRoughnessMap;
-  float2 uvOffset;
-  float2 uvScale;
-  float uvRotation;
-  int vertexColorMode; // 0=Ignore 1=Multiply 2=Add
-  float2 _pad;
+    float4 baseColorFactor;
+    float4 emissiveFactor; // w unused
+    float metallicFactor;
+    float roughnessFactor;
+    float occlusionStrength;
+    float alphaCutoff;
+    int alphaMode; // 0=Opaque 1=Mask 2=Blend
+    int normalMapDirectX;
+    int hasNormalMap;
+    int hasEmissiveMap;
+    int hasOcclusionMap;
+    int hasMetallicRoughnessMap;
+    float2 uvOffset;
+    float2 uvScale;
+    float uvRotation;
+    int vertexColorMode; // 0=Ignore 1=Multiply 2=Add
+    int triplanarMapping;
+    float _pad;
 };
 
 [[vk::binding(0, 0)]]
@@ -64,40 +75,44 @@ TextureCube<float4> prefilteredMap;
 [[vk::binding(2, 4)]]
 Texture2D<float4> brdfLUT;
 
+// NEW: set 5, point lights
+[[vk::binding(0, 5)]]
+StructuredBuffer<PointLight> pointLights;
+
 float3 fresnelSchlick(float cosTheta, float3 F0)
 {
-  return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+    return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
 }
 
 float distributionGGX(float3 N, float3 H, float roughness)
 {
-  float a = roughness * roughness;
-  float a2 = a * a;
-  float NdotH = max(dot(N, H), 0.0);
-  float NdotH2 = NdotH * NdotH;
-  float denom = NdotH2 * (a2 - 1.0) + 1.0;
-  return a2 / (PI * denom * denom);
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float NdotH = max(dot(N, H), 0.0);
+    float NdotH2 = NdotH * NdotH;
+    float denom = NdotH2 * (a2 - 1.0) + 1.0;
+    return a2 / (PI * denom * denom);
 }
 
 float geometrySchlickGGX(float NdotV, float roughness)
 {
-  float r = roughness + 1.0;
-  float k = (r * r) / 8.0;
-  return NdotV / max(NdotV * (1.0 - k) + k, 0.001);
+    float r = roughness + 1.0;
+    float k = (r * r) / 8.0;
+    return NdotV / max(NdotV * (1.0 - k) + k, 0.001);
 }
 
 float geometrySmith(float3 N, float3 V, float3 L, float roughness)
 {
-  float NdotV = max(dot(N, V), 0.0);
-  float NdotL = max(dot(N, L), 0.0);
-  return geometrySchlickGGX(NdotV, roughness) * geometrySchlickGGX(NdotL, roughness);
+    float NdotV = max(dot(N, V), 0.0);
+    float NdotL = max(dot(N, L), 0.0);
+    return geometrySchlickGGX(NdotV, roughness) * geometrySchlickGGX(NdotL, roughness);
 }
 
 float3 calcNormal(Texture2D<float4> tex, SamplerState s, float2 uv,
-                  float3 worldNormal, float3 worldPos)
+                   float3 worldNormal, float3 worldPos)
 {
   if (material.hasNormalMap == 0)
-    return normalize(worldNormal);
+      return normalize(worldNormal);
 
   float3 tangentNormal = tex.Sample(s, uv).xyz * 2.0 - 1.0;
   tangentNormal.y *= material.normalMapDirectX == 1 ? -1.0 : 1.0;
@@ -114,4 +129,34 @@ float3 calcNormal(Texture2D<float4> tex, SamplerState s, float2 uv,
 
   float3x3 TBN = float3x3(T, B, N);
   return normalize(mul(TBN, tangentNormal));
+}
+
+// NEW: shared Cook-Torrance term used for both directional and point lights
+float3 cookTorrance(float3 N, float3 V, float3 L, float3 albedo,
+                     float metallic, float roughness, float3 F0,
+                     out float3 kD)
+{
+  float3 H = normalize(V + L);
+  float NDF = distributionGGX(N, H, roughness);
+  float G = geometrySmith(N, V, L, roughness);
+  float3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
+
+  float3 kS = F;
+  kD = (1.0 - kS) * (1.0 - metallic);
+
+  float3 numerator = NDF * G * F;
+  float denom = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0);
+  float3 specular = numerator / max(denom, 0.001);
+
+  return specular;
+}
+
+float3 tonemapACES(float3 x)
+{
+    const float a = 2.51;
+    const float b = 0.03;
+    const float c = 2.43;
+    const float d = 0.59;
+    const float e = 0.14;
+    return saturate((x * (a * x + b)) / (x * (c * x + d) + e));
 }
